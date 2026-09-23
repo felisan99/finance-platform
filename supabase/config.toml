@@ -1,0 +1,25 @@
+# Configuración de Supabase que se gestiona desde el repo con `supabase config push`.
+#
+# NO es la plantilla completa de `supabase init`. No usamos Supabase local (sin Docker) y un
+# push con esa plantilla pisaba ajustes reales del proyecto en la nube (site URL, confirmación
+# de email, largo del OTP, pooler…). Acá solo se declara lo que queremos versionar; lo que no
+# está declarado no se toca. Referencia: https://supabase.com/docs/guides/local-development/cli/config
+#
+# Regla: antes de `supabase config push`, correr `pnpm db:config-diff` y revisar el diff
+# (sin TTY la CLI aplica los cambios sin preguntar).
+#
+# Las plantillas de correo NO se declaran acá: el plan Free con el proveedor de email por
+# defecto rechaza modificarlas (400 "Email template modification is not available…"). Se
+# podrán versionar cuando se configure un SMTP propio (antes de invitar amigos).
+
+project_id = "finance-platform"
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
+
+# Registro solo por invitación: rechaza el alta si el email no está en public.allowed_emails
+# (función creada en la migración signup_gate_and_defaults).
+[auth.hook.before_user_created]
+enabled = true
+uri = "pg-functions://postgres/public/hook_before_user_created"

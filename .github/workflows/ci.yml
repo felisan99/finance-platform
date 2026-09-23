@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # pnpm 11+: pnpm/setup reemplaza a pnpm/action-setup + actions/setup-node.
+      # La versión de pnpm sale de "packageManager" y la de Node de .nvmrc.
+      - uses: pnpm/setup@v3
+        with:
+          node-version-file: .nvmrc
+          cache: true
+          require-lockfile: true # pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test

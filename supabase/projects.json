@@ -1,0 +1,4 @@
+{
+  "dev": { "name": "finance-dev", "ref": "hkmcsipnkajwkyushjcu" },
+  "prod": { "name": "finance", "ref": "acgzwoauxxnbnttpgdas" }
+}

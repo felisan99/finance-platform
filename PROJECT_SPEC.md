@@ -1,0 +1,555 @@
+# Portfolio Tracker — Especificación del proyecto
+
+> Documento de referencia para desarrollar el proyecto con Claude Code.
+> Copialo a la raíz del repo como `PROJECT_SPEC.md` y referencialo desde `CLAUDE.md` (ver sección 14).
+>
+> **Ajuste 2026-09-23:** no se usa Supabase local (sin Docker). Se trabaja con dos proyectos en la nube: `finance-dev` (desarrollo) y `finance` (producción). Cambios en las secciones 3, 5.3, 5.4, 13, 14.1 y 14.2.
+>
+> **Ajuste 2026-09-24:** la fórmula del TWR (sección 6.5) se corrigió para que coincida con la convención de flujo al inicio del día. La anterior, `(V_t − F_t) / V_{t−1} − 1`, corresponde a un flujo a fin de día y divide por 0 el primer día.
+>
+> **Ajuste 2026-09-24 (Fase 2):** la lista de emails permitidos vive en la tabla `allowed_emails` (la consulta el hook "Before User Created" de Supabase Auth), no en una variable de entorno; y las variables de Supabase usan los nombres de las claves nuevas (`PUBLISHABLE_KEY`, `SECRET_KEY`). Cambios en las secciones 3, 5.4, 11, 13 y 14.1.
+>
+> **Ajuste 2026-09-24 (requisito de la Fase 6):** el ingreso con enlace por email no sirve para la PWA en iPhone. Antes de la Fase 6 (y de invitar a nadie) hay que pasar a código OTP de 6 dígitos con SMTP propio. Cambio en la sección 14.2.
+
+---
+
+## 1. Visión
+
+Una web app personal para hacer seguimiento de un portafolio de inversiones (acciones y ETFs de EE.UU., broker Interactive Brokers), con métricas serias de rendimiento, instalable en el iPhone como PWA, con **costo de operación cero** y la posibilidad de compartirla con algunos amigos, cada uno con sus propios datos aislados.
+
+### Objetivos
+- Registrar todas las operaciones (compras, ventas, dividendos, depósitos, retiros, comisiones, splits) y derivar de ellas **posiciones, efectivo y métricas**. Las transacciones son la única fuente de verdad.
+- Mostrar: valor total (posiciones + efectivo), ganancia no realizada y realizada, rendimiento ponderado por tiempo (TWR) comparado contra el S&P 500, rendimiento ponderado por dinero (XIRR), asignación por activo, dividendos y watchlist.
+- Importar el historial desde el CSV exportado de **Delta** (formato en la sección 8) y, más adelante, desde **IBKR Flex Query**.
+- Mobile-first, instalable en la pantalla de inicio del iPhone.
+- Multiusuario simple: cada usuario ve solo sus datos (Row Level Security).
+
+### No objetivos (por ahora)
+- Ejecutar órdenes o conectarse al broker para operar.
+- Precios en tiempo real: alcanza con el cierre diario más una cotización "reciente" con demora.
+- Reportes impositivos.
+- Opciones, futuros y cripto. El modelo debe permitir agregarlos después, pero no se implementan ahora.
+- Uso comercial: el plan Hobby de Vercel no lo permite.
+
+---
+
+## 2. Restricciones
+
+| Restricción | Implicancia |
+|---|---|
+| Costo cero | Vercel Hobby + Supabase Free + APIs de precios gratuitas. Todo servicio pago es opcional. |
+| Uso no comercial | Compartirla con amigos gratis sí; cobrar o poner anuncios, no. |
+| Bajo cómputo | Nada de procesos siempre prendidos: todo son funciones serverless y crons. |
+| Límites de las APIs gratuitas | Guardar precios en caché en la base; nunca consultar la API externa en cada visita. |
+| Datos de terceros | Mostrar precios a pocos usuarios de forma privada es aceptable; no exponer datos de mercado públicamente. |
+
+> Los límites de los planes gratuitos (Vercel Cron, pausa por inactividad de Supabase, cuotas de las APIs) cambian con el tiempo. Verificarlos al empezar y documentarlos en `docs/limits.md`.
+
+---
+
+## 3. Stack técnico
+
+- **Framework**: Next.js (App Router) + TypeScript en modo `strict`.
+- **UI**: Tailwind CSS + shadcn/ui. Gráficos con Recharts.
+- **Base de datos, auth y seguridad**: Supabase (Postgres + Supabase Auth con magic link por email + RLS).
+- **Entornos de Supabase**: sin Supabase local (sin Docker). Dos proyectos en la nube: `finance-dev` (desarrollo) y `finance` (producción, Fase 7).
+- **Cliente de base de datos**: `@supabase/ssr` para server components, route handlers y el proxy (el antiguo middleware; en Next 16 se llama `proxy.ts`).
+- **Validación**: Zod para inputs, parsing de CSV y respuestas de APIs externas.
+- **Datos de mercado**: `yahoo-finance2` (npm) detrás de una interfaz `MarketDataProvider`, con proveedor alternativo Finnhub o Twelve Data (API key gratuita).
+- **CSV**: `papaparse`.
+- **Fechas y números**: `date-fns` + `date-fns-tz`. Para dinero, `decimal.js` o enteros en centavos: **nunca floats para montos persistidos**.
+- **Tests**: Vitest (unitarios del motor de cálculo) + Playwright (opcional, flujos principales).
+- **PWA**: web app manifest + service worker simple (Serwist o un SW hecho a mano, mínimo).
+- **Hosting**: Vercel (Hobby). Crons con Vercel Cron o, como alternativa, GitHub Actions.
+- **Gestor de paquetes**: pnpm.
+
+---
+
+## 4. Arquitectura
+
+```
+[iPhone PWA / navegador]
+        │
+        ▼
+[Next.js en Vercel]
+  ├─ Server Components  → leen de Supabase (con RLS, sesión del usuario)
+  ├─ Server Actions / Route Handlers → escrituras validadas con Zod
+  ├─ /api/cron/*        → jobs protegidos con CRON_SECRET (usan service role)
+  └─ lib/engine/*       → motor de cálculo PURO (sin I/O, 100% testeable)
+        │
+        ▼
+[Supabase Postgres]  ← tablas de usuario (RLS) + tablas compartidas de mercado
+        ▲
+        │ cron diario
+[MarketDataProvider] → Yahoo (principal) / Finnhub (alternativo)
+```
+
+### Principios
+1. **Las transacciones son la única fuente de verdad.** Posiciones, efectivo y métricas se calculan; no se guardan como estado editable.
+2. **El motor de cálculo es puro** (`lib/engine`): recibe transacciones, precios y tipos de cambio, y devuelve resultados. Sin acceso a la base ni a la red, para poder testearlo a fondo.
+3. **Los datos de mercado se comparten entre usuarios** (instrumentos, precios): se guardan una sola vez y los actualiza el cron.
+4. **Proveedor de datos intercambiable**: toda consulta externa pasa por `MarketDataProvider`.
+5. **Caché primero**: la UI solo lee de la base. Si falta un precio, se muestra el último conocido con su fecha.
+
+---
+
+## 5. Modelo de datos (Postgres / Supabase)
+
+### 5.1 Tablas de usuario (con RLS: `user_id = auth.uid()`)
+
+```sql
+-- Perfil
+create table profiles (
+  id uuid primary key references auth.users on delete cascade,
+  display_name text,
+  base_currency text not null default 'USD',
+  created_at timestamptz not null default now()
+);
+
+create table portfolios (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users on delete cascade,
+  name text not null,
+  benchmark_symbol text not null default 'SPY',
+  created_at timestamptz not null default now()
+);
+
+create table accounts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users on delete cascade,
+  portfolio_id uuid not null references portfolios on delete cascade,
+  name text not null,              -- ej. "IBKR"
+  currency text not null default 'USD',
+  cost_method text not null default 'AVERAGE' check (cost_method in ('AVERAGE','FIFO')),
+  created_at timestamptz not null default now()
+);
+
+create type tx_type as enum (
+  'BUY','SELL','DIVIDEND','DEPOSIT','WITHDRAWAL','FEE','INTEREST','SPLIT','TAX'
+);
+
+create table transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users on delete cascade,
+  account_id uuid not null references accounts on delete cascade,
+  type tx_type not null,
+  instrument_id uuid references instruments,     -- null para DEPOSIT/WITHDRAWAL/FEE/INTEREST de la cuenta
+  executed_at timestamptz not null,
+  quantity numeric(20,8),                         -- acciones (fraccionarias permitidas)
+  price numeric(20,8),                            -- precio unitario SIN comisión
+  amount numeric(20,4),                           -- monto en efectivo (dividendos, depósitos, etc.)
+  fee numeric(20,4) not null default 0,
+  currency text not null default 'USD',
+  split_ratio numeric(20,8),                      -- para SPLIT: nuevas/viejas (ej. 10 para 10:1)
+  notes text,
+  source text not null default 'manual',          -- 'manual' | 'delta_csv' | 'ibkr_flex'
+  external_id text,                               -- para deduplicar importaciones
+  created_at timestamptz not null default now(),
+  unique (account_id, source, external_id)
+);
+
+create table watchlists (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users on delete cascade,
+  name text not null default 'Watchlist'
+);
+
+create table watchlist_items (
+  watchlist_id uuid references watchlists on delete cascade,
+  instrument_id uuid references instruments,
+  user_id uuid not null references auth.users on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (watchlist_id, instrument_id)
+);
+
+create table imports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users on delete cascade,
+  account_id uuid references accounts,
+  source text not null,
+  filename text,
+  rows_total int, rows_imported int, rows_skipped int,
+  report jsonb,                                   -- errores y advertencias por fila
+  created_at timestamptz not null default now()
+);
+```
+
+### 5.2 Tablas de mercado (compartidas; lectura para usuarios autenticados, escritura solo con service role)
+
+```sql
+create table instruments (
+  id uuid primary key default gen_random_uuid(),
+  symbol text not null unique,          -- símbolo canónico, ej. 'VOO', 'BRK-B'
+  name text,
+  type text,                            -- 'STOCK' | 'ETF'
+  exchange text,
+  currency text not null default 'USD',
+  sector text, industry text,
+  provider_symbol text,                 -- símbolo en el proveedor, si difiere
+  history_backfilled_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table prices_daily (
+  instrument_id uuid references instruments on delete cascade,
+  date date not null,
+  close numeric(20,6) not null,
+  adj_close numeric(20,6),
+  primary key (instrument_id, date)
+);
+
+create table quotes_latest (
+  instrument_id uuid primary key references instruments on delete cascade,
+  price numeric(20,6) not null,
+  change numeric(20,6), change_pct numeric(10,6),
+  as_of timestamptz not null
+);
+
+create table corporate_actions (          -- splits y dividendos detectados desde el proveedor
+  id uuid primary key default gen_random_uuid(),
+  instrument_id uuid references instruments,
+  type text not null,                     -- 'SPLIT' | 'DIVIDEND'
+  ex_date date not null,
+  ratio numeric(20,8), amount numeric(20,6),
+  unique (instrument_id, type, ex_date)
+);
+```
+
+### 5.3 RLS
+- Activar RLS en **todas** las tablas.
+- Tablas de usuario: políticas `select/insert/update/delete` con `user_id = auth.uid()`.
+- Tablas de mercado: `select` para el rol `authenticated`; sin políticas de escritura. Solo escribe el cron, con la service role key del lado del servidor.
+- La service role key **nunca** llega al cliente.
+- Crear un test de integración (o un script SQL) que verifique que el usuario A no puede leer datos del usuario B. Como no hay base local, el test corre contra `finance-dev` (usuarios de prueba creados con la service role key y borrados al terminar); nunca contra `finance`.
+
+### 5.4 Migraciones
+Supabase CLI (`supabase/migrations/*.sql`). Cada cambio de esquema es una migración versionada. Se aplican con `supabase link` + `supabase db push` al proyecto vinculado (`finance-dev` en desarrollo). No hay base local ni `supabase db reset`; verificar el ref del proyecto vinculado antes de cada push. El proyecto `finance` (producción) solo se toca en la Fase 7 y con confirmación explícita. Las migraciones aplicadas son la fuente de verdad del esquema; sus diferencias con el SQL de la sección 5.1 están en `docs/decisions.md`.
+
+---
+
+## 6. Motor de cálculo (`lib/engine`)
+
+Módulo TypeScript **puro**. Entrada: transacciones de una cuenta o portafolio, precios diarios, cotizaciones recientes y splits. Salida: estructuras tipadas.
+
+### 6.1 Posiciones
+Recorrer las transacciones en orden cronológico (con desempate estable por `created_at`):
+
+- **BUY**: `qty += quantity`; `cost_basis += quantity * price + fee`.
+- **SELL** (método promedio, default):
+  - `avg_cost = cost_basis / qty`
+  - `proceeds = quantity * price - fee`
+  - `realized += proceeds - quantity * avg_cost`
+  - `cost_basis -= quantity * avg_cost`; `qty -= quantity`
+- **SELL** (FIFO, opcional por cuenta): consumir lotes en orden y calcular el realizado por lote.
+- **SPLIT**: `qty *= ratio`; `cost_basis` no cambia. Los precios históricos anteriores se ajustan al comparar.
+- **DIVIDEND**: no cambia la cantidad; suma a `dividends_received` y al efectivo.
+- Si `qty` queda en ~0 (tolerancia `1e-9`), la posición se cierra; su realizado se conserva.
+- Error de validación si una venta deja la cantidad negativa (short no soportado).
+
+Salida por posición: `symbol, qty, avg_cost, cost_basis, market_value, unrealized_pnl, unrealized_pct, realized_pnl, dividends, day_change, weight`.
+
+### 6.2 Efectivo
+Por cuenta: `cash = Σ DEPOSIT − Σ WITHDRAWAL − Σ (BUY qty*price + fee) + Σ (SELL qty*price − fee) + Σ DIVIDEND + Σ INTEREST − Σ FEE − Σ TAX`.
+Si el efectivo queda negativo, se muestra una advertencia (probable transacción faltante), sin bloquear.
+
+### 6.3 Valor del portafolio
+`total_value = Σ market_value + cash`. El precio de mercado sale de `quotes_latest` si es del día; si no, del último `prices_daily.close`, mostrando la fecha.
+
+### 6.4 Serie histórica diaria
+Para cada día hábil desde la primera transacción: reconstruir cantidades y efectivo a esa fecha y valuar con `prices_daily`. Para días sin precio (feriados), usar el último cierre conocido. Guardar la serie calculada en memoria o en caché; no es fuente de verdad.
+
+### 6.5 Rendimientos
+- **Flujos externos** = `DEPOSIT` (+) y `WITHDRAWAL` (−). Compras, ventas y dividendos son internos.
+- **TWR (time-weighted)**, con encadenamiento diario:
+  `r_t = V_t / (V_{t−1} + F_t) − 1`, donde `V_t` es el valor al cierre del día t y `F_t` el flujo externo neto del día t (convención: el flujo ocurre al inicio del día, así que forma parte de la base de ese día; documentarla en el código). El primer día `V_{t−1} = 0` y la base es solo el depósito.
+  `TWR = Π (1 + r_t) − 1`. Anualizar solo si el período es mayor a 1 año.
+- **XIRR (money-weighted)**: flujos externos con signo (desde el punto de vista del inversor), más el valor final como flujo positivo. Resolver con Newton-Raphson y bisección como respaldo.
+- **Benchmark**: rendimiento del `benchmark_symbol` (default SPY) en el mismo período, usando `adj_close` para incluir dividendos. Gráfico con ambas series normalizadas a 100.
+- Períodos: 1S, 1M, 3M, YTD, 1A, Todo.
+
+### 6.6 Asignación
+Por instrumento, por tipo (acción/ETF) y por sector si está disponible. El efectivo aparece como categoría propia.
+
+### 6.7 Reglas numéricas
+- Usar decimal para dinero; redondear solo al mostrar.
+- Tolerancia de cantidad `1e-9`; acciones fraccionarias con hasta 8 decimales.
+- Todas las fechas en UTC en la base; la UI muestra hora de `America/Montevideo`. Para asignar una transacción a un "día de mercado", usar la hora de Nueva York.
+
+---
+
+## 7. Datos de mercado
+
+### 7.1 Interfaz
+
+```ts
+interface MarketDataProvider {
+  search(query: string): Promise<InstrumentSearchResult[]>;
+  getQuotes(symbols: string[]): Promise<Quote[]>;
+  getDailyHistory(symbol: string, from: Date, to: Date): Promise<DailyBar[]>;
+  getCorporateActions?(symbol: string, from: Date, to: Date): Promise<CorporateAction[]>;
+  getProfile?(symbol: string): Promise<InstrumentProfile>;
+}
+```
+
+- Implementación principal: `YahooProvider` (`yahoo-finance2`). No es una API oficial: envolver todo en try/catch, validar con Zod y registrar los fallos.
+- Implementación alternativa: `FinnhubProvider` o `TwelveDataProvider`, elegida con la variable de entorno `MARKET_DATA_PROVIDER`.
+- Rate limiting simple más reintentos con backoff exponencial.
+
+### 7.2 Jobs (crons)
+| Job | Frecuencia | Qué hace |
+|---|---|---|
+| `/api/cron/daily-prices` | 1 vez por día hábil, después del cierre de NY (ej. 22:00 UTC) | Para todos los instrumentos usados en alguna posición o watchlist: guarda el cierre en `prices_daily`, actualiza `quotes_latest` y detecta splits y dividendos nuevos. |
+| `/api/cron/backfill` | Cuando se crea un instrumento, o en el mismo cron diario si hay pendientes | Descarga el historial desde la primera transacción (o 5 años para la watchlist) y completa `history_backfilled_at`. |
+
+- Proteger los endpoints con el header `Authorization: Bearer ${CRON_SECRET}`.
+- Si el plan gratuito de Vercel Cron limita la frecuencia, usar GitHub Actions (`schedule:`) llamando al endpoint.
+- El cron diario también evita que Supabase pause el proyecto por inactividad.
+- Botón "Actualizar ahora" en la UI: refresca `quotes_latest` solo de las posiciones del usuario, con un límite de 1 vez cada 5 minutos por usuario.
+
+---
+
+## 8. Importación desde Delta (CSV)
+
+### 8.1 Formato de entrada (export de Delta)
+Columnas:
+`Date, Way, Base amount, Base currency (name), Base type, Quote amount, Quote currency, Exchange, Sent/Received from, Sent to, Fee amount, Fee currency (name), Broker, Notes, Sync Base Holding, Leverage Metadata`
+
+Ejemplos:
+```
+"2026-03-06T22:30:00.000Z","DEPOSIT",4200,"USD (United States dollar)","FIAT",,,,"OTHER","MY_WALLET",,,"","Comision 30USD",false,
+"2026-03-09T22:34:00.000Z","BUY",3,"VOO (Vanguard S&P 500 ETF)","FUND",1725.72,"USD","New York Stock Exchange",,,1,"USD",,,true,
+"2026-03-09T22:34:00.000Z","WITHDRAW",1726.72,"USD (United States dollar)","FIAT",,,"New York Stock Exchange","MY_WALLET","OTHER",,,,"SYNC-BASE-HOLDINGS_BUY_VOO/USD",false,
+"2026-04-06T22:42:00.000Z","SELL",37,"KOS (Kosmos Energy Ltd)","STOCK",117.105,"USD","New York Stock Exchange",,,1,"USD",,,true,
+```
+
+### 8.2 Reglas de mapeo
+| Fila Delta | Transacción resultante |
+|---|---|
+| `Way=BUY` | `BUY`, `quantity = Base amount`, **`price = Quote amount / Base amount`** (Quote amount es el TOTAL, no el unitario), `fee = Fee amount \|\| 0`. |
+| `Way=SELL` | `SELL`, mismo cálculo de precio y comisión. |
+| `Way=DEPOSIT` / `WITHDRAW` con `Notes` que empieza con `SYNC-BASE-HOLDINGS_` | **Ignorar.** Son las patas de efectivo automáticas de Delta; el motor ya calcula el efectivo a partir de BUY/SELL. |
+| `Way=DEPOSIT` sin esa nota y con `Base type=FIAT` | `DEPOSIT` (flujo externo), `amount = Base amount`. |
+| `Way=WITHDRAW` sin esa nota y con `Base type=FIAT` | `WITHDRAWAL` (flujo externo). |
+| Otros `Way` (dividendos u otros, si aparecen) | Mapear si es posible; si no, reportar la fila como no soportada. |
+
+- **Símbolo**: tomar el texto de `Base currency (name)` antes del primer espacio (`"VOO (Vanguard S&P 500 ETF)"` → `VOO`). Tipo: `FUND` → ETF, `STOCK` → STOCK.
+- **Fecha**: ISO en UTC, tal cual.
+- **Deduplicación**: `external_id = hash(Date + Way + símbolo + Base amount + Quote amount)`.
+- **Flujo de importación**: subir archivo → parseo y validación con Zod → **pantalla de vista previa** (transacciones a crear, filas ignoradas con motivo, errores) → confirmar → insertar en una sola transacción de base de datos → guardar el reporte en `imports`.
+- Crear en `instruments` los símbolos que no existan y encolar su backfill.
+
+### 8.3 Fixture y resultados esperados (test de aceptación)
+Guardar un export de Delta como `lib/engine/__fixtures__/delta_export.csv`. Con método de costo promedio y comisiones incluidas en el costo, el motor debe dar:
+
+**Posiciones abiertas (antes de la compra de DDOG):**
+| Símbolo | Cantidad | Costo base (USD) |
+|---|---|---|
+| VOO | 8.95 | 5724.77 |
+| SOXX | 3 | 2069.5 |
+| FSLY | 20 | 346.80 |
+| ILF | 10 | 331.60 |
+| NFLX | 3 | 191.60 |
+| **Total** | | **8664.27** |
+
+**Posiciones cerradas — ganancia realizada:**
+| Símbolo | Realizado (USD) |
+|---|---|
+| MELI | 180.55 |
+| URTH | 42.7 |
+| KOS | 11.135 |
+| QCOM | 7.52 |
+| TTWO | 5.11 |
+| **Total** | **247.015** |
+
+**Efectivo:** depósitos externos 9300.00 − compras con comisión 11696.66 + ventas netas de comisión 3279.405 = **882.745 USD**.
+
+**Transacción manual para probar después de importar:** `BUY DDOG 2 @ 251.41, fee 1.00, 2026-09-23` → costo base de DDOG 503.82 y efectivo 378.925.
+
+> Nota: el efectivo que muestra Delta puede diferir del cálculo cuando Delta registró dividendos que no aparecen en el CSV exportado. No es un bug del motor: se corrige cargando los dividendos (manualmente o vía IBKR Flex).
+
+---
+
+## 9. Importación desde IBKR Flex Query (fase posterior)
+
+- IBKR permite definir una Flex Query (Trades, Cash Transactions, Corporate Actions) y consultarla por el Flex Web Service con un token de solo lectura.
+- Guardar el token **cifrado** (por ejemplo con `pgsodium` o cifrado de aplicación con una clave en variable de entorno) y solo del lado del servidor.
+- Mapear: trades → BUY/SELL (con comisión), dividendos → DIVIDEND, retenciones → TAX, depósitos y retiros → DEPOSIT/WITHDRAWAL, splits → SPLIT.
+- Deduplicar por el ID de transacción de IBKR (`external_id`).
+- Opción de sincronización diaria dentro del cron.
+- Verificar la documentación vigente de IBKR antes de implementar.
+
+---
+
+## 10. Funcionalidades y pantallas
+
+Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con: **Inicio, Posiciones, Actividad, Watchlist y Más**.
+
+### 10.1 Inicio (dashboard)
+- Valor total, cambio del día ($ y %), ganancia no realizada y realizada.
+- Gráfico de valor con selector de período; toggle para comparar contra el benchmark (TWR del portafolio vs. SPY, normalizados a 100).
+- Tarjetas: TWR, XIRR, efectivo disponible, dividendos del año.
+- Top ganadores y perdedores del día.
+
+### 10.2 Posiciones
+- Lista ordenable por valor, % del día, ganancia $ o ganancia %.
+- Toggle para mostrar posiciones cerradas.
+- Detalle por posición: gráfico de precio con marcadores de compra y venta, cantidad, costo promedio, costo base, valor, ganancia no realizada y realizada, dividendos, peso en el portafolio e historial de transacciones.
+
+### 10.3 Actividad (transacciones)
+- Lista con filtros (tipo, símbolo, fecha) y alta, edición y eliminación.
+- Formulario con autocompletado de símbolo (`search` del proveedor), cantidad, precio, comisión y fecha.
+- Importar CSV (Delta y, más adelante, un formato genérico) y exportar todo a CSV como backup.
+
+### 10.4 Watchlist
+- Agregar y quitar símbolos; ver precio, cambio del día, rango de 52 semanas y un minigráfico.
+- Tocar un símbolo abre el mismo detalle que una posición, sin datos propios.
+
+### 10.5 Más
+- Cuentas y portafolios (crear, renombrar, método de costo), benchmark, moneda, exportar datos, cerrar sesión.
+
+### 10.6 PWA
+- `manifest.webmanifest` con `display: standalone`, íconos (incluido `apple-touch-icon` de 180×180), `theme_color` y soporte para modo claro y oscuro.
+- Respetar `env(safe-area-inset-*)` para el notch y la barra inferior del iPhone.
+- Service worker mínimo: caché del "app shell" y página offline que muestre el último estado conocido. Sin caché agresiva de datos financieros.
+
+---
+
+## 11. Seguridad y privacidad
+
+- RLS en todas las tablas (sección 5.3), con un test que lo verifique.
+- La service role key y `CRON_SECRET` solo en variables de entorno del servidor.
+- Validar todos los inputs con Zod en server actions y route handlers.
+- Login con magic link; registro solo por **invitación** (lista de emails permitidos en la tabla `public.allowed_emails`, que consulta el hook "Before User Created" de Supabase Auth), para que la app no quede abierta a cualquiera. Habilitar a alguien es insertar su email en esa tabla.
+- Sin analytics de terceros.
+- Exportación completa de datos del usuario (CSV o JSON) y opción de borrar la cuenta.
+
+---
+
+## 12. Estructura del repo
+
+```
+/
+├─ app/
+│  ├─ (auth)/login/
+│  ├─ (app)/            # layout con navegación inferior
+│  │  ├─ page.tsx       # Inicio
+│  │  ├─ positions/ [symbol]/
+│  │  ├─ activity/ import/
+│  │  ├─ watchlist/
+│  │  └─ settings/
+│  └─ api/cron/{daily-prices,backfill}/route.ts
+├─ lib/
+│  ├─ engine/           # motor puro + tests + __fixtures__
+│  │  ├─ positions.ts cash.ts valuation.ts returns.ts allocation.ts
+│  │  └─ __tests__/
+│  ├─ market-data/      # interfaz + providers (yahoo, finnhub)
+│  ├─ importers/        # delta.ts, ibkr-flex.ts (+ tests)
+│  ├─ db/               # clientes Supabase, queries tipadas
+│  └─ validation/       # schemas Zod
+├─ components/          # UI (shadcn + propios)
+├─ supabase/migrations/
+├─ public/              # manifest, íconos
+├─ docs/                # limits.md, decisiones de arquitectura
+├─ CLAUDE.md
+└─ PROJECT_SPEC.md
+```
+
+---
+
+## 13. Variables de entorno
+
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=   # clave publicable (sb_publishable_…)
+SUPABASE_SECRET_KEY=              # clave secreta (sb_secret_…), solo servidor
+CRON_SECRET=
+MARKET_DATA_PROVIDER=yahoo        # yahoo | finnhub | twelvedata
+FINNHUB_API_KEY=                  # opcional
+APP_TIMEZONE=America/Montevideo
+```
+
+Incluir `.env.example` en el repo y nunca commitear `.env.local`. `.env.local` apunta al proyecto `finance-dev`; las credenciales de `finance` (producción) viven solo en las variables de entorno de Vercel. La lista de emails con acceso ya no es una variable: vive en la tabla `allowed_emails`.
+
+---
+
+## 14. Cómo trabajar con Claude Code
+
+### 14.1 `CLAUDE.md` sugerido (raíz del repo)
+```md
+# Contexto
+Portfolio tracker personal. La especificación completa está en PROJECT_SPEC.md: leerla antes de cualquier tarea grande.
+
+# Reglas
+- TypeScript strict. Nada de `any` sin justificar.
+- lib/engine es PURO: sin imports de Supabase, fetch ni Date.now() implícito (recibir la fecha "hoy" como parámetro).
+- Dinero con decimal.js; nunca aritmética de floats para montos persistidos.
+- Todo cambio de esquema = nueva migración en supabase/migrations.
+- Todo cálculo nuevo del motor lleva tests en Vitest, incluidos casos borde.
+- Validar inputs con Zod en el servidor.
+- No exponer SUPABASE_SECRET_KEY al cliente.
+- Supabase solo en la nube (sin Docker ni stack local): `finance-dev` para desarrollo y `finance` para producción. No hacer link/push a `finance` sin pedido explícito.
+
+# Comandos
+pnpm dev | pnpm test | pnpm lint | pnpm typecheck | supabase db push (solo dev)
+```
+
+### 14.2 Fases (una sesión o PR de Claude Code por fase)
+
+**Fase 0 — Setup**
+Next.js + TypeScript + Tailwind + shadcn, `pnpm dlx supabase init` (sin Docker; el proyecto en la nube se vincula en la Fase 2), Vitest, ESLint y Prettier, `.env.example`, CI básica en GitHub Actions (lint, typecheck, test).
+✅ `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build` pasan, y `supabase/` está inicializado.
+
+**Fase 1 — Motor de cálculo (sin UI)**
+`lib/engine` completo para posiciones, efectivo y realizado, con el importador de Delta como función pura.
+✅ El test de aceptación de la sección 8.3 pasa con los números exactos.
+
+**Fase 2 — Base de datos + auth**
+Vincular `finance-dev` (`supabase link`), migraciones de la sección 5 aplicadas con `supabase db push`, RLS, magic link, lista de emails permitidos y el test de aislamiento entre usuarios.
+✅ El usuario A no puede leer datos del usuario B.
+
+**Fase 3 — Datos de mercado + crons**
+`MarketDataProvider` con implementación Yahoo, endpoints de cron y backfill.
+✅ Después de correr el cron, `prices_daily` tiene historial de todos los símbolos del fixture.
+
+**Fase 4 — UI principal**
+Inicio, Posiciones, detalle de posición, Actividad (con alta manual) e Importar CSV con vista previa.
+✅ Importar el CSV de Delta y ver los números de la sección 8.3 en pantalla.
+
+**Fase 5 — Métricas avanzadas**
+Serie histórica, TWR, XIRR, comparación con benchmark y asignación.
+✅ Tests de TWR y XIRR con casos calculados a mano (incluido un depósito a mitad de período).
+
+**Fase 6 — Watchlist + PWA**
+**Requisito previo:** pasar el ingreso a un **código OTP de 6 dígitos** que se tipea en la app, con **SMTP propio** (por ejemplo Resend, plan gratuito). El enlace del correo abre Safari, no la PWA instalada; y el correo por defecto de Supabase (2 mensajes por hora, solo a miembros de la organización) tampoco sirve para invitar a un amigo. Detalle en `docs/decisions.md` (Tareas pendientes).
+✅ Instalable en el iPhone; se abre sin barra del navegador y se ingresa con el código.
+
+**Fase 7 — Deploy**
+Vercel + Supabase en la nube: crear el proyecto `finance` (producción), `supabase link` + `db push` con confirmación explícita y cargar sus credenciales solo en Vercel; crons configurados y dominio opcional.
+✅ Funciona en producción con tu cuenta y la de un amigo.
+
+**Fase 8 (opcional) — IBKR Flex Query, dividendos automáticos, FIFO y notificaciones.**
+
+### 14.3 Primer prompt sugerido para Claude Code
+> Leé PROJECT_SPEC.md completo. Empezamos por la Fase 0 y la Fase 1. Antes de escribir código, proponé el plan de archivos para `lib/engine` y los tipos principales (Transaction, Position, EngineResult). Después implementá el importador de Delta y el cálculo de posiciones, efectivo y realizado, con tests en Vitest usando el fixture de la sección 8.3 (te paso el CSV). No avances a la UI hasta que el test de aceptación pase.
+
+---
+
+## 15. Decisiones abiertas
+
+- ¿Guardar la serie histórica calculada en una tabla de caché (por ejemplo `portfolio_snapshots`) o recalcularla en cada request? Empezar recalculando; cachear si se vuelve lento.
+- ¿Costo promedio o FIFO por defecto? Empezar con costo promedio (el que usan Delta y My Pocket Portfolio, lo que facilita comparar) y dejar FIFO como opción.
+- ¿Multimoneda real? El modelo lo soporta (`currency` en cuentas y transacciones), pero la v1 asume USD. Agregar una tabla `fx_rates` si hace falta.
+- Proveedor de datos definitivo si Yahoo deja de funcionar.
+- Notificaciones push en la PWA de iOS (soportadas en versiones recientes de iOS): opcional, para después.
+
+---
+
+## 16. Definición de "terminado" para la v1
+
+- [ ] Importo el CSV de Delta y veo exactamente las posiciones, el costo base, el realizado y el efectivo de la sección 8.3.
+- [ ] Cargo una compra nueva a mano y todo se recalcula (posición, efectivo, porcentajes).
+- [ ] Veo el valor total, la ganancia no realizada y realizada, TWR vs. SPY y XIRR.
+- [ ] Tengo una watchlist funcional.
+- [ ] Está instalada en mi iPhone como app y carga rápido.
+- [ ] Un amigo puede usarla con su propia cuenta sin ver mis datos.
+- [ ] Costo mensual: USD 0.

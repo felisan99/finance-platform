@@ -1,0 +1,10 @@
+.next
+coverage
+pnpm-lock.yaml
+# Componentes de shadcn/ui: código vendorizado que regenera su CLI
+components/ui
+# El spec se conserva tal cual lo escribió su autor
+PROJECT_SPEC.md
+supabase/.temp
+# Generado por `pnpm db:types`
+lib/db/database.types.ts
