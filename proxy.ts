@@ -1,8 +1,13 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { hasMalformedEncoding } from "@/lib/db/auth-routes";
 import { updateSession } from "@/lib/db/proxy";
 
 // En Next 16 el antiguo `middleware` se llama `proxy`.
 export async function proxy(request: NextRequest) {
+  // Una dirección con `%` mal formado haría fallar al enrutador con un 500: se corta acá con un 400.
+  if (hasMalformedEncoding(request.nextUrl.pathname)) {
+    return new NextResponse("Bad Request", { status: 400 });
+  }
   return updateSession(request);
 }
 

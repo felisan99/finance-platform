@@ -32,10 +32,16 @@ const MARKET_TABLES = [
   "quotes_latest",
   "corporate_actions",
 ] as const;
+// Solo las lee y escribe el servidor (clave secreta): ni anon ni authenticated tienen permisos.
+const SERVER_ONLY_TABLES = [
+  "allowed_emails",
+  "market_job_runs",
+  "rate_limits",
+] as const;
 const ALL_TABLES = [
   ...USER_TABLES,
   ...MARKET_TABLES,
-  "allowed_emails",
+  ...SERVER_ONLY_TABLES,
 ] as const;
 
 /** Para recorrer tablas por nombre sin pelear con los tipos por tabla del cliente. */
@@ -600,6 +606,59 @@ describe("RLS: aislamiento entre usuarios (integración, finance-dev)", () => {
         .from("allowed_emails")
         .insert({ email: "colado@example.com" });
       expect(write.error?.code).toBe(PG.insufficientPrivilege);
+    });
+
+    it("un usuario autenticado no puede leer ni escribir market_job_runs", async () => {
+      const read = await loose(a.client).from("market_job_runs").select("*");
+      expect(read.error?.code).toBe(PG.insufficientPrivilege);
+      const write = await loose(a.client)
+        .from("market_job_runs")
+        .insert({ job: "daily-prices" });
+      expect(write.error?.code).toBe(PG.insufficientPrivilege);
+      const update = await loose(a.client)
+        .from("market_job_runs")
+        .update({ status: "ok" })
+        .eq("status", "running");
+      expect(update.error?.code).toBe(PG.insufficientPrivilege);
+    });
+
+    it("active_instruments() solo la puede llamar el servidor (service_role)", async () => {
+      // anon y authenticated no tienen EXECUTE: la función expone qué instrumentos usa cualquier usuario.
+      for (const [role, client] of [
+        ["anon", createAnon()],
+        ["authenticated", a.client],
+      ] as const) {
+        const { data, error } = await client.rpc("active_instruments");
+        expect(error?.code, `${role}: ${error?.message}`).toBe(
+          PG.insufficientPrivilege,
+        );
+        expect(data).toBeNull();
+      }
+      const server = await admin.rpc("active_instruments");
+      expect(server.error).toBeNull();
+      expect(Array.isArray(server.data)).toBe(true);
+    });
+
+    it("las tablas de mercado nuevas de la Fase 3 siguen siendo de solo lectura para authenticated", async () => {
+      // history_from es una columna nueva de instruments: la política de solo lectura la cubre.
+      const read = await a.client
+        .from("instruments")
+        .select("id, history_from")
+        .limit(1);
+      expect(read.error).toBeNull();
+      const write = await a.client
+        .from("instruments")
+        .update({ history_from: "2020-01-01" })
+        .eq("id", instrumentId)
+        .select("id");
+      // Sin permiso de UPDATE (o 0 filas si RLS filtrara): en ningún caso cambia algo.
+      expect(write.error?.code ?? "sin-error").toBe(PG.insufficientPrivilege);
+      const check = await admin
+        .from("instruments")
+        .select("history_from")
+        .eq("id", instrumentId)
+        .single();
+      expect(check.data?.history_from).toBeNull();
     });
   });
 

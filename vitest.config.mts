@@ -16,8 +16,13 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["lib/**/__tests__/**/*.test.ts"],
-    // Los de integración pegan contra Supabase (finance-dev): van por `pnpm test:integration`.
-    exclude: [...configDefaults.exclude, "**/*.integration.test.ts"],
+    // Los de integración pegan contra Supabase (finance-dev): van por `pnpm test:integration`;
+    // los "en vivo" también contra Yahoo real: `pnpm test:live`.
+    exclude: [
+      ...configDefaults.exclude,
+      "**/*.integration.test.ts",
+      "**/*.live.test.ts",
+    ],
     coverage: {
       provider: "v8",
       include: [

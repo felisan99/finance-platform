@@ -31,6 +31,7 @@ Implicancias para el proyecto:
 | Storage                    | 1 GB, con archivos de hasta 50 MB                                                                                                                                                       |
 | Edge Functions             | 500.000 invocaciones                                                                                                                                                                    |
 | Realtime                   | 200 conexiones simultáneas · 2 millones de mensajes                                                                                                                                     |
+| Data API (PostgREST)       | **Máximo 1000 filas por respuesta** (observado el 2026-09-24: un `select` pedido con `limit(5000)` devolvió 1000). Hay que paginar con `range`; ver `docs/decisions.md`, observación 9. |
 
 Implicancias para el proyecto:
 
@@ -50,6 +51,18 @@ Implicancias para el proyecto:
 | Yahoo (`yahoo-finance2` v4) | **No oficial.** El README dice: "neither created nor endorsed by Yahoo Inc. Yahoo does not provide any official API to developers, nor makes any guarantees regarding service availability or API consistency". Sin cuotas publicadas: tratarlo como best-effort (try/catch, validación con Zod, reintentos con backoff; spec §7.1). Requiere Node 22+ y se compromete a soportar Node 22 hasta 2027-04-30. Revisar los términos de uso de Yahoo antes de mostrar datos a terceros. |
 | Twelve Data (plan Basic)    | 8 créditos de API por minuto y 800 por día. Incluye acciones y ETFs de EE.UU. en tiempo real. El plan se describe como "Internal non-display usage" y para fines "personal, internal, and non-commercial": **leer sus términos antes de mostrar precios en la UI**, aunque sea a amigos.                                                                                                                                                                                            |
 | Finnhub (plan gratuito)     | **Sin verificar.** Su sitio se renderiza con JavaScript y no se pudo leer la cuota por minuto ni qué endpoints son gratuitos (en particular las velas históricas `/stock/candle`). Revisar a mano https://finnhub.io/pricing y https://finnhub.io/docs/api/rate-limit antes de implementar `FinnhubProvider`.                                                                                                                                                                       |
+
+### Yahoo en la práctica (Fase 3, verificado el 2026-09-24)
+
+- Respondió a 12 `chart` seguidos sin errores (70–400 ms cada uno); el cliente igual espacia los pedidos (2 a la vez, 150 ms de separación) y reintenta 429/5xx/red con backoff.
+- Devuelve `close` nulo en algunos días hábiles, reajusta hacia atrás el historial en cada split y dividendo, y trae ruido de float32 en los precios: ver `docs/decisions.md`.
+- `yahoo-finance2` 4.0.2 trae ~100 paquetes (incluye un SDK de MCP con express y hono que la app no usa). Sin scripts de instalación; `pnpm audit` sin vulnerabilidades conocidas.
+- **No verificado:** que Yahoo no bloquee las IPs de datacenter de Vercel. Se comprueba en el deploy (Fase 7) corriendo el cron una vez y mirando `market_job_runs`.
+
+### Next.js en Vercel (Fase 4)
+
+- Una Server Action acepta hasta **1 MB** de cuerpo (`serverActions.bodySizeLimit`): por eso el CSV a importar se limita a 1 MB (el export de Delta del fixture pesa 7,7 KB).
+- `after()` (descarga de precios tras importar) corre dentro de la duración máxima de la función (300 s en Hobby).
 
 ## Runtime
 

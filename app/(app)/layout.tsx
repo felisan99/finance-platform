@@ -1,28 +1,21 @@
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { BottomNav } from "@/components/app/bottom-nav";
+import { getSessionUser } from "@/lib/db/auth";
 import { createClient } from "@/lib/db/server";
-import { signOut } from "./actions";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
   // El proxy ya redirige sin sesión; se verifica de nuevo acá porque el proxy no es una barrera.
-  if (!data?.claims) redirect("/login");
+  if (!(await getSessionUser(supabase))) redirect("/login");
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <span className="truncate text-sm text-muted-foreground">
-          {data.claims.email}
-        </span>
-        <form action={signOut}>
-          <Button type="submit" variant="outline" size="sm">
-            Cerrar sesión
-          </Button>
-        </form>
-      </header>
-      <main className="flex-1 p-4">{children}</main>
+    <div className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col">
+      {/* Espacio para la navegación fija de abajo + el área segura del iPhone. */}
+      <main className="flex-1 px-4 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
+        {children}
+      </main>
+      <BottomNav />
     </div>
   );
 }

@@ -99,10 +99,33 @@ export async function createTestUser(
   return { id: data.user.id, email, client };
 }
 
+export type TestUserRecord = Pick<TestUser, "id" | "email">;
+
+/**
+ * Usuario de prueba SIN sesión: una sola llamada a la API de administración. Para los tests que
+ * operan con la clave secreta y solo necesitan un dueño para las filas (el trigger le crea
+ * perfil, portafolio, cuenta y watchlist). No depende del camino de inicio de sesión (JWT).
+ */
+export async function createTestUserRecord(
+  admin: DbClient,
+  label: string,
+): Promise<TestUserRecord> {
+  const email = `rls-${label}-${randomBytes(4).toString("hex")}@example.com`;
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password: randomBytes(16).toString("hex"),
+    email_confirm: true,
+  });
+  if (error || !data.user) {
+    throw new Error(`No se pudo crear el usuario de prueba: ${error?.message}`);
+  }
+  return { id: data.user.id, email };
+}
+
 /** Borra el usuario; sus filas se van en cascada. */
 export async function deleteTestUser(
   admin: DbClient,
-  user: TestUser | undefined,
+  user: TestUserRecord | undefined,
 ): Promise<void> {
   if (!user) return;
   const { error } = await admin.auth.admin.deleteUser(user.id);

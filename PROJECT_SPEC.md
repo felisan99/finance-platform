@@ -9,6 +9,14 @@
 >
 > **Ajuste 2026-09-24 (Fase 2):** la lista de emails permitidos vive en la tabla `allowed_emails` (la consulta el hook "Before User Created" de Supabase Auth), no en una variable de entorno; y las variables de Supabase usan los nombres de las claves nuevas (`PUBLISHABLE_KEY`, `SECRET_KEY`). Cambios en las secciones 3, 5.4, 11, 13 y 14.1.
 >
+> **Ajuste 2026-09-24 (Fase 3):** `getDailyHistory` devuelve barras y eventos (splits/dividendos) de la misma respuesta; `instruments` suma `history_from`; hay una tabla `market_job_runs` (registro de corridas) y una función `active_instruments()`. Cambios en las secciones 5.2, 7.1 y 7.2; detalle en `docs/decisions.md`.
+>
+> **Ajuste 2026-09-24 (Fase 4):** navegación de 4 pestañas (la de Watchlist llega con la Fase 6), una sola cuenta, importación en dos pasos con función SQL atómica (§8.2), límites de uso por usuario en la base y "Actualizar precios" con límite de 1 cada 5 minutos (§7.2). Cambios en §8.2 y §10; detalle en `docs/decisions.md`.
+>
+> **Ajuste 2026-09-24 (composición):** la asignación de la sección 6.6 (por posición y por tipo, con el efectivo aparte) ya está en Inicio desde la Fase 4; la Fase 5 conserva la serie histórica, TWR, XIRR y benchmark. Detalle en `docs/decisions.md`.
+>
+> **Ajuste 2026-09-24 (Fase 5):** el benchmark (`SPY`) se siembra como instrumento y los jobs de precios lo mantienen (`active_instruments()` lo incluye); la serie histórica desajusta los splits con los `SPLIT` del libro; el XIRR se calcula solo desde 30 días. Convenciones en las secciones 6.4 y 6.5; detalle en `docs/decisions.md`.
+>
 > **Ajuste 2026-09-24 (requisito de la Fase 6):** el ingreso con enlace por email no sirve para la PWA en iPhone. Antes de la Fase 6 (y de invitar a nadie) hay que pasar a código OTP de 6 dígitos con SMTP propio. Cambio en la sección 14.2.
 
 ---
@@ -187,6 +195,7 @@ create table instruments (
   sector text, industry text,
   provider_symbol text,                 -- símbolo en el proveedor, si difiere
   history_backfilled_at timestamptz,
+  history_from date,                    -- desde qué fecha se pidió el último backfill (Fase 3)
   created_at timestamptz not null default now()
 );
 
@@ -214,6 +223,8 @@ create table corporate_actions (          -- splits y dividendos detectados desd
   unique (instrument_id, type, ex_date)
 );
 ```
+
+> Fase 3: además existen `market_job_runs` (registro durable de las corridas de los crons; solo la usa el servidor) y la función `active_instruments()` (los instrumentos con transacciones o watchlist de cualquier usuario; solo `service_role`). Ver `docs/decisions.md`.
 
 ### 5.3 RLS
 - Activar RLS en **todas** las tablas.
@@ -257,6 +268,7 @@ Si el efectivo queda negativo, se muestra una advertencia (probable transacción
 
 ### 6.4 Serie histórica diaria
 Para cada día hábil desde la primera transacción: reconstruir cantidades y efectivo a esa fecha y valuar con `prices_daily`. Para días sin precio (feriados), usar el último cierre conocido. Guardar la serie calculada en memoria o en caché; no es fuente de verdad.
+*(Hecho en la Fase 5, `lib/engine/series.ts`: días hábiles en hora de Nueva York; los cierres —ajustados por splits hacia atrás— se multiplican por la razón de los `SPLIT` del libro que todavía no ocurrieron, para que precio y cantidad estén en las mismas unidades; sin ningún cierre previo, la posición se valúa a costo. Se recalcula por pedido, sin caché.)*
 
 ### 6.5 Rendimientos
 - **Flujos externos** = `DEPOSIT` (+) y `WITHDRAWAL` (−). Compras, ventas y dividendos son internos.
@@ -266,9 +278,11 @@ Para cada día hábil desde la primera transacción: reconstruir cantidades y ef
 - **XIRR (money-weighted)**: flujos externos con signo (desde el punto de vista del inversor), más el valor final como flujo positivo. Resolver con Newton-Raphson y bisección como respaldo.
 - **Benchmark**: rendimiento del `benchmark_symbol` (default SPY) en el mismo período, usando `adj_close` para incluir dividendos. Gráfico con ambas series normalizadas a 100.
 - Períodos: 1S, 1M, 3M, YTD, 1A, Todo.
+*(Hecho en la Fase 5, `lib/engine/{returns,performance}.ts`. El período es `(día base, hoy]`. XIRR con Newton y bisección, en `number` (es una tasa para mostrar), y solo para períodos de 30 días o más. Un período más largo que el historial se recorta a Todo.)*
 
 ### 6.6 Asignación
 Por instrumento, por tipo (acción/ETF) y por sector si está disponible. El efectivo aparece como categoría propia.
+*(Hecho en la Fase 4 por instrumento y por tipo: `lib/engine/allocation.ts`. El sector queda para después: los ETF no lo tienen.)*
 
 ### 6.7 Reglas numéricas
 - Usar decimal para dinero; redondear solo al mostrar.
@@ -285,8 +299,9 @@ Por instrumento, por tipo (acción/ETF) y por sector si está disponible. El efe
 interface MarketDataProvider {
   search(query: string): Promise<InstrumentSearchResult[]>;
   getQuotes(symbols: string[]): Promise<Quote[]>;
-  getDailyHistory(symbol: string, from: Date, to: Date): Promise<DailyBar[]>;
-  getCorporateActions?(symbol: string, from: Date, to: Date): Promise<CorporateAction[]>;
+  // Barras + splits/dividendos de la MISMA respuesta: dos consultas separadas podrían quedar a
+  // ambos lados de un split y dejar precios ajustados con eventos viejos.
+  getDailyHistory(symbol: string, from: Date, to: Date): Promise<DailyHistory>;
   getProfile?(symbol: string): Promise<InstrumentProfile>;
 }
 ```
@@ -294,6 +309,8 @@ interface MarketDataProvider {
 - Implementación principal: `YahooProvider` (`yahoo-finance2`). No es una API oficial: envolver todo en try/catch, validar con Zod y registrar los fallos.
 - Implementación alternativa: `FinnhubProvider` o `TwelveDataProvider`, elegida con la variable de entorno `MARKET_DATA_PROVIDER`.
 - Rate limiting simple más reintentos con backoff exponencial.
+- Solo `YahooProvider` está implementado (Fase 3); `MARKET_DATA_PROVIDER` valida los otros dos nombres pero responden "no implementado".
+- Los montos del proveedor son strings decimales redondeados una sola vez (Yahoo trae ruido de float32, p. ej. `1730.97998046875`).
 
 ### 7.2 Jobs (crons)
 | Job | Frecuencia | Qué hace |
@@ -304,6 +321,8 @@ interface MarketDataProvider {
 - Proteger los endpoints con el header `Authorization: Bearer ${CRON_SECRET}`.
 - Si el plan gratuito de Vercel Cron limita la frecuencia, usar GitHub Actions (`schedule:`) llamando al endpoint.
 - El cron diario también evita que Supabase pause el proyecto por inactividad.
+- Programado en `vercel.json` (`0 22 * * 1-5`, un solo horario: el máximo de Hobby). `/api/cron/backfill` existe pero no se programa: el diario ya descarga lo pendiente.
+- Yahoo devuelve `close` nulo algunos días hábiles y reajusta hacia atrás el historial en cada split (`close`) y dividendo (`adj_close`): el job descarta las barras nulas, detecta el reajuste y vuelve a bajar el historial completo del instrumento.
 - Botón "Actualizar ahora" en la UI: refresca `quotes_latest` solo de las posiciones del usuario, con un límite de 1 vez cada 5 minutos por usuario.
 
 ---
@@ -335,7 +354,7 @@ Ejemplos:
 - **Símbolo**: tomar el texto de `Base currency (name)` antes del primer espacio (`"VOO (Vanguard S&P 500 ETF)"` → `VOO`). Tipo: `FUND` → ETF, `STOCK` → STOCK.
 - **Fecha**: ISO en UTC, tal cual.
 - **Deduplicación**: `external_id = hash(Date + Way + símbolo + Base amount + Quote amount)`.
-- **Flujo de importación**: subir archivo → parseo y validación con Zod → **pantalla de vista previa** (transacciones a crear, filas ignoradas con motivo, errores) → confirmar → insertar en una sola transacción de base de datos → guardar el reporte en `imports`.
+- **Flujo de importación**: subir archivo → parseo y validación con Zod → **pantalla de vista previa** (transacciones a crear, filas ignoradas con motivo, errores) → confirmar → insertar en una sola transacción de base de datos (función SQL `import_transactions`) → guardar el reporte en `imports`. La confirmación vuelve a parsear el archivo desde cero; las filas con error del archivo bloquean la confirmación.
 - Crear en `instruments` los símbolos que no existan y encolar su backfill.
 
 ### 8.3 Fixture y resultados esperados (test de aceptación)
@@ -382,7 +401,7 @@ Guardar un export de Delta como `lib/engine/__fixtures__/delta_export.csv`. Con 
 
 ## 10. Funcionalidades y pantallas
 
-Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con: **Inicio, Posiciones, Actividad, Watchlist y Más**.
+Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con: **Inicio, Posiciones, Actividad, Watchlist y Más** (la pestaña de Watchlist se suma en la Fase 6).
 
 ### 10.1 Inicio (dashboard)
 - Valor total, cambio del día ($ y %), ganancia no realizada y realizada.
@@ -509,15 +528,15 @@ Vincular `finance-dev` (`supabase link`), migraciones de la sección 5 aplicadas
 
 **Fase 3 — Datos de mercado + crons**
 `MarketDataProvider` con implementación Yahoo, endpoints de cron y backfill.
-✅ Después de correr el cron, `prices_daily` tiene historial de todos los símbolos del fixture.
+✅ Después de correr el cron, `prices_daily` tiene historial de todos los símbolos del fixture. *(Hecha: `pnpm test:live`.)*
 
 **Fase 4 — UI principal**
 Inicio, Posiciones, detalle de posición, Actividad (con alta manual) e Importar CSV con vista previa.
-✅ Importar el CSV de Delta y ver los números de la sección 8.3 en pantalla.
+✅ Importar el CSV de Delta y ver los números de la sección 8.3 en pantalla. *(Hecha: `lib/portfolio/__tests__/app-http.live.test.ts`.)*
 
 **Fase 5 — Métricas avanzadas**
-Serie histórica, TWR, XIRR, comparación con benchmark y asignación.
-✅ Tests de TWR y XIRR con casos calculados a mano (incluido un depósito a mitad de período).
+Serie histórica, TWR, XIRR, comparación con benchmark y asignación. *(La asignación por instrumento y por tipo ya está desde la Fase 4.)*
+✅ Tests de TWR y XIRR con casos calculados a mano (incluido un depósito a mitad de período). *(Hecha: `lib/engine/__tests__/performance.test.ts`; tarjeta "Rendimiento" en Inicio.)*
 
 **Fase 6 — Watchlist + PWA**
 **Requisito previo:** pasar el ingreso a un **código OTP de 6 dígitos** que se tipea en la app, con **SMTP propio** (por ejemplo Resend, plan gratuito). El enlace del correo abre Safari, no la PWA instalada; y el correo por defecto de Supabase (2 mensajes por hora, solo a miembros de la organización) tampoco sirve para invitar a un amigo. Detalle en `docs/decisions.md` (Tareas pendientes).

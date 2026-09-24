@@ -183,6 +183,7 @@ export type Database = {
           currency: string
           exchange: string | null
           history_backfilled_at: string | null
+          history_from: string | null
           id: string
           industry: string | null
           name: string | null
@@ -196,6 +197,7 @@ export type Database = {
           currency?: string
           exchange?: string | null
           history_backfilled_at?: string | null
+          history_from?: string | null
           id?: string
           industry?: string | null
           name?: string | null
@@ -209,6 +211,7 @@ export type Database = {
           currency?: string
           exchange?: string | null
           history_backfilled_at?: string | null
+          history_from?: string | null
           id?: string
           industry?: string | null
           name?: string | null
@@ -216,6 +219,36 @@ export type Database = {
           sector?: string | null
           symbol?: string
           type?: string | null
+        }
+        Relationships: []
+      }
+      market_job_runs: {
+        Row: {
+          errors: Json
+          finished_at: string | null
+          id: string
+          job: string
+          started_at: string
+          status: string
+          summary: Json
+        }
+        Insert: {
+          errors?: Json
+          finished_at?: string | null
+          id?: string
+          job: string
+          started_at?: string
+          status?: string
+          summary?: Json
+        }
+        Update: {
+          errors?: Json
+          finished_at?: string | null
+          id?: string
+          job?: string
+          started_at?: string
+          status?: string
+          summary?: Json
         }
         Relationships: []
       }
@@ -324,6 +357,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rate_limits: {
+        Row: {
+          count: number
+          key: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          count?: number
+          key: string
+          user_id: string
+          window_start?: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          user_id?: string
+          window_start?: string
+        }
+        Relationships: []
       }
       transactions: {
         Row: {
@@ -459,7 +513,45 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      active_instruments: {
+        Args: never
+        Returns: {
+          first_tx_date: string
+          history_backfilled_at: string
+          history_from: string
+          in_watchlist: boolean
+          instrument_id: string
+          latest_price_date: string
+          provider_symbol: string
+          symbol: string
+        }[]
+      }
       hook_before_user_created: { Args: { event: Json }; Returns: Json }
+      import_transactions: {
+        Args: {
+          p_account_id: string
+          p_filename: string
+          p_report: Json
+          p_rows: Json
+          p_source: string
+        }
+        Returns: {
+          duplicates: number
+          import_id: string
+          inserted: number
+        }[]
+      }
+      instrument_prices: {
+        Args: { p_instrument_ids: string[] }
+        Returns: {
+          instrument_id: string
+          last_close: string
+          last_date: string
+          prev_close: string
+          prev_date: string
+        }[]
+      }
+      take_rate_limit: { Args: { p_key: string }; Returns: boolean }
     }
     Enums: {
       tx_type:
