@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import manifest from "@/app/manifest";
 import nextConfig from "@/next.config";
+import { CONTENT_SECURITY_POLICY } from "@/lib/security/csp";
 
 // La app instalable (spec §10.6): el manifiesto, los íconos, el service worker y las cabeceras.
 // Lo que solo se ve en un navegador real (instalabilidad, sin conexión, modo oscuro) lo comprueba
@@ -78,7 +79,30 @@ describe("cabeceras (next.config)", () => {
     expect(headers["Strict-Transport-Security"]).toMatch(/max-age=\d{7,}/);
     expect(headers["Permissions-Policy"]).toContain("camera=()");
     expect(headers["Permissions-Policy"]).toContain("geolocation=()");
+    expect(headers["Cross-Origin-Opener-Policy"]).toBe("same-origin");
+    expect(headers["X-Robots-Tag"]).toContain("noindex");
     expect(nextConfig.poweredByHeader).toBe(false);
+  });
+
+  describe("Content-Security-Policy", () => {
+    const allHeaders = async () => {
+      const rules = await nextConfig.headers!();
+      const all = rules.find((rule) => rule.source === "/:path*");
+      return Object.fromEntries(all!.headers.map((h) => [h.key, h.value]));
+    };
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("en producción toda la app la lleva", async () => {
+      vi.stubEnv("NODE_ENV", "production");
+      expect((await allHeaders())["Content-Security-Policy"]).toBe(
+        CONTENT_SECURITY_POLICY,
+      );
+    });
+
+    it("en desarrollo no: el refresco en caliente de Next necesita eval y WebSocket", async () => {
+      vi.stubEnv("NODE_ENV", "development");
+      expect(await allHeaders()).not.toHaveProperty("Content-Security-Policy");
+    });
   });
 
   it("el service worker no se cachea y solo carga scripts propios", async () => {
