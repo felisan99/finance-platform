@@ -1,9 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/db/database.types";
-import { addDays, computePerformance, d, type DailyClose } from "@/lib/engine";
+import { addDays, d, type DailyClose } from "@/lib/engine";
 import { describeError } from "@/lib/market-data";
-import { buildPerformanceView, type PerformanceView } from "./performance-view";
-import { getBenchmark, getCloseSeries } from "./queries";
+import { assemblePerformance } from "./performance-build";
+import type { PerformanceView } from "./performance-view";
+import { getBenchmark, getCloseSeries, getQuoteRows } from "./queries";
 import type { DailyCloseRow } from "./rows";
 import type { PortfolioSnapshot } from "./snapshot";
 
@@ -17,7 +18,9 @@ const toCloses = (rows: readonly DailyCloseRow[]): DailyClose[] =>
  * Lee los cierres de todo lo que el libro alguna vez tuvo (posiciones abiertas y cerradas) y del
  * benchmark, y calcula el rendimiento. Es la única parte de la Fase 5 que toca la base: el cálculo
  * está en `lib/engine` y el formato en `performance-view.ts`. La serie termina en el último cierre
- * disponible. `null` si no hay operaciones o ningún precio todavía.
+ * disponible o, si "Actualizar precios" trajo cotizaciones de un día más nuevo, en ese día con la
+ * cotización como último punto (`live-series.ts`): así el gráfico y las métricas cuentan lo mismo
+ * que el valor total de Inicio. `null` si no hay operaciones o ningún precio todavía.
  */
 export async function loadPerformance(
   client: SupabaseClient<Database>,
@@ -33,11 +36,14 @@ export async function loadPerformance(
 
   const heldIds = [...snapshot.instrumentById.keys()];
   const benchmark = await getBenchmark(client, snapshot.account.id);
-  const [held, benchmarkRows] = await Promise.all([
+  const [held, benchmarkRows, benchmarkQuotes] = await Promise.all([
     getCloseSeries(client, heldIds, fromDate, "close"),
     benchmark?.instrumentId
       ? getCloseSeries(client, [benchmark.instrumentId], fromDate, "adj_close")
       : Promise.resolve(new Map<string, DailyCloseRow[]>()),
+    benchmark?.instrumentId
+      ? getQuoteRows(client, [benchmark.instrumentId])
+      : Promise.resolve([]),
   ]);
 
   const closes = new Map<string, DailyClose[]>();
@@ -49,25 +55,20 @@ export async function loadPerformance(
     ? toCloses(benchmarkRows.get(benchmark.instrumentId) ?? [])
     : [];
 
-  const lastDates = [
-    ...[...closes.values()].map((list) => list.at(-1)?.date),
-    benchmarkCloses.at(-1)?.date,
-  ].filter((date): date is string => date !== undefined);
-  if (lastDates.length === 0) return null;
-  const endDate = lastDates.reduce((max, date) => (date > max ? date : max));
-
-  const result = computePerformance({
-    transactions: snapshot.transactions,
-    closes,
-    benchmark: benchmarkCloses.length > 0 ? benchmarkCloses : null,
-    endDate,
-    options: { currency: snapshot.account.currency },
-  });
-  return buildPerformanceView({
-    result,
-    benchmark: benchmarkCloses.length > 0 ? benchmarkCloses : null,
-    benchmarkSymbol: benchmark?.symbol ?? null,
-  });
+  return (
+    assemblePerformance({
+      snapshot,
+      closes,
+      benchmarkCloses,
+      benchmarkQuote: benchmarkQuotes[0]
+        ? {
+            price: d(benchmarkQuotes[0].price),
+            asOf: new Date(benchmarkQuotes[0].as_of),
+          }
+        : null,
+      benchmarkSymbol: benchmark?.symbol ?? null,
+    })?.view ?? null
+  );
 }
 
 /** Lo que salió de pedir el rendimiento, para que varias secciones de Inicio lo compartan. */

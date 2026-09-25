@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MAX_IMPORT_BYTES, readImportFile, sanitizeFilename } from "../import";
+import {
+  MAX_IMPORT_BYTES,
+  NOT_CSV_MESSAGE,
+  PASTED_FILENAME,
+  readImportFile,
+  readImportInput,
+  readImportText,
+  sanitizeFilename,
+} from "../import";
 
 const file = (content: string | Uint8Array, name = "delta.csv") =>
   new File([content as BlobPart], name);
@@ -60,7 +68,7 @@ describe("readImportFile", () => {
     const result = await readImportFile(file("a,b\n", name));
     expect(result).toEqual({
       ok: false,
-      message: "Subí un archivo con extensión .csv",
+      message: NOT_CSV_MESSAGE,
     });
   });
 
@@ -70,7 +78,90 @@ describe("readImportFile", () => {
     ]); // cabecera de un zip/xlsx
     expect(await readImportFile(file(binary, "planilla.csv"))).toEqual({
       ok: false,
-      message: "No parece un archivo CSV de texto",
+      message: expect.stringContaining("No parece un archivo CSV de texto"),
+    });
+  });
+
+  it("los mensajes de archivo que no es CSV explican qué hacer con una planilla", async () => {
+    const wrongExtension = await readImportFile(file("a,b\n", "datos.xlsx"));
+    expect(wrongExtension).toMatchObject({
+      message: expect.stringContaining("Google Sheets"),
+    });
+    expect(NOT_CSV_MESSAGE).toContain("Pegar filas");
+  });
+});
+
+describe("readImportText (filas pegadas)", () => {
+  it("devuelve el texto tal cual y un nombre fijo", () => {
+    const text = "fecha\ttipo\n2026-03-09\tcompra\n";
+    expect(readImportText(text)).toEqual({
+      ok: true,
+      text,
+      filename: PASTED_FILENAME,
+    });
+  });
+
+  it.each([
+    ["vacío", ""],
+    ["solo espacios y saltos", "  \n\t \n"],
+    ["no es un texto", 42],
+    ["ausente", null],
+    ["undefined", undefined],
+  ])("rechaza %s", (_label, value) => {
+    expect(readImportText(value)).toEqual({
+      ok: false,
+      message: "Pegá las filas primero",
+    });
+  });
+
+  it("rechaza lo que pesa más de 1 MB (en bytes, no en caracteres)", () => {
+    expect(readImportText("a".repeat(MAX_IMPORT_BYTES)).ok).toBe(true);
+    expect(readImportText("a".repeat(MAX_IMPORT_BYTES + 1))).toEqual({
+      ok: false,
+      message: "Lo pegado pesa más de 1 MB",
+    });
+    // "ñ" pesa 2 bytes: la mitad de caracteres ya pasa del tope.
+    expect(readImportText("ñ".repeat(MAX_IMPORT_BYTES / 2 + 1)).ok).toBe(false);
+  });
+
+  it("rechaza bytes nulos", () => {
+    expect(readImportText("a\u0000b")).toMatchObject({ ok: false });
+  });
+});
+
+describe("readImportInput", () => {
+  it("lee el archivo cuando no hay texto", async () => {
+    const form = new FormData();
+    form.set("file", file("a,b\n1,2\n", "mis.csv"));
+    expect(await readImportInput(form)).toMatchObject({
+      ok: true,
+      filename: "mis.csv",
+    });
+  });
+
+  it("lee el texto pegado cuando viene el campo text", async () => {
+    const form = new FormData();
+    form.set("text", "a,b\n1,2\n");
+    expect(await readImportInput(form)).toMatchObject({
+      ok: true,
+      filename: PASTED_FILENAME,
+    });
+  });
+
+  it("si vienen los dos, gana el texto; un texto vacío no cae al archivo", async () => {
+    const form = new FormData();
+    form.set("file", file("a,b\n", "viejo.csv"));
+    form.set("text", "");
+    expect(await readImportInput(form)).toEqual({
+      ok: false,
+      message: "Pegá las filas primero",
+    });
+  });
+
+  it("sin nada: pide elegir un archivo", async () => {
+    expect(await readImportInput(new FormData())).toMatchObject({
+      ok: false,
+      message: expect.stringContaining("Elegí un archivo"),
     });
   });
 });

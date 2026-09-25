@@ -4,7 +4,11 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
   ? Omit<T, K>
   : never;
 
-export type ImportSource = "delta_csv" | "ibkr_flex";
+/** `csv`: el formato simple propio (el mismo del «Exportar CSV»); `delta_csv`: el export de Delta. */
+export type ImportSource = "delta_csv" | "ibkr_flex" | "csv";
+
+/** Formatos de archivo que se reconocen solos por sus encabezados. */
+export type ImportFormat = "delta" | "simple";
 
 /**
  * Transacción lista para insertar, sin los campos que asigna la capa de base de datos
@@ -47,13 +51,19 @@ export interface RowError {
     | "INVALID_ROW"
     | "INVALID_SYMBOL"
     | "INVALID_QUANTITY"
-    | "INVALID_AMOUNT";
+    | "INVALID_AMOUNT"
+    | "INVALID_DATE"
+    | "INVALID_TYPE"
+    | "INVALID_PRICE"
+    | "INVALID_FEE"
+    | "INVALID_SPLIT"
+    | "TEMPLATE_ROW";
   message: string;
 }
 
 /** Problema del archivo entero: no se procesa ninguna fila. */
 export interface FatalError {
-  code: "EMPTY_FILE" | "MISSING_COLUMNS";
+  code: "EMPTY_FILE" | "MISSING_COLUMNS" | "UNKNOWN_FORMAT";
   message: string;
 }
 

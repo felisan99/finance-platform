@@ -209,6 +209,23 @@ describe("buildWatchlistRow: rango y minigráfico", () => {
     expect(view.spark).toEqual([100, 101.5, 99.25]);
   });
 
+  it("minigráfico: si la cotización es de un día posterior al último cierre, termina en ella", () => {
+    const recent: Array<[string, string]> = [
+      ["2026-09-22", "101.5"],
+      ["2026-09-23", "99.25"],
+    ];
+    expect(
+      row(quote("102", "2026-09-24T15:00:00Z", "1"), market({ recent })).spark,
+    ).toEqual([101.5, 99.25, 102]);
+    // Del mismo día que el último cierre, o más vieja: solo los cierres.
+    expect(
+      row(quote("102", "2026-09-23T20:00:00Z", "1"), market({ recent })).spark,
+    ).toEqual([101.5, 99.25]);
+    expect(
+      row(quote("102", "2026-09-22T20:00:00Z", "1"), market({ recent })).spark,
+    ).toEqual([101.5, 99.25]);
+  });
+
   it("minigráfico: con menos de dos cierres válidos queda vacío", () => {
     expect(
       row(null, market({ recent: [["2026-09-23", "100"]] })).spark,

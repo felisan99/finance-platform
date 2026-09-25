@@ -17,6 +17,7 @@ import {
   formatPrice,
   formatQuantity,
 } from "@/lib/portfolio/format";
+import { withLiveBar } from "@/lib/portfolio/live-series";
 import {
   getPriceSeries,
   getWatchlistItems,
@@ -80,8 +81,13 @@ export default async function PositionDetailPage({
         addDays(isoDate(firstTrade), -7),
       )
     : [];
+  // Con la cotización de hoy como último punto mientras no exista el cierre de hoy.
   const chart = buildPositionChart(
-    series,
+    withLiveBar(series, {
+      price: position.price,
+      asOf: position.priceAsOf,
+      source: position.priceSource,
+    }),
     own,
     symbol,
     position.avgCost?.toFixed() ?? null,

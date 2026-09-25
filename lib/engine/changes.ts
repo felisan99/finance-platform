@@ -15,7 +15,9 @@ export type LedgerChange =
   /** Varias altas juntas (una importación): se valida el conjunto, no una por una. */
   | { kind: "addMany"; txs: readonly Transaction[] }
   | { kind: "replace"; id: string; tx: Transaction }
-  | { kind: "remove"; id: string };
+  | { kind: "remove"; id: string }
+  /** Varias bajas juntas (deshacer una importación): se valida el conjunto, no una por una. */
+  | { kind: "removeMany"; ids: readonly string[] };
 
 export interface ChangeCheck {
   /** `true` si el cambio no introduce errores nuevos. */
@@ -56,6 +58,15 @@ function apply(
         throw new RangeError(`No existe la transacción ${change.id}`);
       }
       return existing.filter((tx) => tx.id !== change.id);
+    }
+    case "removeMany": {
+      const ids = new Set(change.ids);
+      const present = new Set(existing.map((tx) => tx.id));
+      for (const id of ids) {
+        if (!present.has(id))
+          throw new RangeError(`No existe la transacción ${id}`);
+      }
+      return existing.filter((tx) => !ids.has(tx.id));
     }
   }
 }

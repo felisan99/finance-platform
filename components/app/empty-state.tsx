@@ -16,8 +16,8 @@ export function EmptyPortfolio() {
       <CardHeader>
         <CardTitle>Todavía no cargaste operaciones</CardTitle>
         <CardDescription>
-          Importá el historial que exportaste de Delta o cargá tu primera
-          operación a mano.
+          Importá tu historial desde un CSV (el de Delta o nuestra plantilla) o
+          cargá tu primera operación a mano.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 sm:flex-row">
@@ -25,7 +25,7 @@ export function EmptyPortfolio() {
           href="/activity/import"
           className={cn(buttonVariants({ size: "lg" }), "flex-1")}
         >
-          Importar CSV de Delta
+          Importar un CSV
         </Link>
         <Link
           href="/activity/new"

@@ -14,7 +14,13 @@ import {
   type RiskResult,
 } from "@/lib/engine";
 import { formatDateKey, formatDayMonthKey } from "./chart-format";
-import { EMPTY, formatMoney, formatPercent, formatPoints } from "./format";
+import {
+  EMPTY,
+  formatDateTime,
+  formatMoney,
+  formatPercent,
+  formatPoints,
+} from "./format";
 import { toneOf, type Tone } from "./tone";
 
 // Rendimiento para la pantalla (spec §10.1): el cálculo es de `lib/engine/performance.ts`; acá se
@@ -121,6 +127,11 @@ export interface PerformanceView {
   risk: RiskView | null;
   /** Fecha del último cierre que entra en la serie, `dd/mm/aaaa`. */
   asOf: string;
+  /**
+   * `dd/mm/aaaa hh:mm` de la cotización que hace de último punto cuando es más nueva que el último
+   * cierre (`live-series.ts`); `null` si la serie llega hasta un cierre.
+   */
+  live: string | null;
   /** Avisos sobre los datos, ya redactados. */
   notes: string[];
 }
@@ -192,6 +203,7 @@ function buildMonthlyBars(
   result: PerformanceResult,
   benchmark: readonly DailyClose[] | null,
   firstDate: string | null,
+  live: boolean,
 ): MonthlyBarView[] {
   return computeMonthlyReturns(result.series, benchmark)
     .slice(-MONTHLY_BARS)
@@ -200,7 +212,8 @@ function buildMonthlyBars(
       if (m.startsMidMonth && firstDate !== null) {
         notes.push(`desde el ${formatDayMonthKey(firstDate)}`);
       }
-      if (m.inProgress) notes.push("en curso");
+      if (m.inProgress)
+        notes.push(live ? "en curso, con la cotización de hoy" : "en curso");
       return {
         month: m.month,
         label: monthLabel(m.month),
@@ -219,7 +232,11 @@ function buildMonthlyBars(
 /** Con menos de un año de ruedas la volatilidad y la caída máxima son orientativas. */
 const RISK_RELIABLE_DAYS = 252;
 
-function buildRiskView(risk: RiskResult, all: PeriodResult): RiskView {
+function buildRiskView(
+  risk: RiskResult,
+  all: PeriodResult,
+  live: boolean,
+): RiskView {
   const drawdown = risk.maxDrawdown;
   const volatility =
     risk.volatility === null ? null : d(risk.volatility.toFixed(8));
@@ -265,9 +282,16 @@ function buildRiskView(risk: RiskResult, all: PeriodResult): RiskView {
       drawdown: percentNumber(point.drawdown),
     })),
     note:
-      risk.days < RISK_RELIABLE_DAYS
-        ? "Con menos de un año de historia estos números son orientativos."
-        : null,
+      [
+        risk.days < RISK_RELIABLE_DAYS
+          ? "Con menos de un año de historia estos números son orientativos."
+          : null,
+        live
+          ? "Incluye la cotización de hoy, que todavía no es un cierre: el mejor y el peor día pueden cambiar al terminar la rueda."
+          : null,
+      ]
+        .filter((text) => text !== null)
+        .join(" ") || null,
   };
 }
 
@@ -279,8 +303,11 @@ export function buildPerformanceView(input: {
   result: PerformanceResult;
   benchmark: readonly DailyClose[] | null;
   benchmarkSymbol: string | null;
+  /** Hay un punto en vivo al final de la serie: de cuándo es la cotización y el último cierre real. */
+  live?: { asOf: Date; lastCloseDate: string } | null;
 }): PerformanceView | null {
   const { result, benchmark, benchmarkSymbol } = input;
+  const live = input.live ?? null;
   const last = result.series.points.at(-1);
   if (result.periods.length === 0 || last === undefined) return null;
 
@@ -327,9 +354,18 @@ export function buildPerformanceView(input: {
     periods,
     benchmarkLabel: benchmarkLabel(benchmarkSymbol),
     hasBenchmark: !result.warnings.some((w) => w.code === "NO_BENCHMARK"),
-    monthly: buildMonthlyBars(result, benchmark, first?.date ?? null),
-    risk: risk === null || all === undefined ? null : buildRiskView(risk, all),
-    asOf: formatDateKey(last.date),
+    monthly: buildMonthlyBars(
+      result,
+      benchmark,
+      first?.date ?? null,
+      live !== null,
+    ),
+    risk:
+      risk === null || all === undefined
+        ? null
+        : buildRiskView(risk, all, live !== null),
+    asOf: formatDateKey(live ? live.lastCloseDate : last.date),
+    live: live ? formatDateTime(live.asOf) : null,
     notes: result.warnings.flatMap((w) => noteOf(w) ?? []),
   };
 }

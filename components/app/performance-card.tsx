@@ -366,6 +366,7 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
           Desde el {period.since}
           {period.truncated ? " (todo el historial)" : ""} · cierres al{" "}
           {view.asOf}
+          {view.live ? ` y cotización del ${view.live}` : ""}
         </p>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-4 border-t pt-4">
@@ -408,8 +409,9 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
             : mode === "value"
               ? `El valor incluye tus depósitos y retiros (por eso sube a saltos): la ganancia y el rendimiento están en “Ganancia” y “vs ${view.benchmarkLabel}”. `
               : ""}
-          El gráfico usa cierres diarios; el valor total de arriba usa la
-          cotización del momento.
+          {view.live
+            ? "El último punto es la cotización del momento, no un cierre: cuando termina la rueda lo reemplaza el cierre del día."
+            : "El gráfico usa cierres diarios; el valor total de arriba usa la cotización del momento."}
         </p>
       </CardContent>
     </Card>

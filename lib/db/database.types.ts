@@ -141,6 +141,7 @@ export type Database = {
           rows_skipped: number | null
           rows_total: number | null
           source: string
+          undone_at: string | null
           user_id: string
         }
         Insert: {
@@ -153,6 +154,7 @@ export type Database = {
           rows_skipped?: number | null
           rows_total?: number | null
           source: string
+          undone_at?: string | null
           user_id: string
         }
         Update: {
@@ -165,6 +167,7 @@ export type Database = {
           rows_skipped?: number | null
           rows_total?: number | null
           source?: string
+          undone_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -407,6 +410,7 @@ export type Database = {
           external_id: string | null
           fee: number
           id: string
+          import_id: string | null
           instrument_id: string | null
           notes: string | null
           price: number | null
@@ -426,6 +430,7 @@ export type Database = {
           external_id?: string | null
           fee?: number
           id?: string
+          import_id?: string | null
           instrument_id?: string | null
           notes?: string | null
           price?: number | null
@@ -445,6 +450,7 @@ export type Database = {
           external_id?: string | null
           fee?: number
           id?: string
+          import_id?: string | null
           instrument_id?: string | null
           notes?: string | null
           price?: number | null
@@ -461,6 +467,13 @@ export type Database = {
             columns: ["account_id", "user_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "transactions_import_fk"
+            columns: ["import_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "imports"
             referencedColumns: ["id", "user_id"]
           },
           {
@@ -570,8 +583,21 @@ export type Database = {
           prev_date: string
         }[]
       }
+      recent_imports: {
+        Args: { p_limit?: number }
+        Returns: {
+          created_at: string
+          filename: string
+          import_id: string
+          live_count: number
+          rows_imported: number
+          source: string
+          undone_at: string
+        }[]
+      }
       take_login_attempt: { Args: { p_key: string }; Returns: boolean }
       take_rate_limit: { Args: { p_key: string }; Returns: boolean }
+      undo_import: { Args: { p_import_id: string }; Returns: number }
       watchlist_market: {
         Args: { p_instrument_ids: string[]; p_points: number; p_since: string }
         Returns: {

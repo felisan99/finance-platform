@@ -12,11 +12,11 @@ Ingresá con tu email: te llega un **código de 6 dígitos** al correo (puede ta
 
 **Para verla a 390 px** usá el modo dispositivo de las herramientas de desarrollo del navegador (Chrome: F12 → ícono de celular → iPhone 12/13/14). Para verla en el teléfono real usá la dirección de Vercel (sección 7): el iPhone exige HTTPS para instalar una app.
 
-## 1. Importar el CSV de Delta
+## 1. Importar operaciones
 
-1. **Más → Importar CSV de Delta** (o **Actividad → Importar CSV**).
-2. Elegí `delta_PORTAFOLIO PRINCIPAL_230902026_1.csv` y tocá **Ver vista previa**.
-3. La vista previa tiene que decir: **operaciones nuevas** (las compras, ventas y depósitos), **filas ignoradas** por ser "patas de efectivo automáticas de Delta" (es a propósito), **0 con error**, y 10 **instrumentos nuevos** (o menos si ya existían) y "Cómo quedaría tu portafolio":
+1. **Más → Importar operaciones (CSV)** (o **Actividad → Importar CSV**). Arriba está la guía del formato, con la plantilla para descargar.
+2. **Delta:** elegí `delta_PORTAFOLIO PRINCIPAL_230902026_1.csv` y tocá **Ver vista previa**.
+3. La vista previa tiene que decir: **Formato: Delta**, **operaciones nuevas** (las compras, ventas y depósitos), **filas ignoradas** por ser "patas de efectivo automáticas de Delta" (es a propósito), **0 con error**, y 10 **instrumentos nuevos** (o menos si ya existían) y "Cómo quedaría tu portafolio":
 
    | Dato                       | Valor esperado |
    | -------------------------- | -------------- |
@@ -25,7 +25,18 @@ Ingresá con tu email: te llega un **código de 6 dígitos** al correo (puede ta
    | Ganancia realizada         | 247,015       |
    | Posiciones abiertas        | 5              |
 
+   Abrí **Ver las N operaciones que se van a cargar**: fechas día/mes/año, tipo, símbolo, cantidad y precio.
+
 4. **Confirmar importación.** Te lleva a **Posiciones** con un aviso de que los precios se descargan en segundo plano.
+
+### Formato simple, planilla y errores (desde el teléfono y la compu)
+
+1. **Descargar la plantilla (CSV)**, abrila en Excel o Google Sheets, borrá los ejemplos y cargá dos o tres operaciones tuyas. Guardala como CSV y subila: **Formato: Portfolio Tracker**. Si subís la plantilla sin tocar, tiene que rechazar las 5 filas de ejemplo.
+2. **Pegar filas:** copiá las celdas de la planilla (con la fila de encabezados) y pegalas en la pestaña **Pegar filas**. Probá con fechas `09/03/2026` y precios con coma (`575,24`): la vista previa tiene que mostrarlos como 09/03/2026 y US$ 575,24.
+3. **Errores:** poné una fecha `31/02/2026`, un tipo raro y un símbolo mal escrito (`APPL`). Tienen que salir agrupados, con la fila y cómo arreglarlos, y no se puede confirmar.
+4. **Repetidas:** volvé a subir lo mismo: «ya importadas», nada que confirmar. Cargá una compra a mano y subí un CSV con esa misma compra (otro precio): aparece «Parecen repetir operaciones que ya tenés» y no se importa salvo que tildes **Importar igual**.
+5. **Deshacer:** al final de la pantalla, **Importaciones anteriores → Deshacer importación → Sí, deshacer**. Se borran solo las de esa importación (no lo cargado a mano). Si después importaste una venta que depende de esas compras, avisa y no deja.
+6. **Ida y vuelta:** **Más → Exportar todas las operaciones (CSV)** y volvelo a subir: todo figura como ya importado.
 
 ## 2. Ver los números en pantalla
 
@@ -68,7 +79,8 @@ En **Inicio**, la tarjeta **Rendimiento** (aparece unos instantes después del r
 - **Datos:** TWR (rendimiento ponderado por tiempo, no le afectan los depósitos), XIRR (tasa anual ponderada por dinero; en períodos de menos de 30 días dice "Muy corto para una tasa anual"), S&P 500 y la diferencia en puntos porcentuales.
 - Referencia: con el CSV de Delta importado y **sin** el DDOG cargado a mano (a los cierres del 24/09/2026, desde el 06/03/2026): TWR +16,48 %, XIRR +28,06 %, S&P 500 +13,48 %, diferencia +3,00 pp. Con el DDOG y con precios más nuevos los números cambian un poco.
 - Si no aparece el S&P 500: tocá **Actualizar precios** (baja el historial del benchmark en segundo plano) y recargá.
-- El gráfico usa cierres diarios: el valor de la tarjeta de arriba (cotización del momento) puede diferir del último punto hasta que cierre el mercado.
+- **Durante la rueda (lunes a viernes, de 10:30 a 17:00 en Montevideo):** tocá **Actualizar precios** sin recargar. Cambian el valor total y la ganancia de arriba **y también** el gráfico de Rendimiento, el TWR, el XIRR, el S&P 500, «Rendimiento por mes», el riesgo y los minigráficos. La leyenda dice «cierres al 24/09/2026 y cotización del 25/09/2026 11:47» y la **Ganancia del período** de «Todo» tiene que ser igual a la **Ganancia total** de arriba. Ese último punto es la cotización del momento, no un cierre: al terminar la rueda el cron guarda el cierre y la leyenda vuelve a decir solo «cierres al …».
+- Fuera de la rueda (noche, fin de semana) no hay punto en vivo: el gráfico llega al último cierre, que es lo mismo que muestra el valor de arriba. Si el S&P 500 no se pudo actualizar, tampoco hay punto en vivo (para no comparar días distintos): tocá **Actualizar precios** de nuevo pasados 5 minutos.
 
 ## 5b. Inicio completo (Inicio v2)
 
@@ -111,5 +123,6 @@ Anotá lo que se vea raro (sobre todo la barra de estado y el correo): son las d
 
 - Una sola cuenta y una sola watchlist.
 - Editar o borrar una operación importada: si volvés a subir el archivo original, se crea de nuevo.
+- Las importaciones anteriores a «Deshacer importación» no se pueden deshacer (no guardaban de qué importación salió cada operación).
 - El código de ingreso permite 5 intentos cada 15 minutos por email; si alguien los gasta, esa persona espera 15 minutos.
 - Sin notificaciones push ni interruptor manual de modo oscuro (sigue al sistema).

@@ -11,6 +11,7 @@ import {
 import type { Database, Json } from "@/lib/db/database.types";
 import { validateLedgerChange } from "@/lib/engine";
 import { ensureInstruments } from "@/lib/market-jobs/instruments";
+import { buildImportTemplate } from "@/lib/importers";
 import { prepareImport } from "../import-flow";
 import {
   inputToInsertRow,
@@ -21,6 +22,7 @@ import {
 import {
   getInstruments,
   getPrimaryAccount,
+  getTransactionIdsByImport,
   getTransactionRows,
 } from "../queries";
 import { parseTransactionForm } from "@/lib/validation/transaction";
@@ -79,6 +81,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
   let b: Session;
   let ddogCreated = false;
   let watchedInstrumentId: string | undefined;
+  const liveInstrumentIds: string[] = [];
   const userIds: string[] = [];
 
   async function newSession(label: string): Promise<Session> {
@@ -156,6 +159,8 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     // Después de los usuarios: sus filas de watchlist apuntan al instrumento (sus cierres se van en cascada).
     if (watchedInstrumentId)
       await admin.from("instruments").delete().eq("id", watchedInstrumentId);
+    for (const id of liveInstrumentIds)
+      await admin.from("instruments").delete().eq("id", id);
   });
 
   it("sin sesión, todas las pantallas mandan a /login", async () => {
@@ -256,7 +261,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     const home = await page("/", a);
     expect(home.status).toBe(200);
     expect(home.html).toContain("Todavía no cargaste operaciones");
-    expect(home.html).toContain("Importar CSV de Delta");
+    expect(home.html).toContain("Importar un CSV");
     expect((await page("/positions", a)).html).toContain(
       "Todavía no cargaste operaciones",
     );
@@ -571,9 +576,126 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(created.html).toContain("Guardar operación");
     const imported = await page("/activity/import", a);
     expect(imported.status).toBe(200);
-    expect(imported.html).toContain("Archivo CSV de Delta");
+    expect(imported.html).toContain("Cómo cargar tus operaciones");
+    expect(imported.html).toContain("Descargar la plantilla");
+    expect(imported.html).toContain("Pegar filas");
+    expect(imported.html).toContain("Archivo CSV");
     expect(imported.html).toContain("Ver vista previa");
+    // La importación de Delta quedó en el historial, con su botón para deshacerla.
+    expect(text(imported.html)).toContain("delta_export.csv");
+    expect(text(imported.html)).toContain("Formato Delta");
+    expect(imported.html).toContain("Deshacer importación");
   });
+
+  it("importar en el formato simple: plantilla, vista previa, parecidas, ida y vuelta con la exportación y deshacer", async () => {
+    // La plantilla: solo con sesión, y es la misma que arma el código.
+    const anonymous = await get("/activity/import/plantilla");
+    expect(anonymous.status).toBe(307);
+    expect(anonymous.headers.get("location")).toContain("/login");
+    const template = await get("/activity/import/plantilla", b);
+    expect(template.status).toBe(200);
+    expect(template.headers.get("content-disposition")).toContain(
+      "plantilla-portfolio-tracker.csv",
+    );
+    expect(template.headers.get("cache-control")).toContain("no-store");
+    // `Response.text()` descarta la BOM del principio.
+    expect(await template.text()).toBe(buildImportTemplate().slice(1));
+
+    const account = (await getPrimaryAccount(b.client))!;
+    const now = new Date();
+    const csv = [
+      "fecha;tipo;simbolo;cantidad;precio;monto;comision;notas",
+      "06/03/2026;depósito;;;;5000;;",
+      "09/03/2026;compra;VOO;3;575,24;;1;",
+      "15/04/2026;venta;VOO;1;640,5;;1;",
+    ].join("\n");
+
+    // Vista previa: formato reconocido, coma decimal y fechas día/mes/año bien leídas.
+    const prepared = (await prepareImport(b.client, csv, now))!;
+    expect(prepared.format).toBe("simple");
+    expect(prepared.source).toBe("csv");
+    const { view } = prepared.preview;
+    expect(view.format?.label).toBe("Portfolio Tracker");
+    expect(view.canConfirm).toBe(true);
+    expect(view.newCount).toBe(3);
+    expect(view.rows.map((r) => [r.date, r.typeLabel, r.symbol])).toEqual([
+      ["06/03/2026", "Depósito", ""],
+      ["09/03/2026", "Compra", "VOO"],
+      ["15/04/2026", "Venta", "VOO"],
+    ]);
+    // 5000 − (3 × 575,24 + 1) + (640,5 − 1) = 3912,78
+    expect(view.after?.cash).toBe("3912.78");
+    expect(view.after?.openPositions).toMatchObject([
+      { symbol: "VOO", quantity: "2" },
+    ]);
+
+    // Un símbolo mal escrito se marca (esto sí sale a Yahoo) y no se puede confirmar.
+    const typo = (await prepareImport(
+      b.client,
+      csv.replace("VOO", "APPL"),
+      now,
+    ))!;
+    expect(typo.preview.view.canConfirm).toBe(false);
+    expect(typo.preview.view.errorGroups[0]).toMatchObject({
+      code: "INVALID_SYMBOL",
+    });
+
+    // Confirmar, con las mismas funciones que la interfaz.
+    await ensureInstruments(admin, prepared.preview.newInstruments);
+    const { data, error } = await b.client.rpc("import_transactions", {
+      p_account_id: account.id,
+      p_source: prepared.source!,
+      p_filename: "simple.csv",
+      p_rows: draftsToRpcRows(prepared.preview.toInsert) as unknown as Json,
+      p_report: { fileRows: view.fileRows } as unknown as Json,
+    });
+    expect(error).toBeNull();
+    expect(data?.[0]).toMatchObject({ inserted: 3, duplicates: 0 });
+    const importId = data![0]!.import_id;
+    expect((await page("/positions", b)).html).toContain("VOO");
+    const history = await page("/activity/import", b);
+    expect(text(history.html)).toContain("Formato Portfolio Tracker");
+    expect(history.html).toContain("Deshacer importación");
+
+    // Lo mismo otra vez: todo ya importado.
+    const again = (await prepareImport(b.client, csv, now))!;
+    expect(again.preview.view.newCount).toBe(0);
+    expect(again.preview.view.duplicateCount).toBe(3);
+    expect(again.preview.view.canConfirm).toBe(false);
+
+    // Una compra que solo difiere en el precio parece repetir una ya cargada: se excluye por defecto.
+    const similarCsv =
+      "fecha;tipo;simbolo;cantidad;precio\n09/03/2026;compra;VOO;3;613,00";
+    const similar = (await prepareImport(b.client, similarCsv, now))!;
+    expect(similar.preview.view.suspectedCount).toBe(1);
+    expect(similar.preview.view.newCount).toBe(0);
+    const included = (await prepareImport(b.client, similarCsv, now, {
+      includeSuspected: true,
+    }))!;
+    expect(included.preview.view.newCount).toBe(1);
+
+    // Ida y vuelta: lo que baja «Exportar CSV» se vuelve a leer y todo figura como ya importado.
+    const exported = await (await get("/activity/export", b)).text();
+    const roundTrip = (await prepareImport(b.client, exported, now))!;
+    expect(roundTrip.format).toBe("simple");
+    expect(roundTrip.preview.view.errorCount).toBe(0);
+    expect(roundTrip.preview.view.duplicateCount).toBe(3);
+    expect(roundTrip.preview.view.newCount).toBe(0);
+
+    // Deshacer: primero se comprueba que el libro siga consistente, y después se borra.
+    const ids = await getTransactionIdsByImport(b.client, importId);
+    expect(ids).toHaveLength(3);
+    const undone = await b.client.rpc("undo_import", { p_import_id: importId });
+    expect(undone.error).toBeNull();
+    expect(undone.data).toBe(3);
+    expect(await getTransactionIdsByImport(b.client, importId)).toEqual([]);
+    expect(text((await page("/activity/import", b)).html)).toContain(
+      "deshecha el",
+    );
+    expect((await page("/positions", b)).html).toContain(
+      "Todavía no cargaste operaciones",
+    );
+  }, 120_000);
 
   it("direcciones inválidas: 'No encontramos esa página' o 400, nunca un error del servidor", async () => {
     for (const path of [
@@ -690,6 +812,144 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect((await page("/watchlist", b)).html).toContain(
       "Todavía no seguís ningún símbolo",
     );
+  });
+
+  it("«Actualizar precios»: con la cotización de hoy el gráfico llega al mismo valor que Inicio, y sin la del benchmark queda en el cierre", async () => {
+    const c = await newSession("live");
+    const held = randomSymbol();
+    const bench = randomSymbol();
+    const created = async (symbol: string, type: string) => {
+      const { data, error } = await admin
+        .from("instruments")
+        .insert({ symbol, name: `En vivo ${symbol}`, type })
+        .select("id")
+        .single();
+      if (error || !data) throw new Error(`instrumento: ${error?.message}`);
+      liveInstrumentIds.push(data.id);
+      return data.id;
+    };
+    const heldId = await created(held, "STOCK");
+    const benchId = await created(bench, "ETF");
+
+    // Cierres del lunes 2 al jueves 5 de marzo de 2026 y la cotización del viernes 6 a media rueda.
+    const days = ["2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05"];
+    const bars = (id: string, closes: number[]) =>
+      closes.map((close, i) => ({
+        instrument_id: id,
+        date: days[i]!,
+        close,
+        adj_close: close,
+      }));
+    expect(
+      (
+        await admin
+          .from("prices_daily")
+          .insert([
+            ...bars(heldId, [100, 102, 104, 103]),
+            ...bars(benchId, [500, 505, 510, 508]),
+          ])
+      ).error,
+    ).toBeNull();
+    const asOf = "2026-03-06T15:00:00Z"; // 12:00 en Montevideo
+    const quoteOf = (id: string, price: number) => ({
+      instrument_id: id,
+      price,
+      change: 1,
+      as_of: asOf,
+    });
+    expect(
+      (
+        await admin
+          .from("quotes_latest")
+          .insert([quoteOf(heldId, 110), quoteOf(benchId, 520)])
+      ).error,
+    ).toBeNull();
+
+    // Su benchmark es el instrumento de prueba; depósito de 2000 y 10 acciones a 100.
+    expect(
+      (
+        await admin
+          .from("portfolios")
+          .update({ benchmark_symbol: bench })
+          .eq("user_id", c.userId)
+      ).error,
+    ).toBeNull();
+    const account = (await getPrimaryAccount(c.client))!;
+    const base = { user_id: c.userId, account_id: account.id, currency: "USD" };
+    expect(
+      (
+        await admin.from("transactions").insert([
+          {
+            ...base,
+            type: "DEPOSIT" as const,
+            amount: 2000,
+            executed_at: "2026-03-02T15:00:00Z",
+          },
+          {
+            ...base,
+            type: "BUY" as const,
+            instrument_id: heldId,
+            quantity: 10,
+            price: 100,
+            executed_at: "2026-03-02T15:00:00Z",
+          },
+        ])
+      ).error,
+    ).toBeNull();
+
+    const count = (html: string, needle: string) =>
+      html.split(needle).length - 1;
+
+    // Con las dos cotizaciones de hoy: 10 × 110 + 1000 de efectivo = 2100, ganancia 100 en Inicio y
+    // en la tarjeta de rendimiento (dos veces: arriba y en «Ganancia del período»).
+    const live = await page("/", c);
+    expect(live.status).toBe(200);
+    expect(live.html).toContain("2.100,00");
+    expect(count(live.html, "+US$ 100,00")).toBeGreaterThanOrEqual(2);
+    expect(live.html).toContain(
+      "cierres al 05/03/2026 y cotización del 06/03/2026 12:00",
+    );
+    expect(live.html).toContain("Incluye la cotización de hoy");
+
+    // El gráfico de precio de la posición también termina en la cotización.
+    expect((await page(`/positions/${held}`, c)).html).toContain("110,00");
+
+    // Sin la cotización de hoy del benchmark el gráfico no mezcla días: queda en el último cierre
+    // (2030 → +30), y el valor de Inicio sigue con la cotización.
+    expect(
+      (await admin.from("quotes_latest").delete().eq("instrument_id", benchId))
+        .error,
+    ).toBeNull();
+    const closed = await page("/", c);
+    expect(closed.status).toBe(200);
+    expect(closed.html).toContain("2.100,00");
+    expect(closed.html).toContain("+US$ 30,00");
+    expect(closed.html).toContain("cierres al 05/03/2026");
+    expect(closed.html).not.toContain("y cotización del");
+    expect(closed.html).not.toContain("Incluye la cotización de hoy");
+
+    // Con el cierre del día ya guardado, la cotización deja de ser más nueva y el punto en vivo
+    // desaparece solo: el cierre gana.
+    expect(
+      (
+        await admin.from("prices_daily").insert([
+          { instrument_id: heldId, date: "2026-03-06", close: 110 },
+          {
+            instrument_id: benchId,
+            date: "2026-03-06",
+            close: 520,
+            adj_close: 520,
+          },
+        ])
+      ).error,
+    ).toBeNull();
+    expect(
+      (await admin.from("quotes_latest").insert(quoteOf(benchId, 520))).error,
+    ).toBeNull();
+    const settled = await page("/", c);
+    expect(settled.html).toContain("cierres al 06/03/2026");
+    expect(settled.html).not.toContain("y cotización del");
+    expect(count(settled.html, "+US$ 100,00")).toBeGreaterThanOrEqual(2);
   });
 
   it("una posición propia ofrece Seguir, y seguirla no cambia sus números", async () => {

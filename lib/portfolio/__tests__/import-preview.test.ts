@@ -86,6 +86,31 @@ describe("buildImportPreview: el CSV de Delta en una cuenta vacía", () => {
     ]);
   });
 
+  it("los textos del resultado vienen ya formateados (es-UY), con el valor exacto al lado", () => {
+    const flat = (text: string | undefined) => text?.replace(/\s/g, " ");
+    expect(flat(view.afterText?.cash.money)).toBe("US$ 882,75");
+    expect(view.afterText?.cash.exact).toBe("882,745");
+    expect(flat(view.afterText?.openCostBasis.money)).toBe("US$ 8.664,27");
+    expect(flat(view.afterText?.realizedPnl.money)).toBe("+US$ 247,02");
+    expect(view.afterText?.openPositions.map((p) => p.symbol)).toEqual([
+      "FSLY",
+      "ILF",
+      "NFLX",
+      "SOXX",
+      "VOO",
+    ]);
+    const voo = view.afterText?.openPositions.find((p) => p.symbol === "VOO");
+    expect(voo?.quantity).toBe("8,95");
+    expect(flat(voo?.costBasis)).toBe("US$ 5.724,77");
+  });
+
+  it("los tipos de operación llevan su rótulo en español", () => {
+    expect(view.newByType.find((t) => t.type === "BUY")?.label).toBe("Compra");
+    expect(view.newByType.find((t) => t.type === "DEPOSIT")?.label).toBe(
+      "Depósito",
+    );
+  });
+
   it("`toInsert` son todos los borradores, en el orden del archivo", () => {
     expect(preview.toInsert.map((t) => t.externalId)).toEqual(
       parsedFixture().transactions.map((t) => t.externalId),

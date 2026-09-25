@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import type { Database } from "@/lib/db/database.types";
 import { chunk, fetchAllPages } from "@/lib/db/paginate";
 import {
@@ -18,6 +19,7 @@ import {
   instrumentRowSchema,
   parseRows,
   quoteRowSchema,
+  recentImportRowSchema,
   transactionRowSchema,
   watchlistItemRowSchema,
   watchlistMarketRowSchema,
@@ -26,6 +28,7 @@ import {
   type DailyCloseRow,
   type InstrumentRow,
   type QuoteRow,
+  type RecentImportRow,
   type TransactionRow,
   type WatchlistItemRow,
   type WatchlistMarketRow,
@@ -70,6 +73,36 @@ export async function getTransactionRows(
       .range(from, to),
   );
   return parseRows(transactionRowSchema, rows, "transactions");
+}
+
+/** Las últimas importaciones del usuario (RLS), con cuántas transacciones les quedan ligadas hoy. */
+export async function getRecentImports(
+  client: Client,
+  limit = 10,
+): Promise<RecentImportRow[]> {
+  const { data, error } = await client.rpc("recent_imports", {
+    p_limit: limit,
+  });
+  if (error) throw new Error(`db recent_imports: ${error.message}`);
+  return parseRows(recentImportRowSchema, data, "recent_imports");
+}
+
+/** Ids de las transacciones que quedaron ligadas a una importación (RLS: solo las del usuario). */
+export async function getTransactionIdsByImport(
+  client: Client,
+  importId: string,
+): Promise<string[]> {
+  const rows = await fetchAllPages((from, to) =>
+    loose(client)
+      .from("transactions")
+      .select("id")
+      .eq("import_id", importId)
+      .order("seq")
+      .range(from, to),
+  );
+  return parseRows(z.object({ id: z.string() }), rows, "transactions").map(
+    (row) => row.id,
+  );
 }
 
 /** Una transacción por id (RLS: solo si es del usuario), o `null`. */
@@ -239,6 +272,16 @@ export async function getBenchmark(
   if (!symbol) return null;
   const ids = await getInstrumentIdsBySymbol(client, [symbol]);
   return { symbol, instrumentId: ids.get(symbol) ?? null };
+}
+
+/** La fila del instrumento del benchmark (con su símbolo del proveedor), o `null` si no existe. */
+export async function getBenchmarkInstrument(
+  client: Client,
+  accountId: string,
+): Promise<InstrumentRow | null> {
+  const benchmark = await getBenchmark(client, accountId);
+  if (!benchmark?.instrumentId) return null;
+  return (await getInstruments(client, [benchmark.instrumentId]))[0] ?? null;
 }
 
 /** Cuántos instrumentos se leen a la vez: una consulta paginada por cada uno. */

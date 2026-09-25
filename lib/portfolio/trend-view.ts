@@ -49,6 +49,11 @@ export function buildTrendRows(
       unrealizedPct: position.unrealizedPct,
       spark: sparkOf(
         instrument ? (marketByInstrumentId.get(instrument.id) ?? null) : null,
+        {
+          price: position.price,
+          asOf: position.priceAsOf,
+          source: position.priceSource,
+        },
       ),
     };
   });

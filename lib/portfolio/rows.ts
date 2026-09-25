@@ -98,6 +98,18 @@ export const dailyCloseRowSchema = z.object({
 });
 export type DailyCloseRow = z.infer<typeof dailyCloseRowSchema>;
 
+/** Una importación reciente (RPC `recent_imports`), con cuántas transacciones le quedan ligadas. */
+export const recentImportRowSchema = z.object({
+  import_id: z.string(),
+  source: z.string(),
+  filename: z.string().nullable(),
+  created_at: z.string(),
+  rows_imported: z.number().nullable(),
+  undone_at: z.string().nullable(),
+  live_count: z.number(),
+});
+export type RecentImportRow = z.infer<typeof recentImportRowSchema>;
+
 export const benchmarkRowSchema = z.object({
   portfolios: z.object({ benchmark_symbol: z.string() }).nullable(),
 });

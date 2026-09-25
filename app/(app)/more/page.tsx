@@ -38,7 +38,7 @@ export default async function MorePage() {
             href="/activity/import"
             className={cn(buttonVariants({ variant: "outline" }), "w-full")}
           >
-            Importar CSV de Delta
+            Importar operaciones (CSV)
           </Link>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- descarga de un archivo: <Link> intentaría navegar */}
           <a

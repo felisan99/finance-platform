@@ -14,10 +14,14 @@ import {
 } from "@/lib/market-jobs";
 import { backfillPendingInBackground } from "@/lib/portfolio/background";
 import {
+  getBenchmarkInstrument,
   getWatchlistItems,
   loadPortfolioSnapshot,
 } from "@/lib/portfolio/queries";
-import type { InstrumentRow } from "@/lib/portfolio/rows";
+import {
+  collectRefreshTargets,
+  refreshMessage,
+} from "@/lib/portfolio/refresh-targets";
 
 export async function signOut() {
   const supabase = await createClient();
@@ -32,8 +36,9 @@ export type RefreshState =
 
 /**
  * "Actualizar precios" (spec §7.2): refresca `quotes_latest` solo de las posiciones abiertas del
- * usuario y de los símbolos de su watchlist, a lo sumo una vez cada 5 minutos por usuario (el límite lo aplica la base). Escribir en
- * `quotes_latest` requiere la clave secreta: por eso el usuario no la toca directamente.
+ * usuario, de los símbolos de su watchlist y del benchmark (el gráfico de rendimiento compara
+ * contra él), a lo sumo una vez cada 5 minutos por usuario (el límite lo aplica la base). Escribir
+ * en `quotes_latest` requiere la clave secreta: por eso el usuario no la toca directamente.
  */
 export async function refreshQuotesAction(): Promise<RefreshState> {
   const supabase = await createClient();
@@ -52,19 +57,26 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
       loadPortfolioSnapshot(supabase),
       getWatchlistItems(supabase),
     ]);
-    const openSymbols =
-      snapshot?.engine.positions.filter((p) => p.isOpen).map((p) => p.symbol) ??
-      [];
+    // Sin benchmark el resto se actualiza igual: el gráfico solo se queda con los cierres.
+    const benchmark = snapshot
+      ? await getBenchmarkInstrument(supabase, snapshot.account.id).catch(
+          (error: unknown) => {
+            console.error("[refresh-quotes] benchmark", describeError(error));
+            return null;
+          },
+        )
+      : null;
 
-    // Posiciones abiertas y símbolos seguidos, sin repetir.
-    const rows = new Map<string, InstrumentRow>();
-    for (const symbol of openSymbols) {
-      const instrument = snapshot?.instrumentBySymbol.get(symbol);
-      if (instrument) rows.set(instrument.id, instrument);
-    }
-    for (const item of followed)
-      rows.set(item.instruments.id, item.instruments);
-    if (rows.size === 0) {
+    const targets = collectRefreshTargets({
+      openSymbols:
+        snapshot?.engine.positions
+          .filter((p) => p.isOpen)
+          .map((p) => p.symbol) ?? [],
+      instrumentBySymbol: snapshot?.instrumentBySymbol ?? new Map(),
+      followed: followed.map((item) => item.instruments),
+      benchmark,
+    });
+    if (targets.instruments.length === 0) {
       return {
         status: "ok",
         message:
@@ -72,7 +84,7 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
       };
     }
 
-    const instruments: ActiveInstrument[] = [...rows.values()].map(
+    const instruments: ActiveInstrument[] = targets.instruments.map(
       (instrument) => ({
         id: instrument.id,
         symbol: instrument.symbol,
@@ -94,15 +106,9 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
     backfillPendingInBackground("refresh-backfill");
     revalidatePath("/", "layout");
 
-    if (result.missing.length > 0) {
-      return {
-        status: "ok",
-        message: `Actualizado (${result.updated}). Sin cotización: ${result.missing.join(", ")}.`,
-      };
-    }
     return {
       status: "ok",
-      message: `Precios actualizados (${result.updated}).`,
+      message: refreshMessage(result, targets.extraBenchmark),
     };
   } catch (error) {
     console.error("[refresh-quotes]", describeError(error));

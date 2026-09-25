@@ -116,6 +116,27 @@ describe("buildTrendRows", () => {
     expect(rows.find((r) => r.symbol === "NEW")!.spark).toEqual([]);
   });
 
+  it("con la cotización de un día posterior al último cierre, el minigráfico termina en ella", () => {
+    const live = valuePortfolio(
+      computeEngine([deposit(T, "10000"), buy(T, "VOO", "2", "100")]),
+      new Map([
+        [
+          "VOO",
+          {
+            ...price("112", "110"),
+            asOf: new Date("2026-09-24T17:30:00Z"),
+          },
+        ],
+      ]),
+    );
+    const [row] = buildTrendRows(
+      pickTrendPositions(live),
+      new Map([["VOO", instrument("VOO", "Vanguard")]]),
+      new Map([["id-VOO", market("VOO", ["100", "104", "110"])]]),
+    );
+    expect(row!.spark).toEqual([100, 104, 110, 112]);
+  });
+
   it("sin fila de mercado (o sin historial) el minigráfico queda vacío y la fila se muestra igual", () => {
     const withoutMarket = buildTrendRows(
       pickTrendPositions(valued),

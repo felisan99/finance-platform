@@ -2,52 +2,131 @@
 
 import { useActionState, useState, startTransition } from "react";
 import { Notice } from "@/components/app/stat";
+import { Segmented } from "@/components/app/segmented";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   confirmImport,
   previewImport,
   type ImportState,
 } from "@/app/(app)/activity/import/actions";
-import { d } from "@/lib/engine";
-import { formatMoney, formatQuantity } from "@/lib/portfolio/format";
-import type { ImportPreviewView } from "@/lib/portfolio/import-preview";
-import { TRANSACTION_TYPE_LABELS } from "@/lib/validation/transaction";
+import { inputSignature } from "@/lib/portfolio/import-signature";
+import { plural } from "@/lib/portfolio/plural";
+import type {
+  ImportPreviewView,
+  ImportRowView,
+} from "@/lib/portfolio/import-preview";
+
+// El cliente no importa el motor ni el formato de dinero (arrastrarían decimal.js al navegador):
+// todo lo que muestra viene ya escrito en `ImportPreviewView`.
 
 const initial: ImportState = { status: "idle" };
-const typeLabel = (type: string) =>
-  TRANSACTION_TYPE_LABELS[type as keyof typeof TRANSACTION_TYPE_LABELS] ?? type;
 
-function PreviewPanel({ view }: { view: ImportPreviewView }) {
+type Mode = "file" | "paste";
+const MODES = [
+  { id: "file", text: "Subir archivo" },
+  { id: "paste", text: "Pegar filas" },
+] as const;
+
+const SUSPECTED_SHOWN = 10;
+
+/** Las operaciones en lista compacta (entra en 390 px): fecha, tipo y símbolo a la izquierda, detalle a la derecha. */
+function RowList({ rows, hidden }: { rows: ImportRowView[]; hidden: number }) {
+  return (
+    <>
+      <ul className="divide-y text-xs">
+        {rows.map((row) => (
+          <li
+            key={row.row}
+            className="flex items-baseline justify-between gap-3 py-1.5"
+          >
+            <span className="min-w-0">
+              <span className="text-muted-foreground tabular-nums">
+                {row.date}
+              </span>{" "}
+              <span className="font-medium">{row.typeLabel}</span>
+              {row.symbol && <span> {row.symbol}</span>}
+              <span className="text-muted-foreground"> · fila {row.row}</span>
+            </span>
+            <span className="text-right tabular-nums">{row.detail}</span>
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 && (
+        <p className="pt-1 text-xs text-muted-foreground">…y {hidden} más.</p>
+      )}
+    </>
+  );
+}
+
+function PreviewPanel({
+  view,
+  includeSuspected,
+  busy,
+  onIncludeSuspected,
+}: {
+  view: ImportPreviewView;
+  includeSuspected: boolean;
+  busy: boolean;
+  onIncludeSuspected: (include: boolean) => void;
+}) {
+  const skippedCount = view.skipped.reduce((n, s) => n + s.count, 0);
+  const suspectedHidden = view.suspectedCount - view.suspected.length;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Vista previa</CardTitle>
+        <CardTitle className="flex items-center justify-between gap-2 text-sm">
+          Vista previa
+          {view.format && (
+            <Badge variant="outline">Formato: {view.format.label}</Badge>
+          )}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
-        <p className="tabular-nums">
-          <strong>{view.newCount}</strong> operaciones nuevas
-          {view.duplicateCount > 0 && (
-            <> · {view.duplicateCount} ya importadas</>
-          )}
-          {view.skipped.length > 0 && (
-            <>
-              {" "}
-              · {view.skipped.reduce((n, s) => n + s.count, 0)} filas ignoradas
-            </>
-          )}
-          {view.errorCount > 0 && <> · {view.errorCount} con error</>}
-        </p>
+        {!view.fatal && (
+          <p className="tabular-nums">
+            <strong>{view.newCount}</strong>{" "}
+            {plural(view.newCount, "operación nueva", "operaciones nuevas")}
+            {view.duplicateCount > 0 && (
+              <>
+                {" "}
+                · {view.duplicateCount}{" "}
+                {plural(view.duplicateCount, "ya importada", "ya importadas")}
+              </>
+            )}
+            {view.suspectedCount > 0 && !view.suspectedIncluded && (
+              <>
+                {" "}
+                · {view.suspectedCount}{" "}
+                {plural(
+                  view.suspectedCount,
+                  "parece repetida",
+                  "parecen repetidas",
+                )}
+              </>
+            )}
+            {skippedCount > 0 && (
+              <>
+                {" "}
+                · {skippedCount}{" "}
+                {plural(skippedCount, "fila ignorada", "filas ignoradas")}
+              </>
+            )}
+            {view.errorCount > 0 && <> · {view.errorCount} con error</>}
+          </p>
+        )}
 
         {view.newByType.length > 0 && (
           <ul className="flex flex-wrap gap-1.5">
             {view.newByType.map((t) => (
               <li key={t.type}>
                 <Badge variant="secondary">
-                  {typeLabel(t.type)} · {t.count}
+                  {t.label} · {t.count}
                 </Badge>
               </li>
             ))}
@@ -59,6 +138,68 @@ function PreviewPanel({ view }: { view: ImportPreviewView }) {
             <span className="text-muted-foreground">Instrumentos nuevos: </span>
             {view.newSymbols.join(", ")}
           </p>
+        )}
+
+        {view.errorGroups.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {view.errorGroups.map((group) => (
+              <div key={group.code} className="flex flex-col gap-1">
+                <p className="font-medium text-destructive">
+                  {group.label} ({group.count})
+                </p>
+                <ul className="flex flex-col gap-1 text-destructive">
+                  {group.examples.map((example) => (
+                    <li key={`${example.row}-${example.message}`}>
+                      Fila {example.row}: {example.message}
+                    </li>
+                  ))}
+                </ul>
+                {group.count > group.examples.length && (
+                  <p className="text-xs text-muted-foreground">
+                    …y {group.count - group.examples.length} más de este tipo.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {view.suspectedCount > 0 && (
+          <div className="flex flex-col gap-2 rounded-lg bg-warning p-3 text-warning-foreground">
+            <p className="font-medium">
+              Parecen repetir operaciones que ya tenés ({view.suspectedCount})
+            </p>
+            <p className="text-xs">
+              Tienen el mismo día, tipo, símbolo y cantidad que algo ya cargado
+              {includeSuspected
+                ? ", y las vas a importar igual."
+                : ", así que no se importan salvo que lo pidas."}
+            </p>
+            <RowList
+              rows={view.suspected.slice(0, SUSPECTED_SHOWN)}
+              hidden={
+                suspectedHidden +
+                Math.max(0, view.suspected.length - SUSPECTED_SHOWN)
+              }
+            />
+            <label className="flex items-start gap-2 pt-1">
+              <input
+                type="checkbox"
+                checked={includeSuspected}
+                disabled={busy}
+                onChange={(event) => onIncludeSuspected(event.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-current"
+              />
+              <span>
+                Importar igual{" "}
+                {plural(
+                  view.suspectedCount,
+                  "esta operación",
+                  `estas ${view.suspectedCount} operaciones`,
+                )}
+              </span>
+            </label>
+          </div>
         )}
 
         {view.skipped.length > 0 && (
@@ -79,60 +220,60 @@ function PreviewPanel({ view }: { view: ImportPreviewView }) {
           </div>
         )}
 
-        {view.errors.length > 0 && (
-          <div className="flex flex-col gap-1">
-            <p className="font-medium text-destructive">Filas con error</p>
-            <ul className="flex flex-col gap-1 text-destructive">
-              {view.errors.map((e) => (
-                <li key={`${e.row}-${e.code}`}>
-                  Fila {e.row}: {e.message}
-                </li>
-              ))}
-            </ul>
-            {view.errorCount > view.errors.length && (
-              <p className="text-xs text-muted-foreground">
-                …y {view.errorCount - view.errors.length} más.
-              </p>
-            )}
-          </div>
+        {view.rows.length > 0 && (
+          <details className="rounded-lg border px-3 py-2">
+            <summary className="cursor-pointer font-medium">
+              Ver{" "}
+              {plural(
+                view.newCount,
+                "la operación que se va",
+                `las ${view.newCount} operaciones que se van`,
+              )}{" "}
+              a cargar
+            </summary>
+            <p className="pt-2 pb-1 text-xs text-muted-foreground">
+              Revisá que las fechas (día/mes/año) y los montos sean los que
+              esperás.
+            </p>
+            <RowList rows={view.rows} hidden={view.rowsHidden} />
+          </details>
         )}
 
-        {view.after && (
+        {view.afterText && view.newCount > 0 && (
           <div className="flex flex-col gap-1 rounded-lg bg-muted p-3">
             <p className="font-medium">Cómo quedaría tu portafolio</p>
             <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 tabular-nums">
               <dt className="text-muted-foreground">Efectivo</dt>
               <dd>
-                {formatMoney(d(view.after.cash))}{" "}
+                {view.afterText.cash.money}{" "}
                 <span className="text-xs text-muted-foreground">
-                  ({formatQuantity(d(view.after.cash))})
+                  ({view.afterText.cash.exact})
                 </span>
               </dd>
               <dt className="text-muted-foreground">
                 Costo base de las abiertas
               </dt>
               <dd>
-                {formatMoney(d(view.after.openCostBasis))}{" "}
+                {view.afterText.openCostBasis.money}{" "}
                 <span className="text-xs text-muted-foreground">
-                  ({formatQuantity(d(view.after.openCostBasis))})
+                  ({view.afterText.openCostBasis.exact})
                 </span>
               </dd>
               <dt className="text-muted-foreground">Ganancia realizada</dt>
               <dd>
-                {formatMoney(d(view.after.realizedPnl), { signed: true })}{" "}
+                {view.afterText.realizedPnl.money}{" "}
                 <span className="text-xs text-muted-foreground">
-                  ({formatQuantity(d(view.after.realizedPnl))})
+                  ({view.afterText.realizedPnl.exact})
                 </span>
               </dd>
               <dt className="text-muted-foreground">Posiciones abiertas</dt>
-              <dd>{view.after.openPositions.length}</dd>
+              <dd>{view.afterText.openPositions.length}</dd>
             </dl>
-            {view.after.openPositions.length > 0 && (
+            {view.afterText.openPositions.length > 0 && (
               <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted-foreground tabular-nums">
-                {view.after.openPositions.map((p) => (
+                {view.afterText.openPositions.map((p) => (
                   <li key={p.symbol}>
-                    {p.symbol}: {formatQuantity(d(p.quantity))} · costo{" "}
-                    {formatMoney(d(p.costBasis))}
+                    {p.symbol}: {p.quantity} · costo {p.costBasis}
                   </li>
                 ))}
               </ul>
@@ -150,19 +291,32 @@ function PreviewPanel({ view }: { view: ImportPreviewView }) {
             {warning}
           </Notice>
         ))}
+        {view.problems.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            ¿Dudas con el formato?{" "}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- descarga de un archivo: <Link> intentaría navegar */}
+            <a href="/activity/import/plantilla" className="underline">
+              Descargá la plantilla
+            </a>{" "}
+            y mirá la guía de arriba.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 /**
- * Importar un CSV en dos pasos: vista previa y confirmación. El archivo se guarda en el estado del
- * componente y se reenvía en cada paso (el navegador limpia el campo de archivo después de una
- * acción de formulario). El servidor vuelve a leerlo y a validarlo al confirmar: no confía en la
- * vista previa.
+ * Importar operaciones en dos pasos: vista previa y confirmación. La entrada es un archivo CSV o
+ * filas pegadas desde una planilla. Lo elegido se guarda en el estado del componente y se reenvía
+ * en cada paso (el navegador limpia el campo de archivo después de una acción de formulario). El
+ * servidor vuelve a leerlo y a validarlo al confirmar: no confía en la vista previa.
  */
 export function ImportForm() {
+  const [mode, setMode] = useState<Mode>("file");
   const [file, setFile] = useState<File | null>(null);
+  const [pasted, setPasted] = useState("");
+  const [includeSuspected, setIncludeSuspected] = useState(false);
   const [previewState, previewAction, previewPending] = useActionState(
     previewImport,
     initial,
@@ -172,18 +326,34 @@ export function ImportForm() {
     initial,
   );
 
-  const signature = file ? `${file.name}|${file.size}` : "";
-  // Una vista previa de otro archivo (o de uno cambiado) no se muestra.
+  const hasInput = mode === "file" ? file !== null : pasted.trim() !== "";
+  const signatureFor = (include: boolean) =>
+    mode === "file" && file
+      ? inputSignature(
+          { kind: "file", name: file.name, size: file.size },
+          include,
+        )
+      : mode === "paste" && pasted.trim() !== ""
+        ? inputSignature({ kind: "text", text: pasted }, include)
+        : "";
+  const signature = signatureFor(includeSuspected);
+
+  // Una vista previa de otra entrada (o de otra opción) no se muestra.
   const view =
     previewState.status === "preview" && previewState.signature === signature
       ? previewState.view
       : null;
   const busy = previewPending || confirmPending;
 
-  const run = (action: (payload: FormData) => void) => {
-    if (!file) return;
+  const run = (
+    action: (payload: FormData) => void,
+    include = includeSuspected,
+  ) => {
+    if (!hasInput) return;
     const data = new FormData();
-    data.set("file", file);
+    if (mode === "file" && file) data.set("file", file);
+    else data.set("text", pasted);
+    data.set("include_suspected", include ? "1" : "0");
     startTransition(() => action(data));
   };
 
@@ -196,30 +366,72 @@ export function ImportForm() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="file">Archivo CSV de Delta</Label>
-        <Input
-          id="file"
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-        />
-        <p className="text-xs text-muted-foreground">
-          Hasta 1 MB. No se guarda el archivo, solo las operaciones.
-        </p>
-      </div>
+      <Segmented
+        label="Cómo cargar las operaciones"
+        options={MODES}
+        value={mode}
+        onChange={setMode}
+        className="w-full"
+      />
+
+      {mode === "file" ? (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="file">Archivo CSV</Label>
+          <Input
+            id="file"
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Hasta 1 MB. No se guarda el archivo, solo las operaciones.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="pasted">Filas copiadas de tu planilla</Label>
+          <Textarea
+            id="pasted"
+            value={pasted}
+            onChange={(event) => setPasted(event.target.value)}
+            rows={8}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            placeholder={
+              "fecha\ttipo\tsimbolo\tcantidad\tprecio\n2026-03-09\tcompra\tVOO\t2\t400,50"
+            }
+            className="font-mono text-xs"
+          />
+          <p className="text-xs text-muted-foreground">
+            Copiá las celdas en Excel o Google Sheets, con la fila de
+            encabezados, y pegalas acá. Hasta 1 MB.
+          </p>
+        </div>
+      )}
 
       <Button
         type="button"
         size="lg"
-        disabled={!file || busy}
+        disabled={!hasInput || busy}
         onClick={() => run(previewAction)}
       >
-        {previewPending ? "Leyendo el archivo…" : "Ver vista previa"}
+        {previewPending ? "Leyendo…" : "Ver vista previa"}
       </Button>
 
       {error && <Notice tone="error">{error}</Notice>}
-      {view && <PreviewPanel view={view} />}
+      {view && (
+        <PreviewPanel
+          view={view}
+          includeSuspected={includeSuspected}
+          busy={busy}
+          onIncludeSuspected={(include) => {
+            setIncludeSuspected(include);
+            run(previewAction, include);
+          }}
+        />
+      )}
 
       {view?.canConfirm && (
         <Button
@@ -230,7 +442,7 @@ export function ImportForm() {
         >
           {confirmPending
             ? "Importando…"
-            : `Confirmar importación (${view.newCount} operaciones)`}
+            : `Confirmar importación (${view.newCount} ${plural(view.newCount, "operación", "operaciones")})`}
         </Button>
       )}
     </div>

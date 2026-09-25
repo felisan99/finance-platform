@@ -1,4 +1,5 @@
 import { d, pickPrice, type Dec, type PriceSource } from "@/lib/engine";
+import { liveDay, liveQuoteOf, type LivePrice } from "./live-series";
 import type { InstrumentRow, QuoteRow, WatchlistMarketRow } from "./rows";
 
 // Vista de la watchlist (spec §10.4): precio, cambio del día, rango de 52 semanas y minigráfico de
@@ -68,20 +69,27 @@ export function buildRange(
   };
 }
 
-/** Un símbolo, con lo que hay de él en la base. Sin cotización ni cierres queda "sin precio". */
 /**
- * Cierres recientes (de más viejo a más nuevo) para un minigráfico. Con menos de dos no hay línea
- * que dibujar: vacío. Los usa también "Tus posiciones" de Inicio.
+ * Cierres recientes (de más viejo a más nuevo) para un minigráfico, y al final la cotización de hoy
+ * si todavía no hay cierre de hoy (`live-series.ts`). Con menos de dos no hay línea que dibujar:
+ * vacío. Los usa también "Tus posiciones" de Inicio.
  */
 export function sparkOf(
-  market: Pick<WatchlistMarketRow, "recent"> | null,
+  market: Pick<WatchlistMarketRow, "recent" | "last_date"> | null,
+  live: LivePrice | null = null,
 ): number[] {
   const values = (market?.recent ?? [])
     .map(([, close]) => Number(close))
     .filter((value) => Number.isFinite(value));
+  const quote = liveQuoteOf(live);
+  if (quote !== null && liveDay(market?.last_date ?? null, quote) !== null) {
+    const price = quote.price.toNumber();
+    if (Number.isFinite(price)) values.push(price);
+  }
   return values.length >= 2 ? values : [];
 }
 
+/** Un símbolo, con lo que hay de él en la base. Sin cotización ni cierres queda "sin precio". */
 export function buildWatchlistRow(input: WatchlistInput): WatchlistRowView {
   const { instrument, quote, market } = input;
 
@@ -128,7 +136,7 @@ export function buildWatchlistRow(input: WatchlistInput): WatchlistRowView {
           market?.high_close != null ? d(market.high_close) : null,
         )
       : null,
-    spark: sparkOf(market),
+    spark: sparkOf(market, picked),
   };
 }
 

@@ -379,3 +379,83 @@ describe("validateLedgerChange: uso", () => {
     );
   });
 });
+
+describe("validateLedgerChange: varias bajas juntas (deshacer una importación)", () => {
+  const funding = deposit(T0, "5000");
+  const purchase = buy(T0, "AAA", "10", "100");
+  const sale = sell(T2, "AAA", "10", "120");
+  const ledger: Transaction[] = [funding, purchase, sale];
+
+  it("quitar la compra y la venta que la consume juntas es válido, aunque cada baja sola no lo sería", () => {
+    const alone = validateLedgerChange(ledger, {
+      kind: "remove",
+      id: purchase.id,
+    });
+    expect(alone.ok).toBe(false);
+
+    const both = validateLedgerChange(ledger, {
+      kind: "removeMany",
+      ids: [purchase.id, sale.id],
+    });
+    expect(both.ok).toBe(true);
+    expect(both.newErrors).toEqual([]);
+    expect(both.after.positions).toEqual([]);
+    expectDec(both.after.cash, "5000");
+  });
+
+  it("quitar la compra y dejar la venta se rechaza y apunta a la venta", () => {
+    const check = validateLedgerChange(ledger, {
+      kind: "removeMany",
+      ids: [purchase.id],
+    });
+    expect(check.ok).toBe(false);
+    expect(check.newErrors[0]).toMatchObject({
+      code: "SELL_EXCEEDS_HOLDINGS",
+      txId: sale.id,
+    });
+  });
+
+  it("quitar el depósito que fondea las compras avisa del efectivo negativo pero no bloquea", () => {
+    const check = validateLedgerChange([funding, purchase], {
+      kind: "removeMany",
+      ids: [funding.id],
+    });
+    expect(check.ok).toBe(true);
+    expect(codes(check.newWarnings)).toEqual(["NEGATIVE_CASH"]);
+  });
+
+  it("una lista vacía no cambia nada", () => {
+    const check = validateLedgerChange(ledger, { kind: "removeMany", ids: [] });
+    expect(check.ok).toBe(true);
+    expect(check.after.positions).toEqual(computeEngine(ledger).positions);
+    expectDec(check.after.cash, computeEngine(ledger).cash.toFixed());
+  });
+
+  it("un id repetido en la lista cuenta una vez", () => {
+    const check = validateLedgerChange(ledger, {
+      kind: "removeMany",
+      ids: [sale.id, sale.id],
+    });
+    expect(check.ok).toBe(true);
+    expect(positionOf(check.after, "AAA").isOpen).toBe(true);
+  });
+
+  it("un id que no existe es un error de uso (RangeError), aunque los demás existan", () => {
+    expect(() =>
+      validateLedgerChange(ledger, {
+        kind: "removeMany",
+        ids: [sale.id, "nope"],
+      }),
+    ).toThrow(RangeError);
+  });
+
+  it("no muta el libro que recibe", () => {
+    const frozen = deepFreeze([...ledger]);
+    expect(() =>
+      validateLedgerChange(frozen, {
+        kind: "removeMany",
+        ids: [purchase.id, sale.id],
+      }),
+    ).not.toThrow();
+  });
+});

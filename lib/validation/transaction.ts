@@ -23,7 +23,7 @@ export function normalizeSymbol(input: string): string {
     .replace(/[.\s]+/g, "-");
 }
 
-interface DecimalRules {
+export interface DecimalRules {
   maxInt: number;
   maxDecimals: number;
   /** `positive`: > 0. `nonNegative`: ≥ 0. `nonZero`: ≠ 0 y admite negativos (interés de margen). */
@@ -157,6 +157,17 @@ const notesField = z
     return cleaned;
   });
 
+/**
+ * Mensaje si la fecha de una operación no es razonable (futura o de antes de 1990); `null` si está
+ * bien. `now` entra por parámetro: el formulario y los importadores comparten la misma regla.
+ */
+export function dateRangeError(instant: Date, now: Date): string | null {
+  if (instant.getTime() > now.getTime() + MAX_FUTURE_MS)
+    return "La fecha no puede ser futura";
+  if (instant < MIN_DATE) return "La fecha es demasiado antigua";
+  return null;
+}
+
 /** Los campos comunes; `now` fija el límite de "fecha futura" sin leer el reloj adentro. */
 function executedAtField(now: Date) {
   return z
@@ -167,18 +178,9 @@ function executedAtField(now: Date) {
         ctx.addIssue({ code: "custom", message: "Fecha y hora inválidas" });
         return z.NEVER;
       }
-      if (instant.getTime() > now.getTime() + MAX_FUTURE_MS) {
-        ctx.addIssue({
-          code: "custom",
-          message: "La fecha no puede ser futura",
-        });
-        return z.NEVER;
-      }
-      if (instant < MIN_DATE) {
-        ctx.addIssue({
-          code: "custom",
-          message: "La fecha es demasiado antigua",
-        });
+      const problem = dateRangeError(instant, now);
+      if (problem) {
+        ctx.addIssue({ code: "custom", message: problem });
         return z.NEVER;
       }
       return instant;

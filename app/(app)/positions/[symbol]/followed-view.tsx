@@ -10,6 +10,7 @@ import type { Database } from "@/lib/db/database.types";
 import { addDays, isoDate } from "@/lib/market-jobs/dates";
 import { buildPositionChart } from "@/lib/portfolio/chart-data";
 import { formatDayMonth, formatPrice } from "@/lib/portfolio/format";
+import { withLiveBar } from "@/lib/portfolio/live-series";
 import { getPriceSeries } from "@/lib/portfolio/queries";
 import type { InstrumentRow } from "@/lib/portfolio/rows";
 import { RANGE_DAYS } from "@/lib/portfolio/watchlist";
@@ -31,7 +32,16 @@ export async function FollowedSymbolView({
     loadSymbolView(supabase, instrument, now),
     getPriceSeries(supabase, instrument.id, addDays(isoDate(now), -RANGE_DAYS)),
   ]);
-  const chart = buildPositionChart(series, [], instrument.symbol, null);
+  const chart = buildPositionChart(
+    withLiveBar(series, {
+      price: view.price,
+      asOf: view.priceAsOf,
+      source: view.priceSource,
+    }),
+    [],
+    instrument.symbol,
+    null,
+  );
 
   return (
     <div className="flex flex-col gap-3">

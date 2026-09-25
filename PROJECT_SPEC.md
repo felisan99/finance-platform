@@ -152,7 +152,8 @@ create table transactions (
   currency text not null default 'USD',
   split_ratio numeric(20,8),                      -- para SPLIT: nuevas/viejas (ej. 10 para 10:1)
   notes text,
-  source text not null default 'manual',          -- 'manual' | 'delta_csv' | 'ibkr_flex'
+  source text not null default 'manual',          -- 'manual' | 'delta_csv' | 'csv' | 'ibkr_flex'
+  import_id uuid,                                 -- la importación de la que salió (para deshacerla); null si es manual
   external_id text,                               -- para deduplicar importaciones
   created_at timestamptz not null default now(),
   unique (account_id, source, external_id)
@@ -267,10 +268,13 @@ Si el efectivo queda negativo, se muestra una advertencia (probable transacción
 
 ### 6.3 Valor del portafolio
 `total_value = Σ market_value + cash`. El precio de mercado sale de `quotes_latest` si es del día; si no, del último `prices_daily.close`, mostrando la fecha.
+*(Regla exacta en `pickPrice`, `lib/engine/valuation.ts`: la cotización si su día es igual o posterior al del último cierre.)*
 
 ### 6.4 Serie histórica diaria
 Para cada día hábil desde la primera transacción: reconstruir cantidades y efectivo a esa fecha y valuar con `prices_daily`. Para días sin precio (feriados), usar el último cierre conocido. Guardar la serie calculada en memoria o en caché; no es fuente de verdad.
 *(Hecho en la Fase 5, `lib/engine/series.ts`: días hábiles en hora de Nueva York; los cierres —ajustados por splits hacia atrás— se multiplican por la razón de los `SPLIT` del libro que todavía no ocurrieron, para que precio y cantidad estén en las mismas unidades; sin ningún cierre previo, la posición se valúa a costo. Se recalcula por pedido, sin caché.)*
+
+*(**Punto en vivo**, `lib/portfolio/live-series.ts`: el cron guarda el cierre una vez por día, al terminar la rueda, así que durante la rueda la serie llegaba hasta ayer mientras el valor de Inicio ya usaba la cotización. Ahora, si una cotización es de un día de rueda posterior al último cierre de su serie, se suma como el último punto (día de Nueva York, sin tocar `lib/engine`: entra como un cierre más). Sirve al gráfico, el TWR, el XIRR, la ganancia del período, el rendimiento por mes, el riesgo, los minigráficos y el gráfico de precio de una posición. Es todo o nada entre el portafolio y el benchmark: si el benchmark no llega en vivo al mismo día, ninguna serie suma punto y queda con cierres. Sin ningún cierre previo tampoco hay punto (un salto de costo a mercado no es rendimiento). Con la cotización del mismo día que el último cierre, gana el cierre; al llegar el cierre del día el punto en vivo desaparece solo. La tarjeta lo rotula («cierres al 24/09 y cotización del 25/09 11:47»).)*
 
 ### 6.5 Rendimientos
 - **Flujos externos** = `DEPOSIT` (+) y `WITHDRAWAL` (−). Compras, ventas y dividendos son internos.
@@ -325,11 +329,11 @@ interface MarketDataProvider {
 - El cron diario también evita que Supabase pause el proyecto por inactividad.
 - Programado en `vercel.json` (`0 22 * * 1-5`, un solo horario: el máximo de Hobby). `/api/cron/backfill` existe pero no se programa: el diario ya descarga lo pendiente.
 - Yahoo devuelve `close` nulo algunos días hábiles y reajusta hacia atrás el historial en cada split (`close`) y dividendo (`adj_close`): el job descarta las barras nulas, detecta el reajuste y vuelve a bajar el historial completo del instrumento.
-- Botón "Actualizar ahora" en la UI: refresca `quotes_latest` solo de las posiciones del usuario, con un límite de 1 vez cada 5 minutos por usuario.
+- Botón "Actualizar ahora" en la UI: refresca `quotes_latest` solo de las posiciones del usuario, con un límite de 1 vez cada 5 minutos por usuario. *(También de los símbolos que sigue y del benchmark —`SPY`—: el gráfico de rendimiento compara contra él y necesita su cotización de hoy para cerrar el mismo día que el portafolio, §6.4. El benchmark agregado por nosotros no cuenta en el mensaje de resultado.)*
 
 ---
 
-## 8. Importación desde Delta (CSV)
+## 8. Importación de CSV (formato simple y Delta)
 
 ### 8.1 Formato de entrada (export de Delta)
 Columnas:
@@ -387,6 +391,28 @@ Guardar un export de Delta como `lib/engine/__fixtures__/delta_export.csv`. Con 
 **Transacción manual para probar después de importar:** `BUY DDOG 2 @ 251.41, fee 1.00, 2026-09-23` → costo base de DDOG 503.82 y efectivo 378.925.
 
 > Nota: el efectivo que muestra Delta puede diferir del cálculo cuando Delta registró dividendos que no aparecen en el CSV exportado. No es un bug del motor: se corrige cargando los dividendos (manualmente o vía IBKR Flex).
+
+### 8.4 Formato simple («Portfolio Tracker») y pantalla de importación
+Casi ningún usuario usa Delta, así que el formato principal es uno propio, simple y documentado en la pantalla (`lib/importers/simple.ts`, `docs/importar-csv.md`). **Es el mismo que escribe «Exportar CSV»**: exportar → importar es ida y vuelta (backup, restauración y mudanza de una base a otra). Un archivo se reconoce solo por sus encabezados (`lib/importers/detect.ts`): `Way` + `Base amount` → Delta (sin cambios); `fecha` + `tipo` → simple.
+
+| Operación | Columnas |
+|---|---|
+| Compra / Venta | `fecha, tipo, simbolo, cantidad, precio` (precio **por unidad**) y `comision` opcional |
+| Depósito / Retiro / Comisión / Impuesto | `fecha, tipo, monto` |
+| Interés | `fecha, tipo, monto` (puede ser negativo) |
+| Dividendo | `fecha, tipo, simbolo, monto` |
+| Split | `fecha, tipo, simbolo, razon_split` (10 = 10:1; 0,1 = inverso 1:10) |
+
+- **Encabezados** tolerantes (minúsculas, sin tildes, alias en español e inglés; `fecha_utc` gana sobre `fecha` y `fecha_montevideo`); las columnas de más se ignoran. **Tipos** en inglés (`BUY`…, como el export) o español (`compra`, `venta`, `depósito`, `retiro`, `dividendo`, `split`, `comisión`, `impuesto`, `interés`).
+- **Fechas:** `AAAA-MM-DD`, `AAAA-MM-DD HH:mm[:ss]`, ISO con zona y `DD/MM/AAAA [HH:mm]` (**día antes que mes**). Sin zona = hora de Montevideo; sin hora = mediodía de Montevideo (mismo día en Nueva York; los empates conservan el orden del archivo). Se rechazan las que no existen (31/02), las futuras y las de antes de 1990.
+- **Números:** punto o coma decimal (uno solo, sin separador de miles), con los mismos límites de dígitos que el formulario manual. **Delimitador** `,` `;` o tabulación, autodetectado (el Excel en español guarda con `;`); BOM y CRLF ok. Solo USD.
+- **Deduplicación:** `external_id = csv:` + instante + tipo + símbolo + cantidades + comisión (las filas idénticas del mismo archivo llevan sufijo `#2`, `#3`…), con `source = 'csv'`.
+- **Símbolos nuevos** (escrito a mano: un error de tipeo es probable): se verifican con el proveedor (`resolveNewInstrument`) hasta 40 por archivo; uno que no existe es un error de esa fila y bloquea; si el proveedor no responde también bloquea (sin él no se sabe si es acción o ETF). Los instrumentos salen con el nombre y el tipo del proveedor. Delta no se verifica.
+- **Parecidas a lo ya cargado:** lo cargado a mano y lo importado no comparten identificador; una fila con el mismo día (Montevideo), tipo, símbolo y cantidad (o monto) que algo ya cargado —de cualquier origen— se **excluye por defecto**, se lista aparte y se importa solo si la persona tilda «Importar igual». Cuenta repeticiones.
+- **Plantilla** descargable (`/activity/import/plantilla`) con filas de ejemplo; subirla sin tocar, o dejar los ejemplos mezclados, es un error.
+- **Entrada:** archivo `.csv` o **filas pegadas** desde una planilla (llegan con tabulaciones). Hasta 1 MB y 5000 operaciones.
+- **Vista previa:** formato detectado, las operaciones interpretadas (fecha día/mes/año, tipo, símbolo, cantidad y precio) para verificar a ojo, errores agrupados por causa, las parecidas, y cómo quedaría el portafolio.
+- **Deshacer una importación:** cada transacción importada guarda su `import_id`; `undo_import` borra las de esa importación y la marca (`imports.undone_at`), pero antes el servidor valida con `validateLedgerChange` (`removeMany`) que el libro siga consistente (no puede quedar una venta sin su compra). Las importaciones anteriores a esta función no se pueden deshacer.
 
 ---
 
