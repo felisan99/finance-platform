@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { hardenSessionCookie, isSecureRequest } from "./cookie-options";
 import type { Database } from "./database.types";
 import { getPublicEnv } from "./env";
 
@@ -10,6 +11,7 @@ import { getPublicEnv } from "./env";
  */
 export async function createClient() {
   const cookieStore = await cookies();
+  const secure = isSecureRequest((await headers()).get("x-forwarded-proto"));
   const env = getPublicEnv();
 
   return createServerClient<Database>(
@@ -23,7 +25,11 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             for (const { name, value, options } of cookiesToSet) {
-              cookieStore.set(name, value, options);
+              cookieStore.set(
+                name,
+                value,
+                hardenSessionCookie(options, secure),
+              );
             }
           } catch {
             // Un Server Component no puede escribir cookies. Es inocuo: el proxy ya refresca la

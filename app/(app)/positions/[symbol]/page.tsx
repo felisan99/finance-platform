@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { FollowButton } from "@/components/app/follow-button";
 import { Pnl } from "@/components/app/pnl";
 import { PriceChart } from "@/components/app/price-chart";
 import { Notice, PageHeader, Stat } from "@/components/app/stat";
@@ -16,9 +17,14 @@ import {
   formatPrice,
   formatQuantity,
 } from "@/lib/portfolio/format";
-import { getPriceSeries, loadPortfolioSnapshot } from "@/lib/portfolio/queries";
+import {
+  getPriceSeries,
+  getWatchlistItems,
+  loadPortfolioSnapshot,
+} from "@/lib/portfolio/queries";
 import { describeTransaction } from "@/lib/portfolio/tx-view";
 import { SYMBOL_PATTERN, normalizeSymbol } from "@/lib/validation/transaction";
+import { FollowedSymbolView } from "./followed-view";
 
 function symbolFromParam(raw: string): string | null {
   try {
@@ -38,10 +44,25 @@ export default async function PositionDetailPage({
   if (!symbol) notFound();
 
   const supabase = await createClient();
-  const snapshot = await loadPortfolioSnapshot(supabase);
+  const [snapshot, followedItems] = await Promise.all([
+    loadPortfolioSnapshot(supabase),
+    getWatchlistItems(supabase),
+  ]);
+  const followedItem = followedItems.find(
+    (item) => item.instruments.symbol === symbol,
+  );
   const position = snapshot?.valued.positions.find((p) => p.symbol === symbol);
   const instrument = snapshot?.instrumentBySymbol.get(symbol);
-  if (!snapshot || !position || !instrument) notFound();
+  if (!snapshot || !position || !instrument) {
+    // Sin posición: solo existe la página si el símbolo está en la watchlist.
+    if (!followedItem) notFound();
+    return (
+      <FollowedSymbolView
+        supabase={supabase}
+        instrument={followedItem.instruments}
+      />
+    );
+  }
 
   const own = snapshot.transactions.filter(
     (tx) => "symbol" in tx && tx.symbol === symbol,
@@ -92,6 +113,9 @@ export default async function PositionDetailPage({
               </Badge>
             )}
           </>
+        }
+        actions={
+          <FollowButton symbol={symbol} followed={followedItem !== undefined} />
         }
       />
 

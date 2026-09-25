@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/db/auth";
-import { createAdminClient } from "@/lib/db/admin";
 import { takeRateLimit } from "@/lib/db/rate-limit";
 import { createClient } from "@/lib/db/server";
 import { validateLedgerChange, type LedgerChange } from "@/lib/engine";
@@ -15,11 +14,8 @@ import {
   type InstrumentSearchResult,
 } from "@/lib/market-data";
 import { cleanText } from "@/lib/market-data/sanitize";
-import {
-  ensureInstruments,
-  resolveNewInstrument,
-} from "@/lib/market-jobs/instruments";
 import { backfillPendingInBackground } from "@/lib/portfolio/background";
+import { resolveInstrumentId } from "@/lib/portfolio/instruments";
 import { describeRejectedChange } from "@/lib/portfolio/issues";
 import {
   inputToInsertRow,
@@ -28,7 +24,6 @@ import {
   rowToTransaction,
 } from "@/lib/portfolio/mappers";
 import {
-  getInstrumentIdsBySymbol,
   getInstruments,
   getPrimaryAccount,
   getTransactionRows,
@@ -60,39 +55,6 @@ function echo(formData: FormData): Record<string, string> {
     if (typeof value === "string" && key !== "id") values[key] = value;
   }
   return values;
-}
-
-/**
- * Trae el símbolo de la base o, si es nuevo, lo verifica con el proveedor y lo da de alta (con la
- * clave secreta: `instruments` no es escribible por usuarios). Verificar un símbolo nuevo llama a
- * Yahoo, así que cuenta contra el límite de búsquedas.
- */
-async function resolveInstrumentId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  symbol: string,
-): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
-  const known = (await getInstrumentIdsBySymbol(supabase, [symbol])).get(
-    symbol,
-  );
-  if (known) return { ok: true, id: known };
-
-  if (!(await takeRateLimit(supabase, "search_symbols"))) {
-    return {
-      ok: false,
-      message:
-        "Demasiados intentos seguidos. Esperá un minuto y probá de nuevo.",
-    };
-  }
-  const resolved = await resolveNewInstrument(
-    await getMarketDataProvider(),
-    symbol,
-  );
-  if (!resolved.ok) return { ok: false, message: resolved.message };
-  const ids = await ensureInstruments(createAdminClient(), [
-    resolved.instrument,
-  ]);
-  const id = ids.get(symbol);
-  return id ? { ok: true, id } : { ok: false, message: GENERIC };
 }
 
 /** Alta o edición de una operación (spec §10.3). Con `id` en el formulario, edita; sin él, crea. */

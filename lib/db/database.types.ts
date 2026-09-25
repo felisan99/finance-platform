@@ -222,6 +222,24 @@ export type Database = {
         }
         Relationships: []
       }
+      login_attempts: {
+        Row: {
+          count: number
+          key: string
+          window_start: string
+        }
+        Insert: {
+          count?: number
+          key: string
+          window_start?: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       market_job_runs: {
         Row: {
           errors: Json
@@ -526,6 +544,7 @@ export type Database = {
           symbol: string
         }[]
       }
+      clear_login_attempts: { Args: { p_key: string }; Returns: undefined }
       hook_before_user_created: { Args: { event: Json }; Returns: Json }
       import_transactions: {
         Args: {
@@ -551,7 +570,21 @@ export type Database = {
           prev_date: string
         }[]
       }
+      take_login_attempt: { Args: { p_key: string }; Returns: boolean }
       take_rate_limit: { Args: { p_key: string }; Returns: boolean }
+      watchlist_market: {
+        Args: { p_instrument_ids: string[]; p_points: number; p_since: string }
+        Returns: {
+          high_close: string
+          instrument_id: string
+          last_close: string
+          last_date: string
+          low_close: string
+          prev_close: string
+          prev_date: string
+          recent: Json
+        }[]
+      }
     }
     Enums: {
       tx_type:

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
+    <title>Sin conexión · Portfolio Tracker</title>
+    <link rel="stylesheet" href="/pwa/offline.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Sin conexión</h1>
+      <p class="muted">
+        No hay internet en este momento. Cuando vuelva, tocá “Reintentar”.
+      </p>
+
+      <section id="snapshot" hidden aria-labelledby="snapshot-title">
+        <h2 id="snapshot-title">Último estado conocido</h2>
+        <p class="label">Valor total</p>
+        <p id="total" class="total"></p>
+        <p id="day" class="day"></p>
+        <p id="cash" class="muted"></p>
+        <ul id="positions"></ul>
+        <p id="when" class="muted small"></p>
+      </section>
+
+      <button id="retry" type="button">Reintentar</button>
+    </main>
+    <script src="/pwa/offline.js"></script>
+  </body>
+</html>

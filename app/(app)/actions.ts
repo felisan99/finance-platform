@@ -13,7 +13,11 @@ import {
   type ActiveInstrument,
 } from "@/lib/market-jobs";
 import { backfillPendingInBackground } from "@/lib/portfolio/background";
-import { loadPortfolioSnapshot } from "@/lib/portfolio/queries";
+import {
+  getWatchlistItems,
+  loadPortfolioSnapshot,
+} from "@/lib/portfolio/queries";
+import type { InstrumentRow } from "@/lib/portfolio/rows";
 
 export async function signOut() {
   const supabase = await createClient();
@@ -28,7 +32,7 @@ export type RefreshState =
 
 /**
  * "Actualizar precios" (spec §7.2): refresca `quotes_latest` solo de las posiciones abiertas del
- * usuario, a lo sumo una vez cada 5 minutos por usuario (el límite lo aplica la base). Escribir en
+ * usuario y de los símbolos de su watchlist, a lo sumo una vez cada 5 minutos por usuario (el límite lo aplica la base). Escribir en
  * `quotes_latest` requiere la clave secreta: por eso el usuario no la toca directamente.
  */
 export async function refreshQuotesAction(): Promise<RefreshState> {
@@ -44,34 +48,42 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
       };
     }
 
-    const snapshot = await loadPortfolioSnapshot(supabase);
+    const [snapshot, followed] = await Promise.all([
+      loadPortfolioSnapshot(supabase),
+      getWatchlistItems(supabase),
+    ]);
     const openSymbols =
       snapshot?.engine.positions.filter((p) => p.isOpen).map((p) => p.symbol) ??
       [];
-    if (!snapshot || openSymbols.length === 0) {
+
+    // Posiciones abiertas y símbolos seguidos, sin repetir.
+    const rows = new Map<string, InstrumentRow>();
+    for (const symbol of openSymbols) {
+      const instrument = snapshot?.instrumentBySymbol.get(symbol);
+      if (instrument) rows.set(instrument.id, instrument);
+    }
+    for (const item of followed)
+      rows.set(item.instruments.id, item.instruments);
+    if (rows.size === 0) {
       return {
         status: "ok",
-        message: "No hay posiciones abiertas para actualizar.",
+        message:
+          "No hay posiciones abiertas ni símbolos seguidos para actualizar.",
       };
     }
 
-    const instruments: ActiveInstrument[] = openSymbols.flatMap((symbol) => {
-      const instrument = snapshot.instrumentBySymbol.get(symbol);
-      return instrument
-        ? [
-            {
-              id: instrument.id,
-              symbol: instrument.symbol,
-              providerSymbol: instrument.provider_symbol,
-              historyBackfilledAt: null,
-              historyFrom: null,
-              firstTxDate: null,
-              inWatchlist: false,
-              latestPriceDate: null,
-            },
-          ]
-        : [];
-    });
+    const instruments: ActiveInstrument[] = [...rows.values()].map(
+      (instrument) => ({
+        id: instrument.id,
+        symbol: instrument.symbol,
+        providerSymbol: instrument.provider_symbol,
+        historyBackfilledAt: null,
+        historyFrom: null,
+        firstTxDate: null,
+        inWatchlist: false,
+        latestPriceDate: null,
+      }),
+    );
 
     const result = await refreshQuotes({
       provider: await getMarketDataProvider(),

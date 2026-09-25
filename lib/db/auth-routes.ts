@@ -1,16 +1,25 @@
 /**
  * Reglas de acceso por ruta, sin dependencias de Next ni de Supabase para poder probarlas.
- * Rutas públicas para el proxy: la pantalla de ingreso, el retorno del enlace de acceso
- * (`/auth/*`) y los crons (`/api/cron/*`). Los crons no tienen sesión de usuario: cada handler
- * exige `Authorization: Bearer ${CRON_SECRET}` y falla cerrado (ver lib/cron/auth.ts).
+ * Rutas públicas para el proxy: la pantalla de ingreso (el código se verifica con una Server Action
+ * de esa misma pantalla: no hay ruta de retorno), los crons (`/api/cron/*`) y lo que necesita
+ * la app instalable (PWA) antes de tener sesión: el manifiesto, el service worker y la pantalla sin
+ * conexión (`/pwa/*`). Los crons no tienen sesión de usuario: cada handler exige
+ * `Authorization: Bearer ${CRON_SECRET}` y falla cerrado (ver lib/cron/auth.ts). Nada de lo
+ * público de la PWA tiene datos de nadie: el último estado conocido vive en el dispositivo.
  */
-const PUBLIC_PREFIXES = ["/login", "/auth", "/api/cron"] as const;
+const PUBLIC_PREFIXES = ["/login", "/api/cron", "/pwa"] as const;
+
+/** Archivos sueltos que también son públicos (coincidencia exacta). */
+const PUBLIC_FILES = new Set(["/sw.js", "/manifest.webmanifest"]);
 
 const startsWithSegment = (pathname: string, prefix: string) =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);
 
 export function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PREFIXES.some((prefix) => startsWithSegment(pathname, prefix));
+  return (
+    PUBLIC_FILES.has(pathname) ||
+    PUBLIC_PREFIXES.some((prefix) => startsWithSegment(pathname, prefix))
+  );
 }
 
 /**

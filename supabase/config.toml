@@ -8,9 +8,10 @@
 # Regla: antes de `supabase config push`, correr `pnpm db:config-diff` y revisar el diff
 # (sin TTY la CLI aplica los cambios sin preguntar).
 #
-# Las plantillas de correo NO se declaran acá: el plan Free con el proveedor de email por
-# defecto rechaza modificarlas (400 "Email template modification is not available…"). Se
-# podrán versionar cuando se configure un SMTP propio (antes de invitar amigos).
+# Las plantillas de correo se declaran acá desde que hay SMTP propio (con el correo por defecto
+# de Supabase, el plan Free rechaza modificarlas: 400 "Email template modification is not
+# available…"). El bloque [auth.email.smtp] NO se declara a propósito: la contraseña de
+# aplicación de Gmail vive solo en el panel de Supabase y un `config push` no debe pisarla.
 
 project_id = "finance-platform"
 
@@ -20,6 +21,24 @@ additional_redirect_urls = ["http://localhost:3000/**"]
 
 # Registro solo por invitación: rechaza el alta si el email no está en public.allowed_emails
 # (función creada en la migración signup_gate_and_defaults).
+# Ingreso con código de 6 dígitos (no con enlace: el enlace abre Safari y no la app instalada).
+# `otp_length` tiene que coincidir con CODE_LENGTH de lib/validation/login.ts. `max_frequency`
+# es la espera mínima entre dos correos al mismo email: el botón "Reenviar" espera lo mismo.
+[auth.email]
+otp_length = 6
+otp_expiry = 600
+max_frequency = "1m0s"
+
+# Supabase manda una u otra según el email ya exista (magic_link) o sea un alta nueva
+# (confirmation): las dos muestran solo el código.
+[auth.email.template.magic_link]
+subject = "Tu código de ingreso a Portfolio Tracker"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Tu código de ingreso a Portfolio Tracker"
+content_path = "./supabase/templates/confirmation.html"
+
 [auth.hook.before_user_created]
 enabled = true
 uri = "pg-functions://postgres/public/hook_before_user_created"

@@ -11,8 +11,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col">
-      {/* Espacio para la navegación fija de abajo + el área segura del iPhone. */}
-      <main className="flex-1 px-4 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
+      {/* Espacio arriba para el área segura del iPhone (notch) y abajo para la navegación fija. */}
+      <main className="flex-1 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[calc(5rem+env(safe-area-inset-bottom))]">
         {children}
       </main>
       <BottomNav />

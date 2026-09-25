@@ -18,6 +18,8 @@
 > **Ajuste 2026-09-24 (Fase 5):** el benchmark (`SPY`) se siembra como instrumento y los jobs de precios lo mantienen (`active_instruments()` lo incluye); la serie histórica desajusta los splits con los `SPLIT` del libro; el XIRR se calcula solo desde 30 días. Convenciones en las secciones 6.4 y 6.5; detalle en `docs/decisions.md`.
 >
 > **Ajuste 2026-09-24 (requisito de la Fase 6):** el ingreso con enlace por email no sirve para la PWA en iPhone. Antes de la Fase 6 (y de invitar a nadie) hay que pasar a código OTP de 6 dígitos con SMTP propio. Cambio en la sección 14.2.
+>
+> **Ajuste 2026-09-25 (Fase 6):** el ingreso es por código de 6 dígitos (SMTP propio con Gmail dedicado, plantillas en el repo y un límite de 5 intentos por 15 minutos por email); la Watchlist tiene una función SQL de lectura (`watchlist_market`) y un tope de 50 símbolos; la PWA lleva un service worker mínimo (solo la pantalla sin conexión, sin caché de páginas ni datos), un último estado conocido guardado en el dispositivo y el modo oscuro sigue al sistema con CSS. Cambios en §10.4, §10.6, §11 y §14.2; detalle en `docs/decisions.md`.
 
 ---
 
@@ -401,7 +403,7 @@ Guardar un export de Delta como `lib/engine/__fixtures__/delta_export.csv`. Con 
 
 ## 10. Funcionalidades y pantallas
 
-Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con: **Inicio, Posiciones, Actividad, Watchlist y Más** (la pestaña de Watchlist se suma en la Fase 6).
+Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con: **Inicio, Posiciones, Watchlist, Actividad y Más**.
 
 ### 10.1 Inicio (dashboard)
 - Valor total, cambio del día ($ y %), ganancia no realizada y realizada.
@@ -420,8 +422,8 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 - Importar CSV (Delta y, más adelante, un formato genérico) y exportar todo a CSV como backup.
 
 ### 10.4 Watchlist
-- Agregar y quitar símbolos; ver precio, cambio del día, rango de 52 semanas y un minigráfico.
-- Tocar un símbolo abre el mismo detalle que una posición, sin datos propios.
+- Agregar y quitar símbolos (hasta 50, en orden alfabético); ver precio, cambio del día, rango de 52 semanas y un minigráfico. El rango son los **cierres diarios** de las últimas 52 semanas (`prices_daily` no guarda máximos y mínimos intradiarios) y el precio actual se suma al rango.
+- Tocar un símbolo abre el mismo detalle que una posición; si no hay posición, se muestra solo precio, rango, gráfico de un año y el botón de seguir o dejar de seguir, sin costos ni operaciones.
 
 ### 10.5 Más
 - Cuentas y portafolios (crear, renombrar, método de costo), benchmark, moneda, exportar datos, cerrar sesión.
@@ -429,7 +431,8 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 ### 10.6 PWA
 - `manifest.webmanifest` con `display: standalone`, íconos (incluido `apple-touch-icon` de 180×180), `theme_color` y soporte para modo claro y oscuro.
 - Respetar `env(safe-area-inset-*)` para el notch y la barra inferior del iPhone.
-- Service worker mínimo: caché del "app shell" y página offline que muestre el último estado conocido. Sin caché agresiva de datos financieros.
+- Service worker mínimo (`public/sw.js`): precachea solo la pantalla sin conexión y sus archivos, y la muestra cuando una navegación falla por falta de red. **No guarda páginas ni datos financieros.** La pantalla sin conexión muestra el último estado conocido de Inicio, que la app deja en el `localStorage` del dispositivo (textos ya formateados; vence a los 30 días y se borra al llegar a `/login`).
+- El modo oscuro sigue al sistema (`prefers-color-scheme`), sin interruptor manual.
 
 ---
 
@@ -438,7 +441,7 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 - RLS en todas las tablas (sección 5.3), con un test que lo verifique.
 - La service role key y `CRON_SECRET` solo en variables de entorno del servidor.
 - Validar todos los inputs con Zod en server actions y route handlers.
-- Login con magic link; registro solo por **invitación** (lista de emails permitidos en la tabla `public.allowed_emails`, que consulta el hook "Before User Created" de Supabase Auth), para que la app no quede abierta a cualquiera. Habilitar a alguien es insertar su email en esa tabla.
+- Login con **código de 6 dígitos** enviado por email (SMTP propio; no hay enlace), con un límite de intentos de verificación por email; registro solo por **invitación** (lista de emails permitidos en la tabla `public.allowed_emails`, que consulta el hook "Before User Created" de Supabase Auth), para que la app no quede abierta a cualquiera. Habilitar a alguien es insertar su email en esa tabla.
 - Sin analytics de terceros.
 - Exportación completa de datos del usuario (CSV o JSON) y opción de borrar la cuenta.
 
@@ -539,7 +542,7 @@ Serie histórica, TWR, XIRR, comparación con benchmark y asignación. *(La asig
 ✅ Tests de TWR y XIRR con casos calculados a mano (incluido un depósito a mitad de período). *(Hecha: `lib/engine/__tests__/performance.test.ts`; tarjeta "Rendimiento" en Inicio.)*
 
 **Fase 6 — Watchlist + PWA**
-**Requisito previo:** pasar el ingreso a un **código OTP de 6 dígitos** que se tipea en la app, con **SMTP propio** (por ejemplo Resend, plan gratuito). El enlace del correo abre Safari, no la PWA instalada; y el correo por defecto de Supabase (2 mensajes por hora, solo a miembros de la organización) tampoco sirve para invitar a un amigo. Detalle en `docs/decisions.md` (Tareas pendientes).
+**Requisito previo (hecho):** el ingreso es por **código OTP de 6 dígitos** que se tipea en la app, con **SMTP propio** (Gmail dedicado con contraseña de aplicación). El enlace del correo abría Safari, no la PWA instalada; y el correo por defecto de Supabase (2 mensajes por hora, solo a miembros de la organización) tampoco servía para invitar a un amigo. Detalle en `docs/decisions.md`. Incluye un **deploy temprano a Vercel apuntando a `finance-dev`** (el iPhone exige HTTPS para instalar la app); la producción sigue siendo la Fase 7.
 ✅ Instalable en el iPhone; se abre sin barra del navegador y se ingresa con el código.
 
 **Fase 7 — Deploy**

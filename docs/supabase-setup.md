@@ -68,26 +68,45 @@ Se puede ejecutar con `pnpm supabase db query --linked "…"` o desde el Table E
 - **Leer series largas de `prices_daily` por páginas**: PostgREST corta cada respuesta en 1000 filas y cinco años de un instrumento son ~1260 (ver `docs/decisions.md`, observación 9).
 - El advisor de seguridad puede avisar `auth_leaked_password_protection`: es de plan Pro y no aplica (la app no usa contraseñas).
 
-## Funciones de la app (Fase 4)
+## Funciones de la app (Fases 4 y 6)
 
 - **`import_transactions(p_account_id, p_source, p_filename, p_rows, p_report)`**: importación atómica (una llamada = una transacción). `security invoker`: RLS y las FK compuestas protegen (no se puede importar a la cuenta de otro). Devuelve `(import_id, inserted, duplicates)`. Los instrumentos ya tienen que existir (los da de alta el servidor con la clave secreta). Máximo 5000 filas por llamada. Para ver lo importado: `select filename, rows_total, rows_imported, rows_skipped, report, created_at from public.imports order by created_at desc;`.
 - **`instrument_prices(p_instrument_ids)`**: último y penúltimo cierre de hasta 500 instrumentos, en texto (sin pasar por floats).
 - **`take_rate_limit(p_key)`**: límites de uso por usuario. La política vive en la función: `refresh_quotes` 1 cada 5 minutos, `search_symbols` 30 por minuto, `import_csv` 20 por hora. Para cambiarla se edita la función en una migración nueva. La tabla `rate_limits` no es accesible para los usuarios.
 - **Advisor de seguridad:** avisa que `take_rate_limit` es `security definer` y `authenticated` puede ejecutarla. Es intencional (ver `docs/decisions.md`, Fase 4). El otro aviso (`auth_leaked_password_protection`) es de plan Pro y no aplica.
+- **`watchlist_market(p_instrument_ids, p_since, p_points)`** (Fase 6): por instrumento, último y penúltimo cierre, mínimo y máximo de cierres desde `p_since` y los últimos `p_points` cierres, en texto (hasta 100 instrumentos, `security invoker`). El trigger `watchlist_items_limit` limita cada watchlist a 50 símbolos.
+- **`take_login_attempt(p_key)` y `clear_login_attempts(p_key)`** (Fase 6): límite de intentos del código de ingreso, solo `service_role` (ver "Ingreso con código").
 - **Crear migraciones con `supabase migration new` en una terminal sin TTY:** agregar `< /dev/null`, si no la CLI espera datos por stdin y se cuelga.
 
-## Ingreso con enlace (magic link)
+## Ingreso con código (OTP) y SMTP propio
 
-Flujo PKCE: `/login` → `signInWithOtp` → correo con el enlace de Supabase → `/auth/callback?code=…` → sesión.
+Flujo: `/login` (email) → `signInWithOtp` → correo con un **código de 6 dígitos** → `/login` (código) → `verifyOtp({ email, token, type: "email" })` → sesión en las cookies. No hay enlace ni ruta de retorno: sirve igual dentro de la app instalada en el iPhone (sus cookies son aparte de las de Safari).
 
-- **El enlace tiene que abrirse en el mismo navegador donde se pidió**: la cookie con el "code verifier" vive ahí. Si no, la app muestra "El enlace no funcionó…".
-- **iPhone con la PWA instalada (Fase 6):** el enlace del correo abre Safari, no la app instalada, así que este flujo no alcanza. Hará falta SMTP propio y una plantilla con código de un solo uso (OTP) o con `token_hash`.
-- **Correo por defecto de Supabase:** 2 mensajes por hora, solo a miembros de la organización y sin poder editar las plantillas (el plan Free responde 400 "Email template modification is not available…"). Sirve para vos en desarrollo; **antes de invitar a un amigo hay que configurar SMTP propio** (Authentication → SMTP Settings). La doc de Supabase menciona Resend, Brevo, AWS SES, Postmark, SendGrid y ZeptoMail: revisar sus planes gratuitos.
-- Límites de Auth: 60 segundos entre pedidos para el mismo usuario y 30 pedidos cada 5 minutos por IP.
+- **SMTP:** Gmail dedicado con contraseña de aplicación. En el panel de Supabase: _Authentication → Emails → SMTP Settings_ → host `smtp.gmail.com`, puerto `465`, usuario = la dirección completa, remitente = la misma dirección, nombre del remitente a gusto (es lo que se ve en la bandeja de entrada). **La contraseña de aplicación se carga solo en el panel**, nunca en el repo ni en el chat. Requisitos de Gmail: verificación en dos pasos y una cuenta que no sea la personal (la contraseña de aplicación da acceso a toda la cuenta). El bloque SMTP **no** está en `supabase/config.toml`: un `config push` no la pisa. Con SMTP propio Supabase fija 30 correos por hora en total (`rate_limit.email_sent`); Gmail permite ~500 por día.
+- **Qué se versiona** (`supabase/config.toml`): `otp_length = 6` (tiene que coincidir con `CODE_LENGTH` de `lib/validation/login.ts`), `otp_expiry = 600` (10 minutos), `max_frequency = "1m0s"` (espera mínima entre dos correos al mismo email; el botón "Reenviar" espera lo mismo) y las plantillas `magic_link` y `confirmation` (`supabase/templates/*.html`, solo el código). Supabase usa una u otra según el email ya exista o sea un alta nueva. Después de cambiar algo: `pnpm db:config-diff`, revisar, y recién entonces `pnpm exec supabase config push`.
+- **Límite de intentos de verificación** (antes de tener sesión): tabla `login_attempts` y funciones `take_login_attempt` / `clear_login_attempts`, solo ejecutables por `service_role`. La política (5 verificaciones por 15 minutos por email, clave = SHA-256 del email) vive en la función. Si alguien queda bloqueado por error: `delete from public.login_attempts;`.
+- **Un email sin acceso** (fuera de `allowed_emails`) recibe la misma respuesta que uno con acceso: el hook "Before User Created" responde 403 y no se manda ningún correo. Un usuario que ya existe y se sacó de la lista sigue pudiendo pedir un código: para quitar el acceso de verdad hay que borrar el usuario (Authentication → Users) además de la fila de `allowed_emails`.
+- **Plan B si el correo falla** (Gmail bloquea el envío, cuota agotada, correo en spam): generar el código con la clave secreta, sin enviar nada, y escribirlo en `/login`. Con la clave en `.env.local`, desde la raíz del repo:
+
+  ```bash
+  node -e '
+  const { parseEnv } = require("node:util");
+  const env = parseEnv(require("node:fs").readFileSync(".env.local", "utf8"));
+  const { createClient } = require("@supabase/supabase-js");
+  const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
+  admin.auth.admin.generateLink({ type: "magiclink", email: "tu@email.com" })
+    .then(({ data, error }) => console.log(error ? error.message : data.properties.email_otp));
+  '
+  ```
+
+  Vale 10 minutos y sirve una vez. En `/login` escribí tu email, tocá **Ya tengo un código** (salta al segundo paso sin pedir otro correo) y escribí el código.
+
+- **Los correos de Auth con el proveedor por defecto** (sin SMTP propio) están limitados a 2 por hora, solo a miembros de la organización y sin plantillas editables (400 "Email template modification is not available…"): no sirven para invitar a nadie. Repetir la configuración de SMTP en `finance` en la Fase 7.
+- Límites de Auth: 60 segundos entre pedidos para el mismo email y 30 correos por hora en total.
 
 ## Configuración de Auth como código
 
-`supabase/config.toml` **no** es la plantilla de `supabase init`: declara solo lo que gestionamos (URL del sitio, redirecciones permitidas y el hook de registro). Lo que no está declarado no se toca. La plantilla completa pisaba ajustes reales del proyecto (site URL, confirmación de email, largo del OTP, pooler) y, sin TTY, `config push` aplica sin preguntar.
+`supabase/config.toml` **no** es la plantilla de `supabase init`: declara solo lo que gestionamos (URL del sitio y redirecciones —ya sin uso, los correos no llevan enlaces—, el hook de registro, el largo, el vencimiento y la frecuencia del código y las plantillas de correo). Lo que no está declarado no se toca (`config push` ya no devuelve a su valor por defecto lo no declarado). La plantilla completa de `supabase init` **no** se debe usar: un `config push` con ella pisaba ajustes reales del proyecto. **Regla:** `pnpm db:config-diff` y revisar el diff antes de cualquier `config push` (sin TTY la CLI aplica los cambios sin preguntar).
 
 ## Base de datos
 

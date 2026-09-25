@@ -1,0 +1,33 @@
+# Lo que NO se sube a Vercel: no hace falta para compilar ni para correr la app.
+# Sobre todo: los fixtures de prueba, la especificación y los documentos
+# internos. `vercel` sin este archivo sube todo lo que no esté en su lista mínima (no respeta
+# el .gitignore completo: subió coverage/ y supabase/.temp/).
+
+# Secretos y configuración local
+.env*
+.claude/
+.vercel/
+
+# Fixtures y documentación interna
+lib/engine/__fixtures__/
+docs/
+PROJECT_SPEC.md
+CLAUDE.md
+AGENTS.md
+README.md
+
+# Pruebas, cobertura y herramientas de desarrollo
+**/__tests__/
+**/*.test.ts
+**/*.test.tsx
+vitest*.mts
+coverage/
+scripts/
+.github/
+
+# Base de datos: las migraciones se aplican desde la CLI, no desde Vercel
+supabase/
+
+# Generados
+*.tsbuildinfo
+next-env.d.ts

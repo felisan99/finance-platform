@@ -19,12 +19,16 @@ import {
   parseRows,
   quoteRowSchema,
   transactionRowSchema,
+  watchlistItemRowSchema,
+  watchlistMarketRowSchema,
   type AccountRow,
   type ClosesRow,
   type DailyCloseRow,
   type InstrumentRow,
   type QuoteRow,
   type TransactionRow,
+  type WatchlistItemRow,
+  type WatchlistMarketRow,
 } from "./rows";
 
 // Consultas de las pantallas. Se hacen con el cliente del usuario (RLS): nunca con la clave secreta.
@@ -147,6 +151,55 @@ export async function getCloseRows(
     rows.push(...(data ?? []));
   }
   return parseRows(closesRowSchema, rows, "instrument_prices");
+}
+
+/** Los símbolos que sigue la persona (RLS: solo los suyos), con su instrumento. */
+export async function getWatchlistItems(
+  client: Client,
+): Promise<WatchlistItemRow[]> {
+  const { data, error } = await loose(client)
+    .from("watchlist_items")
+    .select(`added_at, instruments(${INSTRUMENT_COLUMNS})`)
+    .order("added_at");
+  if (error) throw new Error(`db watchlist_items: ${error.message}`);
+  return parseRows(watchlistItemRowSchema, data, "watchlist_items");
+}
+
+/** Id de la watchlist de la persona (la crea el alta de usuario); `null` si no tiene ninguna. */
+export async function getWatchlistId(client: Client): Promise<string | null> {
+  const { data, error } = await loose(client)
+    .from("watchlists")
+    .select("id")
+    .limit(1);
+  if (error) throw new Error(`db watchlists: ${error.message}`);
+  const row = (data ?? [])[0] as { id?: unknown } | undefined;
+  return typeof row?.id === "string" ? row.id : null;
+}
+
+/** Cantidad máxima de instrumentos por llamada al RPC `watchlist_market`. */
+const WATCHLIST_MARKET_CHUNK = 100;
+
+/**
+ * Último y penúltimo cierre, rango de cierres desde `since` y los últimos `points` cierres de cada
+ * instrumento (RPC `watchlist_market`). Los que no tienen ningún cierre no vuelven.
+ */
+export async function getWatchlistMarket(
+  client: Client,
+  ids: readonly string[],
+  since: string,
+  points: number,
+): Promise<WatchlistMarketRow[]> {
+  const rows: unknown[] = [];
+  for (const group of chunk(ids, WATCHLIST_MARKET_CHUNK)) {
+    const { data, error } = await client.rpc("watchlist_market", {
+      p_instrument_ids: group,
+      p_since: since,
+      p_points: points,
+    });
+    if (error) throw new Error(`db watchlist_market: ${error.message}`);
+    rows.push(...(data ?? []));
+  }
+  return parseRows(watchlistMarketRowSchema, rows, "watchlist_market");
 }
 
 /** Serie diaria de cierres de un instrumento desde `fromDate` (YYYY-MM-DD), paginada. */

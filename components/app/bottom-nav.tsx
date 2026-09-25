@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, ChartPie, Ellipsis, House } from "lucide-react";
+import { ArrowLeftRight, ChartPie, Ellipsis, House, Star } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -8,14 +8,14 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/", label: "Inicio", icon: House },
   { href: "/positions", label: "Posiciones", icon: ChartPie },
+  { href: "/watchlist", label: "Watchlist", icon: Star },
   { href: "/activity", label: "Actividad", icon: ArrowLeftRight },
   { href: "/more", label: "Más", icon: Ellipsis },
 ] as const;
 
 /**
  * Navegación inferior fija, a lo ancho de la columna de la app. Respeta el área segura del iPhone
- * (`env(safe-area-inset-bottom)`, requiere `viewport-fit=cover`). La pestaña de Watchlist llega con
- * la Fase 6.
+ * (`env(safe-area-inset-bottom)`, requiere `viewport-fit=cover`).
  */
 export function BottomNav() {
   const pathname = usePathname();

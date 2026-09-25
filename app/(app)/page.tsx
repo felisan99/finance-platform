@@ -8,6 +8,7 @@ import {
 } from "@/components/app/performance-section";
 import { Pnl } from "@/components/app/pnl";
 import { RefreshButton } from "@/components/app/refresh-button";
+import { SnapshotSaver } from "@/components/app/snapshot-saver";
 import { Notice, PageHeader, Stat } from "@/components/app/stat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
@@ -19,6 +20,7 @@ import {
   formatMoney,
 } from "@/lib/portfolio/format";
 import { loadPortfolioSnapshot } from "@/lib/portfolio/queries";
+import { buildCachedSnapshot } from "@/lib/portfolio/snapshot-cache";
 import { localYear } from "@/lib/portfolio/time";
 
 function Movers({ title, movers }: { title: string; movers: Mover[] }) {
@@ -74,6 +76,7 @@ export default async function HomePage() {
   );
   return (
     <div className="flex flex-col gap-3">
+      <SnapshotSaver json={JSON.stringify(buildCachedSnapshot(valued, now))} />
       <PageHeader title="Inicio" subtitle={snapshot.account.name} />
 
       <Card>

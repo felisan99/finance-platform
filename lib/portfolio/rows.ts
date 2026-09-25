@@ -101,3 +101,23 @@ export type DailyCloseRow = z.infer<typeof dailyCloseRowSchema>;
 export const benchmarkRowSchema = z.object({
   portfolios: z.object({ benchmark_symbol: z.string() }).nullable(),
 });
+
+/** Un símbolo seguido, con su instrumento embebido (`watchlist_items` → `instruments`). */
+export const watchlistItemRowSchema = z.object({
+  added_at: z.string(),
+  instruments: instrumentRowSchema,
+});
+export type WatchlistItemRow = z.infer<typeof watchlistItemRowSchema>;
+
+/** Resultado del RPC `watchlist_market`: `recent` son pares `[fecha, cierre]` de más viejo a más nuevo. */
+export const watchlistMarketRowSchema = z.object({
+  instrument_id: z.string(),
+  last_close: z.string(),
+  last_date: z.string(),
+  prev_close: z.string().nullable(),
+  prev_date: z.string().nullable(),
+  low_close: z.string().nullable(),
+  high_close: z.string().nullable(),
+  recent: z.array(z.tuple([z.string(), z.string()])).nullable(),
+});
+export type WatchlistMarketRow = z.infer<typeof watchlistMarketRowSchema>;

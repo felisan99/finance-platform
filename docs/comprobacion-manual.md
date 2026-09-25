@@ -1,4 +1,4 @@
-# Comprobación manual (Fases 4 y 5)
+# Comprobación manual (Fases 4, 5 y 6)
 
 Lo único que no se puede automatizar sin un navegador: ver la app con tus ojos, en el teléfono. Los números de la sección 8.3 del spec ya se comprueban por HTTP con una sesión real (`pnpm build && pnpm test:live`); esta lista es para que los veas vos y para revisar el aspecto.
 
@@ -8,9 +8,9 @@ Lo único que no se puede automatizar sin un navegador: ver la app con tus ojos,
 pnpm dev          # http://localhost:3000
 ```
 
-Ingresá con tu email (enlace mágico; abrilo en el **mismo** navegador).
+Ingresá con tu email: te llega un **código de 6 dígitos** al correo (puede tardar un minuto; mirá en spam). Escribilo en la pantalla y entrás. Si perdiste la pantalla del código (por ejemplo, el iPhone recargó la app mientras mirabas el correo), escribí tu email y tocá **Ya tengo un código**: no hace falta pedir otro.
 
-**Para verla a 390 px** usá el modo dispositivo de las herramientas de desarrollo del navegador (Chrome: F12 → ícono de celular → iPhone 12/13/14). Verla en el teléfono real por la IP de tu red no funciona todavía: las redirecciones permitidas de Supabase Auth solo incluyen `http://localhost:3000`, así que el enlace de ingreso no volvería. Eso se resuelve con el deploy (Fase 7) o agregando la IP a las redirecciones (con `pnpm db:config-diff` antes de cualquier `config push`).
+**Para verla a 390 px** usá el modo dispositivo de las herramientas de desarrollo del navegador (Chrome: F12 → ícono de celular → iPhone 12/13/14). Para verla en el teléfono real usá la dirección de Vercel (sección 7): el iPhone exige HTTPS para instalar una app.
 
 ## 1. Importar el CSV de Delta
 
@@ -70,9 +70,35 @@ En **Inicio**, la tarjeta **Rendimiento** (aparece unos instantes después del r
 - Si no aparece el S&P 500: tocá **Actualizar precios** (baja el historial del benchmark en segundo plano) y recargá.
 - El gráfico usa cierres diarios: el valor de la tarjeta de arriba (cotización del momento) puede diferir del último punto hasta que cierre el mercado.
 
+## 6. Watchlist (Fase 6)
+
+Pestaña **Watchlist** (la estrella, entre Posiciones y Actividad):
+
+- **Seguir un símbolo:** escribí `AAPL` (aparecen sugerencias) y tocá **Seguir**. Si el símbolo es nuevo tarda unos segundos en tener precio: la fila dice "Sin precio todavía"; actualizá la página. También sirve `brk.b` (se convierte en `BRK-B`).
+- **Cada fila:** precio, cambio del día con signo y flecha, un minigráfico de los últimos 60 cierres (gris a propósito) y la barra del **rango de 52 semanas** (mínimo a la izquierda, máximo a la derecha, el punto es el precio). Es el rango de cierres diarios, no de los extremos dentro del día.
+- **Tocá la fila** para abrir el detalle: precio, rango, gráfico de un año y **Dejar de seguir**. Sin costos ni operaciones porque no tenés una posición. Los símbolos que sí tenés también tienen el botón **Seguir** en su detalle.
+- **Quitar de la lista:** tocá la ✕ de la fila: pregunta "¿Quitar X?" con **Sí, quitar** y **Cancelar** (la ✕ sola no quita nada).
+- **Límites:** 50 símbolos; símbolo repetido ("Ya seguís X") o inexistente (mensaje de error) no rompen nada.
+- **Actualizar precios** (arriba a la derecha) también refresca los símbolos seguidos (1 vez cada 5 minutos).
+
+## 7. La app instalada en el iPhone (Fase 6)
+
+Dirección: **https://finance-platform-jade.vercel.app** (apunta a la base de desarrollo `finance-dev` hasta la Fase 7). Hacelo con **Safari** (no Chrome) en el iPhone:
+
+1. Abrí la dirección y pedí el código con tu email. **Fijate en el correo:** que llegue (mirá también en spam), cómo se ve (remitente, asunto "Tu código de ingreso a Portfolio Tracker", el código grande) y cuánto tarda. Escribí el código y entrá.
+2. **Compartir → Agregar a pantalla de inicio.** El ícono es un fondo casi negro con un trazo de gráfico blanco y el nombre "Portfolio".
+3. **Abrí la app desde el ícono:** tiene que abrirse **sin la barra de Safari**. Mirá la barra de estado de arriba (hora, batería): ¿se ve bien sobre el fondo, tanto en claro como en oscuro? Si no se lee o queda una franja de otro color, avisame (se ajusta con `statusBarStyle`).
+4. **Ingresar dentro de la app instalada:** cerrá la sesión (**Más → Cerrar sesión**) y volvé a entrar con un código nuevo. Las cookies de la app instalada son aparte de las de Safari: acá es donde el enlace de antes fallaba y el código no. Al pedir el código, el teclado numérico y la sugerencia del código que llegó por correo (arriba del teclado) tienen que aparecer. Si al ir al correo la app se recarga y volvés a la pantalla del email, escribí el email y tocá **Ya tengo un código**.
+5. **Modo avión:** con la app abierta activá el modo avión y tocá otra pestaña o cerrala y abrila de nuevo: tiene que aparecer **"Sin conexión"** con el último estado de Inicio (valor total, cambio, efectivo, posiciones) y la hora en que se guardó. Al volver la conexión, **Reintentar**.
+6. **Modo oscuro:** cambiá el aspecto del iPhone (Ajustes → Pantalla y brillo): la app lo sigue sola. Revisá Inicio, Watchlist y el ingreso en los dos modos.
+7. **Watchlist:** agregar y quitar un símbolo desde el teléfono. Que el teclado no tape el botón **Seguir** y que la navegación de abajo respete la barra inferior.
+8. **Cerrar sesión borra lo guardado:** después de cerrar sesión, modo avión y abrir la app: la pantalla sin conexión ya no muestra tu valor total.
+
+Anotá lo que se vea raro (sobre todo la barra de estado y el correo): son las dos cosas que no se pueden comprobar sin el teléfono.
+
 ## Límites conocidos
 
-- Una sola cuenta.
-- No hay pestaña de Watchlist ni la app instalable (Fase 6).
+- Una sola cuenta y una sola watchlist.
 - Editar o borrar una operación importada: si volvés a subir el archivo original, se crea de nuevo.
-- Todavía no hay ingreso con código de 6 dígitos; el enlace del correo abre el navegador, no la app instalada (ver "Tareas pendientes" en `docs/decisions.md`).
+- El código de ingreso permite 5 intentos cada 15 minutos por email; si alguien los gasta, esa persona espera 15 minutos.
+- Sin notificaciones push ni interruptor manual de modo oscuro (sigue al sistema).

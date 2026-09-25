@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveAuthRedirect } from "./auth-routes";
+import { hardenSessionCookie, isSecureRequest } from "./cookie-options";
 import type { Database } from "./database.types";
 import { getPublicEnv } from "./env";
 
@@ -13,6 +14,10 @@ import { getPublicEnv } from "./env";
  */
 export async function updateSession(request: NextRequest) {
   const env = getPublicEnv();
+  const secure = isSecureRequest(
+    request.headers.get("x-forwarded-proto"),
+    request.nextUrl.protocol,
+  );
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
@@ -30,7 +35,11 @@ export async function updateSession(request: NextRequest) {
           }
           response = NextResponse.next({ request });
           for (const { name, value, options } of cookiesToSet) {
-            response.cookies.set(name, value, options);
+            response.cookies.set(
+              name,
+              value,
+              hardenSessionCookie(options, secure),
+            );
           }
           // Cache-Control, Expires y Pragma: evitan que un CDN cachee una respuesta con sesión.
           for (const [key, value] of Object.entries(headers)) {

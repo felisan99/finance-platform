@@ -117,21 +117,24 @@ export function PriceChart({
           ))}
         </LineChart>
       </ChartContainer>
-      <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span>
-          <span aria-hidden="true" className="text-gain">
-            ●
-          </span>{" "}
-          Compra
-        </span>
-        <span>
-          <span aria-hidden="true" className="text-loss">
-            ●
-          </span>{" "}
-          Venta
-        </span>
-        {data.avgCost !== null && <span>- - Costo promedio</span>}
-      </p>
+      {/* Sin operaciones ni costo promedio (un símbolo que solo se sigue) no hay nada que explicar. */}
+      {(data.markers.length > 0 || data.avgCost !== null) && (
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            <span aria-hidden="true" className="text-gain">
+              ●
+            </span>{" "}
+            Compra
+          </span>
+          <span>
+            <span aria-hidden="true" className="text-loss">
+              ●
+            </span>{" "}
+            Venta
+          </span>
+          {data.avgCost !== null && <span>- - Costo promedio</span>}
+        </p>
+      )}
     </div>
   );
 }

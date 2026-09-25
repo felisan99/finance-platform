@@ -12,7 +12,7 @@ Portfolio tracker personal. La especificación completa está en PROJECT_SPEC.md
 - Todo cambio de esquema = nueva migración en supabase/migrations. **Toda migración que crea una tabla incluye sus GRANT y su RLS**: los privilegios por defecto de `public` están revocados para `anon` y `authenticated`.
 - Todo cálculo nuevo del motor lleva tests en Vitest, incluidos casos borde.
 - Validar inputs con Zod en el servidor.
-- No exponer SUPABASE_SECRET_KEY al cliente. Salta RLS: `lib/db/admin.ts` es `server-only` y se usa solo para tareas que no pertenecen a un usuario (crons, alta de instrumentos), nunca para atender lecturas o escrituras de un usuario.
+- No exponer SUPABASE_SECRET_KEY al cliente. Salta RLS: `lib/db/admin.ts` es `server-only` y se usa solo para tareas que no pertenecen a un usuario (crons, alta de instrumentos, el límite de intentos del código de ingreso —`lib/db/login-attempts.ts`— que corre antes de que haya sesión), nunca para atender lecturas o escrituras de un usuario.
 - En el servidor la sesión se verifica con `getClaims()`, nunca con `getSession()`. El proxy no es una barrera de autorización: cada página o acción vuelve a verificar y RLS protege los datos.
 - Supabase solo en la nube (sin Docker ni stack local): `finance-dev` para desarrollo y `finance` para producción (Fase 7). No hacer `supabase link` ni `db push` a `finance` sin pedido explícito; los scripts `pnpm db:*` se niegan a operar si el proyecto vinculado no es el de desarrollo.
 - Nunca `supabase config push` sin correr antes `pnpm db:config-diff` y revisar el diff: sin TTY la CLI aplica los cambios sin preguntar. `supabase/config.toml` declara solo lo que gestionamos (no es la plantilla de `init`).
@@ -27,6 +27,13 @@ Portfolio tracker personal. La especificación completa está en PROJECT_SPEC.md
 - Serie histórica, TWR, XIRR y benchmark son del motor puro (`lib/engine/{dates,series,returns,performance}.ts`); la lectura de cierres y el formato están en `lib/portfolio/`. Los cierres guardados están ajustados por splits: se des-ajustan con los `SPLIT` del libro, no con `corporate_actions`. El XIRR usa `number` (es una tasa para mostrar, no un monto). El benchmark (`SPY`) es un instrumento más que mantienen los jobs (`active_instruments()` lo incluye).
 - Los componentes de cliente no importan `lib/engine` ni `lib/portfolio/format.ts` (arrastrarían decimal.js al navegador): reciben textos y `number` ya preparados en el servidor (`performance-view.ts`, `allocation-view.ts`) y usan `chart-format.ts`, `pnl-text.tsx`.
 - Toda acción que pueda dejar un instrumento nuevo sin precios (importar, guardar una operación con símbolo, "Actualizar precios") llama a `backfillPendingInBackground` (`lib/portfolio/background.ts`): descarga el historial sin bloquear la respuesta.
+
+- El ingreso es con un código de 6 dígitos del correo (`/login`, Server Actions `requestCode` y `verifyCode`); no hay enlace ni ruta de retorno. `otp_length` de `supabase/config.toml` y `CODE_LENGTH` de `lib/validation/login.ts` tienen que coincidir. Toda verificación pasa antes por `takeLoginAttempt` (5 por 15 minutos por email). El SMTP (contraseña de aplicación) se carga solo en el panel de Supabase: no se declara en `config.toml` ni se pega en el chat.
+- Las cookies de sesión son `HttpOnly` y, con HTTPS, `Secure` (`lib/db/cookie-options.ts`, usado por `lib/db/server.ts` y `lib/db/proxy.ts`): no hay cliente de Supabase en el navegador y ningún código lee `document.cookie`. Si algún día se agrega uno, hay que revisarlo.
+- Público para el proxy (`lib/db/auth-routes.ts`): `/login`, `/api/cron/*`, `/pwa/*`, `/sw.js` y `/manifest.webmanifest` (los dos últimos, exactos). Nada de eso lleva datos de nadie.
+- PWA: el service worker (`public/sw.js`) **no cachea páginas ni datos** financieros, solo la pantalla sin conexión; al cambiar un archivo que precachea hay que subir su `VERSION`. El último estado conocido vive en `localStorage` (textos ya formateados, `lib/portfolio/snapshot-cache.ts`) y se borra al llegar a `/login`. El modo oscuro sigue al sistema con CSS (`prefers-color-scheme`), no con la clase `.dark`.
+- Un botón que pasa de `type="button"` a `type="submit"` en el mismo lugar del árbol de React envía el formulario en medio del mismo clic: cada rama lleva su propia `key` (ver `components/app/watchlist-row-footer.tsx`).
+- Vercel: nunca correr `vercel` sin revisar qué sube (no respeta todo el `.gitignore`); `.vercelignore` deja afuera los fixtures, `docs/`, el spec, los tests y `supabase/`. Variables de Production: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` y `CRON_SECRET` (las `NEXT_PUBLIC_*` se incorporan al compilar: cargarlas antes del deploy). Se cargan por stdin desde `.env.local` (`... | vercel env add NOMBRE production --sensitive`), sin imprimirlas. El proyecto de Vercel de la Fase 6 apunta a `finance-dev`; producción es la Fase 7.
 
 # Convenciones
 
@@ -43,4 +50,5 @@ pnpm test:live          # cron real contra Yahoo real + la app por HTTP con sesi
 pnpm db:push            # migraciones a finance-dev
 pnpm db:types           # regenera lib/db/database.types.ts
 pnpm db:config-diff     # revisar antes de `pnpm supabase config push`
+node scripts/generate-icons.mjs   # regenera los íconos de la PWA en public/icons/
 ```

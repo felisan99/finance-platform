@@ -5,6 +5,7 @@ import {
   createAdmin,
   assertDevProject,
   deleteTestUser,
+  randomSymbol,
   type DbClient,
 } from "@/lib/db/__tests__/integration-helpers";
 import type { Database, Json } from "@/lib/db/database.types";
@@ -77,6 +78,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
   let a: Session;
   let b: Session;
   let ddogCreated = false;
+  let watchedInstrumentId: string | undefined;
   const userIds: string[] = [];
 
   async function newSession(label: string): Promise<Session> {
@@ -151,6 +153,9 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     for (const id of userIds) await deleteTestUser(admin, { id, email: id });
     if (ddogCreated)
       await admin.from("instruments").delete().eq("symbol", "DDOG");
+    // Después de los usuarios: sus filas de watchlist apuntan al instrumento (sus cierres se van en cascada).
+    if (watchedInstrumentId)
+      await admin.from("instruments").delete().eq("id", watchedInstrumentId);
   });
 
   it("sin sesión, todas las pantallas mandan a /login", async () => {
@@ -162,12 +167,89 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
       "/activity/new",
       "/activity/import",
       "/more",
+      "/watchlist",
       "/activity/export",
     ]) {
       const response = await get(path);
       expect(response.status, path).toBe(307);
       expect(response.headers.get("location"), path).toMatch(/\/login$/);
     }
+  });
+
+  it("la app instalable: manifiesto, service worker y pantalla sin conexión son públicos, con las cabeceras de seguridad", async () => {
+    const manifest = await get("/manifest.webmanifest");
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers.get("content-type")).toContain("manifest+json");
+    const parsed = (await manifest.json()) as {
+      display: string;
+      start_url: string;
+      icons: Array<{ src: string; sizes: string; purpose?: string }>;
+    };
+    expect(parsed).toMatchObject({ display: "standalone", start_url: "/" });
+    expect(parsed.icons.map((icon) => icon.sizes)).toEqual(
+      expect.arrayContaining(["192x192", "512x512"]),
+    );
+    expect(parsed.icons.some((icon) => icon.purpose === "maskable")).toBe(true);
+
+    // Cada ícono del manifiesto se sirve sin sesión, como imagen.
+    for (const icon of parsed.icons) {
+      const response = await get(icon.src);
+      expect(response.status, icon.src).toBe(200);
+      expect(response.headers.get("content-type"), icon.src).toBe("image/png");
+    }
+
+    const sw = await get("/sw.js");
+    expect(sw.status).toBe(200);
+    expect(sw.headers.get("content-type")).toContain("javascript");
+    expect(sw.headers.get("cache-control")).toContain("no-store");
+    expect(sw.headers.get("service-worker-allowed")).toBe("/");
+    expect(sw.headers.get("content-security-policy")).toContain(
+      "script-src 'self'",
+    );
+
+    for (const path of [
+      "/pwa/offline.html",
+      "/pwa/offline.css",
+      "/pwa/offline.js",
+    ]) {
+      expect((await get(path)).status, path).toBe(200);
+    }
+    const offline = text(await (await get("/pwa/offline.html")).text());
+    expect(offline).toContain("Sin conexión");
+    // La pantalla sin conexión no lleva datos de nadie: solo la estructura.
+    expect(offline).not.toMatch(/US\$|VOO|Valor total \d/);
+
+    // Cabeceras de seguridad en una pantalla pública y en una privada (con sesión).
+    for (const response of [await get("/login"), await get("/", a)]) {
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("x-frame-options")).toBe("DENY");
+      expect(response.headers.get("referrer-policy")).toBe(
+        "strict-origin-when-cross-origin",
+      );
+      expect(response.headers.get("strict-transport-security")).toContain(
+        "max-age=",
+      );
+      expect(response.headers.get("permissions-policy")).toContain("camera=()");
+      expect(response.headers.get("x-powered-by")).toBeNull();
+    }
+  });
+
+  it("el ingreso es por código: no hay enlace de retorno y la pantalla lo dice", async () => {
+    const login = text(await (await get("/login")).text());
+    expect(login).toContain("código de 6 dígitos");
+    expect(login).toContain("Enviar código");
+    expect(login).toContain("Ya tengo un código");
+    expect(login.toLowerCase()).not.toContain("enlace de acceso");
+    // El retorno del enlace mágico ya no existe: sin sesión manda a /login, con sesión da "no encontrado".
+    const anon = await get("/auth/callback?code=abc");
+    expect(anon.status).toBe(307);
+    expect(anon.headers.get("location")).toMatch(/\/login$/);
+    const withSession = await page("/auth/callback?code=abc", a);
+    expect(withSession.html).toContain(NOT_FOUND);
+    // Con sesión, /login lleva al inicio.
+    const loggedIn = await get("/login", a);
+    expect(loggedIn.status).toBe(307);
+    expect(loggedIn.headers.get("location")).toMatch(/\/$/);
   });
 
   it("una cuenta nueva ve los estados vacíos, con los caminos para empezar", async () => {
@@ -494,6 +576,134 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
       expect((await page(path, a)).status, path).toBe(400);
       expect((await get(path)).status, `${path} sin sesión`).toBe(400);
     }
+  });
+
+  it("Watchlist (Fase 6): vacía, con un símbolo seguido sin posición, su detalle y el aislamiento entre usuarios", async () => {
+    // Un instrumento de prueba con cierres conocidos, dentro de las últimas 52 semanas.
+    const today = new Date();
+    const daysAgo = (n: number) =>
+      new Date(today.getTime() - n * 86_400_000).toISOString().slice(0, 10);
+    const symbol = randomSymbol();
+    const { data: instrument, error } = await admin
+      .from("instruments")
+      .insert({ symbol, name: "Watchlist de prueba", type: "ETF" })
+      .select("id")
+      .single();
+    if (error || !instrument)
+      throw new Error(`instrumento de prueba: ${error?.message}`);
+    watchedInstrumentId = instrument.id;
+    const closes: Array<[number, number]> = [
+      [40, 90],
+      [30, 130],
+      [20, 100],
+      [2, 110],
+      [1, 112.5],
+    ];
+    const inserted = await admin.from("prices_daily").insert(
+      closes.map(([days, close]) => ({
+        instrument_id: instrument.id,
+        date: daysAgo(days),
+        close,
+      })),
+    );
+    expect(inserted.error).toBeNull();
+
+    // Vacía: el estado inicial y la pestaña en la navegación.
+    const empty = await page("/watchlist", b);
+    expect(empty.status).toBe(200);
+    expect(empty.html).toContain("Todavía no seguís ningún símbolo");
+    expect(empty.html).toContain("0 de 50 símbolos");
+    expect(empty.html).toContain('href="/watchlist"');
+
+    // La persona sigue el símbolo (lo mismo que hace la acción, con su propia sesión y RLS).
+    const { data: list } = await b.client
+      .from("watchlists")
+      .select("id")
+      .limit(1)
+      .single();
+    const follow = await b.client.from("watchlist_items").insert({
+      watchlist_id: list!.id,
+      instrument_id: instrument.id,
+      user_id: b.userId,
+    });
+    expect(follow.error).toBeNull();
+
+    const followed = await page("/watchlist", b);
+    expect(followed.status).toBe(200);
+    expect(followed.html).toContain("1 de 50 símbolos");
+    expect(followed.html).toContain(symbol);
+    expect(followed.html).toContain("Watchlist de prueba");
+    expect(followed.html).toContain("112,50"); // último cierre
+    expect(followed.html).toContain("+US$ 2,50"); // 112,5 − 110
+    expect(followed.html).toContain("+2,27%"); // 2,5 / 110
+    expect(followed.html).toContain("90,00"); // mínimo de 52 semanas
+    expect(followed.html).toContain("130,00"); // máximo
+    expect(followed.html).toContain(`Quitar ${symbol} de la watchlist`);
+    expect(followed.html).not.toContain("Sin precio todavía");
+
+    // El detalle de un símbolo que se sigue pero no se tiene.
+    const detail = await page(`/positions/${symbol}`, b);
+    expect(detail.status).toBe(200);
+    expect(detail.html).toContain("Rango de 52 semanas");
+    expect(detail.html).toContain("Dejar de seguir");
+    expect(detail.html).toContain("no tenés una posición");
+    expect(detail.html).not.toContain("Costo promedio");
+    expect(detail.html).not.toContain("Operaciones (");
+
+    // Otra persona no lo ve en su lista ni puede abrir su detalle (RLS): para ella no existe.
+    expect((await page("/watchlist", a)).html).not.toContain(symbol);
+    const foreign = await page(`/positions/${symbol}`, a);
+    expect(foreign.html).toContain(NOT_FOUND);
+    expect(foreign.html).not.toContain("Rango de 52 semanas");
+
+    // Al dejar de seguir, el detalle vuelve a no existir.
+    const unfollow = await b.client
+      .from("watchlist_items")
+      .delete()
+      .eq("instrument_id", instrument.id);
+    expect(unfollow.error).toBeNull();
+    expect((await page(`/positions/${symbol}`, b)).html).toContain(NOT_FOUND);
+    expect((await page("/watchlist", b)).html).toContain(
+      "Todavía no seguís ningún símbolo",
+    );
+  });
+
+  it("una posición propia ofrece Seguir, y seguirla no cambia sus números", async () => {
+    const before = await page("/positions/VOO", a);
+    expect(before.status).toBe(200);
+    expect(before.html).toContain("Seguir");
+    expect(before.html).not.toContain("Dejar de seguir");
+
+    const account = (await getPrimaryAccount(a.client))!;
+    expect(account).toBeTruthy();
+    const { data: voo } = await admin
+      .from("instruments")
+      .select("id")
+      .eq("symbol", "VOO")
+      .single();
+    const { data: list } = await a.client
+      .from("watchlists")
+      .select("id")
+      .limit(1)
+      .single();
+    const follow = await a.client.from("watchlist_items").insert({
+      watchlist_id: list!.id,
+      instrument_id: voo!.id,
+      user_id: a.userId,
+    });
+    expect(follow.error).toBeNull();
+
+    const after = await page("/positions/VOO", a);
+    expect(after.html).toContain("Dejar de seguir");
+    expect(after.html).toContain("Operaciones ("); // sigue siendo el detalle de la posición
+    expect(after.html).toContain("5.724,77"); // costo base: no cambió
+    const watchlist = await page("/watchlist", a);
+    expect(watchlist.html).toContain('href="/positions/VOO"');
+
+    await a.client
+      .from("watchlist_items")
+      .delete()
+      .eq("instrument_id", voo!.id);
   });
 
   it("otro usuario no ve nada de esta cuenta, ni por pantalla ni por dirección directa (RLS)", async () => {
