@@ -448,6 +448,7 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 ### 10.3 Actividad (transacciones)
 - Lista con filtros (tipo, símbolo, fecha) y alta, edición y eliminación.
 - Formulario con autocompletado de símbolo (`search` del proveedor), cantidad, precio, comisión y fecha.
+- En el alta de una compra o venta, al elegir el símbolo se trae la **cotización actual** (`getReferencePrice`, una consulta al proveedor que no guarda nada) y se deja escrita en el precio, como la fecha y la hora que arrancan en «ahora». Debajo del precio dice de cuándo es (si es del cierre, se ve la hora del cierre). Es editable: si la persona ya escribió un precio no se le pisa y queda el botón «Usar este precio». No aplica a la edición de una operación ni a los tipos sin precio por acción.
 - Importar CSV (Delta y, más adelante, un formato genérico) y exportar todo a CSV como backup.
 
 ### 10.4 Watchlist

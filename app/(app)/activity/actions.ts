@@ -26,9 +26,16 @@ import {
 import {
   getInstruments,
   getPrimaryAccount,
+  getProviderSymbol,
   getTransactionRows,
 } from "@/lib/portfolio/queries";
 import {
+  buildReferencePrice,
+  type ReferencePrice,
+} from "@/lib/portfolio/reference-price";
+import {
+  SYMBOL_PATTERN,
+  normalizeSymbol,
   parseTransactionForm,
   type RawTransactionForm,
 } from "@/lib/validation/transaction";
@@ -271,6 +278,67 @@ export async function searchInstruments(
     return {
       ok: false,
       message: "No pudimos buscar ahora. Podés escribir el símbolo a mano.",
+    };
+  }
+}
+
+export type ReferencePriceResponse =
+  | ({ ok: true; symbol: string } & ReferencePrice)
+  | { ok: false; message: string };
+
+/**
+ * Precio de referencia para el alta de una operación: la cotización de hoy del símbolo elegido, que
+ * el formulario deja escrita en el campo de precio. No guarda nada. Llama a Yahoo, así que exige
+ * sesión y cuenta contra el mismo límite que la búsqueda de símbolos (30 por minuto): cada símbolo
+ * elegido gasta una búsqueda de ese cupo. El símbolo se normaliza y se valida antes de consultar.
+ */
+export async function getReferencePrice(
+  symbol: string,
+): Promise<ReferencePriceResponse> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user)
+    return { ok: false, message: "La sesión venció. Volvé a ingresar." };
+
+  const normalized = typeof symbol === "string" ? normalizeSymbol(symbol) : "";
+  if (
+    normalized === "" ||
+    normalized.length > 15 ||
+    !SYMBOL_PATTERN.test(normalized)
+  ) {
+    return { ok: false, message: "Revisá el símbolo: no parece válido." };
+  }
+  const notFound = `No encontramos cotización de ${normalized}.`;
+
+  try {
+    if (!(await takeRateLimit(supabase, "search_symbols"))) {
+      return {
+        ok: false,
+        message: "Muchas consultas seguidas. Esperá un momento.",
+      };
+    }
+    const providerSymbol =
+      (await getProviderSymbol(supabase, normalized)) ?? normalized;
+    const [quote] = await (
+      await getMarketDataProvider()
+    ).getQuotes([providerSymbol]);
+    if (!quote || quote.symbol.toUpperCase() !== providerSymbol.toUpperCase()) {
+      return { ok: false, message: notFound };
+    }
+    const reference = buildReferencePrice(quote);
+    return reference
+      ? { ok: true, symbol: normalized, ...reference }
+      : { ok: false, message: notFound };
+  } catch (error) {
+    if (error instanceof MarketDataError && error.kind === "NOT_FOUND") {
+      return { ok: false, message: notFound };
+    }
+    if (!(error instanceof MarketDataError && error.kind === "BAD_REQUEST")) {
+      console.error("[reference-price]", describeError(error));
+    }
+    return {
+      ok: false,
+      message: "No pudimos traer el precio actual ahora. Cargalo a mano.",
     };
   }
 }

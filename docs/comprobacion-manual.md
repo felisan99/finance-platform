@@ -58,12 +58,14 @@ En **Posiciones**, debajo de cada tarjeta dice "Exacto: …" con el valor sin re
 
 **Actividad → Agregar**: Compra · símbolo `DDOG` (aparece en la lista mientras escribís) · cantidad `2` · precio `251,41` · comisión `1,00` · fecha `23/09/2026`. Guardar.
 
+**Precio de referencia:** al elegir el símbolo (tocá la sugerencia), el campo **Precio** se llena solo con la cotización actual y abajo dice de cuándo es («Precio actual de DDOG: US$ … (fecha y hora)»). Si escribís vos el precio y después cambiás de símbolo, tu precio no se pisa y aparece **Usar este precio**. Un símbolo que no existe avisa «No encontramos cotización». Al editar una operación ya guardada no se toca el precio.
+
 Resultado esperado: DDOG con **costo base 503,82** y el **efectivo baja a 378,925**. Un símbolo nuevo puede tardar unos segundos en tener precio: puede aparecer un instante el aviso "Falta el precio de DDOG" y desaparecer al actualizar la página. En el detalle de DDOG tiene que verse el gráfico con el punto verde de la compra.
 
 ## 4. Cosas para mirar
 
 - **Editar y borrar:** tocá una operación en Actividad. Probá cambiarle la cantidad y guardar; probá eliminar una compra que sostiene una venta posterior (tiene que rechazarlo con un mensaje claro).
-- **Filtros de Actividad:** por tipo, símbolo y fechas.
+- **Filtros de Actividad:** por tipo, símbolo y fechas. En el iPhone **Desde** y **Hasta** van cada uno en su renglón, sin pisarse ni salirse de la tarjeta.
 - **Exportar CSV:** **Actividad → Exportar CSV** descarga todas tus operaciones.
 - **Detalle de una posición** (tocá VOO): gráfico de precio con puntos verdes (compras) y rojos (ventas) y una línea punteada con tu costo promedio.
 - **A 390 px:** que nada se corte ni haya scroll horizontal, que la navegación de abajo no tape contenido (en el iPhone, que respete la barra inferior) y que los botones se puedan tocar con el pulgar.
@@ -97,7 +99,7 @@ De arriba abajo, con el CSV de Delta importado y sin el DDOG (a los cierres del 
 
 Pestaña **Watchlist** (la estrella, entre Posiciones y Actividad):
 
-- **Seguir un símbolo:** escribí `AAPL` (aparecen sugerencias) y tocá **Seguir**. Si el símbolo es nuevo tarda unos segundos en tener precio: la fila dice "Sin precio todavía"; actualizá la página. También sirve `brk.b` (se convierte en `BRK-B`).
+- **Seguir un símbolo:** escribí `AAPL` (aparecen sugerencias, con la lista completa a la vista y los nombres largos cortados con «…») y tocá **Seguir**. Si el símbolo es nuevo tarda unos segundos en tener precio: la fila dice "Sin precio todavía"; actualizá la página. También sirve `brk.b` (se convierte en `BRK-B`).
 - **Cada fila:** precio, cambio del día con signo y flecha, un minigráfico de los últimos 60 cierres (gris a propósito) y la barra del **rango de 52 semanas** (mínimo a la izquierda, máximo a la derecha, el punto es el precio). Es el rango de cierres diarios, no de los extremos dentro del día.
 - **Tocá la fila** para abrir el detalle: precio, rango, gráfico de un año y **Dejar de seguir**. Sin costos ni operaciones porque no tenés una posición. Los símbolos que sí tenés también tienen el botón **Seguir** en su detalle.
 - **Quitar de la lista:** tocá la ✕ de la fila: pregunta "¿Quitar X?" con **Sí, quitar** y **Cancelar** (la ✕ sola no quita nada).

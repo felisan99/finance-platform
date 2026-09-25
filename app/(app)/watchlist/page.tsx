@@ -20,7 +20,9 @@ export default async function WatchlistPage() {
         actions={<RefreshButton />}
       />
 
-      <Card size="sm">
+      {/* `overflow-visible`: la lista de sugerencias del buscador se despliega fuera de la tarjeta;
+          con el `overflow-hidden` de siempre quedaba recortada contra el borde de abajo. */}
+      <Card size="sm" className="overflow-visible">
         <CardContent>
           <WatchlistAddForm />
         </CardContent>

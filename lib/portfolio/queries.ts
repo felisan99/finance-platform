@@ -154,6 +154,24 @@ export async function getInstrumentIdsBySymbol(
   return found;
 }
 
+/**
+ * El símbolo con el que el proveedor conoce a uno que ya está en la base, si tiene uno propio
+ * (`provider_symbol`); `null` si no está o usa el mismo.
+ */
+export async function getProviderSymbol(
+  client: Client,
+  symbol: string,
+): Promise<string | null> {
+  const { data, error } = await loose(client)
+    .from("instruments")
+    .select("provider_symbol")
+    .eq("symbol", symbol)
+    .maybeSingle();
+  if (error) throw new Error(`db instruments: ${error.message}`);
+  const row = data as { provider_symbol: string | null } | null;
+  return row?.provider_symbol ?? null;
+}
+
 export async function getQuoteRows(
   client: Client,
   ids: readonly string[],

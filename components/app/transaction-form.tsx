@@ -1,14 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { Field } from "@/components/app/field";
 import { SymbolCombobox } from "@/components/app/symbol-combobox";
 import { Notice } from "@/components/app/stat";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
-import { saveTransaction, type FormState } from "@/app/(app)/activity/actions";
+import {
+  getReferencePrice,
+  saveTransaction,
+  type FormState,
+  type ReferencePriceResponse,
+} from "@/app/(app)/activity/actions";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/validation/transaction";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +76,66 @@ export function TransactionForm({
   const describe = (name: string) =>
     fieldErrors[name] ? `${name}-error` : undefined;
 
+  // Precio de referencia (solo en el alta de una compra o venta): al elegir el símbolo se trae la
+  // cotización de hoy y se deja escrita en el precio, como la fecha y la hora que arrancan en
+  // "ahora". Si la persona ya escribió el precio, no se lo pisa: queda el botón «Usar este precio».
+  const wantsReference = !id && isTrade;
+  const [price, setPrice] = useState(value("price"));
+  const priceTouched = useRef(value("price") !== "");
+  const [committed, setCommitted] = useState<{
+    symbol: string;
+    n: number;
+  } | null>(null);
+  const [reference, setReference] = useState<{
+    symbol: string;
+    response: ReferencePriceResponse;
+  } | null>(null);
+  /** Último símbolo consultado y si salió bien: uno que salió bien no se vuelve a pedir. */
+  const asked = useRef<{ symbol: string; ok: boolean } | null>(null);
+
+  const handleCommit = (raw: string) => {
+    const symbol = raw.trim().toUpperCase();
+    if (symbol === "") return;
+    if (asked.current?.symbol === symbol && asked.current.ok) return;
+    // El precio que dejamos escrito era de otro símbolo: si nadie lo tocó, se borra hasta que llegue
+    // el nuevo (y si el nuevo no llega, no queda un precio que no corresponde).
+    if (asked.current?.symbol !== symbol && !priceTouched.current) setPrice("");
+    setCommitted((previous) => ({ symbol, n: (previous?.n ?? 0) + 1 }));
+  };
+
+  useEffect(() => {
+    if (!wantsReference || committed === null) return;
+    const { symbol } = committed;
+    if (asked.current?.symbol === symbol && asked.current.ok) return;
+    let cancelled = false;
+    const settle = (response: ReferencePriceResponse) => {
+      if (cancelled) return;
+      asked.current = { symbol, ok: response.ok };
+      setReference({ symbol, response });
+      if (response.ok && !priceTouched.current) setPrice(response.price);
+    };
+    getReferencePrice(symbol).then(settle, () =>
+      settle({
+        ok: false,
+        message: "No pudimos traer el precio actual ahora. Cargalo a mano.",
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [wantsReference, committed]);
+
+  const referenceLoading =
+    wantsReference &&
+    committed !== null &&
+    reference?.symbol !== committed.symbol;
+  const shownReference =
+    wantsReference &&
+    committed !== null &&
+    reference?.symbol === committed.symbol
+      ? reference.response
+      : null;
+
   return (
     <form action={formAction} className="flex flex-col gap-4" noValidate>
       {id && <input type="hidden" name="id" value={id} />}
@@ -103,6 +168,7 @@ export function TransactionForm({
             defaultValue={value("symbol")}
             invalid={Boolean(fieldErrors.symbol)}
             describedBy={describe("symbol")}
+            onCommit={handleCommit}
           />
         </Field>
       )}
@@ -129,13 +195,52 @@ export function TransactionForm({
               <Input
                 id="price"
                 name="price"
-                defaultValue={value("price")}
+                value={price}
+                onChange={(event) => {
+                  priceTouched.current = true;
+                  setPrice(event.target.value);
+                }}
                 aria-invalid={fieldErrors.price ? true : undefined}
                 aria-describedby={describe("price")}
                 {...decimal}
               />
             </Field>
           </div>
+          {!id && (
+            <p
+              aria-live="polite"
+              className="-mt-2 min-h-4 text-xs text-muted-foreground"
+            >
+              {referenceLoading && committed ? (
+                `Buscando el precio actual de ${committed.symbol}…`
+              ) : shownReference?.ok ? (
+                <>
+                  Precio actual de {shownReference.symbol}:{" "}
+                  <span className="font-medium text-foreground">
+                    {shownReference.priceText}
+                  </span>{" "}
+                  ({shownReference.asOfText}).{" "}
+                  {price === shownReference.price ? (
+                    "Ya está cargado: cambialo si operaste a otro precio."
+                  ) : (
+                    <button
+                      key="use-reference"
+                      type="button"
+                      className="underline"
+                      onClick={() => {
+                        priceTouched.current = false;
+                        setPrice(shownReference.price);
+                      }}
+                    >
+                      Usar este precio
+                    </button>
+                  )}
+                </>
+              ) : (
+                (shownReference?.message ?? null)
+              )}
+            </p>
+          )}
           <Field
             id="fee"
             label="Comisión (USD)"

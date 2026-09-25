@@ -86,7 +86,7 @@ export default async function ActivityPage({
             action="/activity"
             className="grid grid-cols-2 gap-3"
           >
-            <div className="flex flex-col gap-1.5">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <Label htmlFor="tipo">Tipo</Label>
               <NativeSelect
                 id="tipo"
@@ -101,7 +101,7 @@ export default async function ActivityPage({
                 ))}
               </NativeSelect>
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <Label htmlFor="simbolo">Símbolo</Label>
               <Input
                 id="simbolo"
@@ -112,7 +112,7 @@ export default async function ActivityPage({
                 maxLength={15}
               />
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="col-span-2 flex min-w-0 flex-col gap-1.5 sm:col-span-1">
               <Label htmlFor="desde">Desde</Label>
               <Input
                 id="desde"
@@ -121,7 +121,7 @@ export default async function ActivityPage({
                 defaultValue={filters.from ?? ""}
               />
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="col-span-2 flex min-w-0 flex-col gap-1.5 sm:col-span-1">
               <Label htmlFor="hasta">Hasta</Label>
               <Input
                 id="hasta"
