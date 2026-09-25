@@ -84,7 +84,10 @@ export function ImportGuide() {
             <li>
               <strong className="text-foreground">Decimales:</strong> con punto
               o con coma (575.24 o 575,24), sin separador de miles (1000, no
-              1.000).
+              1.000). Si tu archivo separa las columnas con comas, escribí los
+              decimales con punto o entre comillas (&quot;575,24&quot;): una
+              coma decimal suelta se lee como otra columna y esa fila se
+              rechaza.
             </li>
             <li>
               <strong className="text-foreground">Fechas:</strong> primero el
