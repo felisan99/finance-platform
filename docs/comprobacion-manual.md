@@ -106,6 +106,17 @@ Pestaña **Watchlist** (la estrella, entre Posiciones y Actividad):
 - **Límites:** 50 símbolos; símbolo repetido ("Ya seguís X") o inexistente (mensaje de error) no rompen nada.
 - **Actualizar precios** (arriba a la derecha) también refresca los símbolos seguidos (1 vez cada 5 minutos).
 
+## 6b. Ficha de un activo: gráfico con rangos, datos de la empresa y ganancias
+
+Tocá una posición (por ejemplo **AAPL**) o un símbolo de la Watchlist:
+
+- **Evolución del precio:** arriba **1S · 1M · 1A** (arranca en 1A). Al tocar **1S** o **1M** se pide el detalle del día (tarda una fracción de segundo) y cambian el gráfico y el texto «En 1 semana: ▲ +US$ …». Volver a un rango ya visto es instantáneo. Las marcas del eje son fechas (`21/09`, o `09/25` en 1A).
+- **52 semanas superpuesto:** en **1A** hay dos líneas punteadas con «Máx. 52 sem.» y «Mín. 52 sem.» y su valor, con las etiquetas afuera de la franja y del lado donde la curva no las pisa. En **1S** y **1M** la línea solo aparece si el máximo o el mínimo quedan dentro de la escala del período. Debajo siempre está la barra «Rango de 52 semanas» con el precio marcado.
+- **Datos de la empresa:** cierre anterior, apertura, rangos, volumen, capitalización («US$ 4,98 billones»), P/E, BPA, dividendo, acciones, P/B… Un ETF (**VOO**) dice «Datos del fondo» y trae patrimonio, valor de la cuota, categoría y retorno del año.
+- **Ganancias** (solo acciones): cuatro barras con el BPA real, una rayita con el consenso y «Superó / En línea / No llegó». Un ETF no tiene esa tarjeta.
+- En un símbolo que **solo seguís** ya no hay la tarjeta suelta «Rango de 52 semanas» ni «Precio de cierre (1 año)»: están dentro de «Evolución del precio».
+- Los datos de la empresa vienen de Yahoo con hasta una hora de demora y son informativos. Si Yahoo falla, la tarjeta dice «No pudimos traer los datos ahora» y el resto de la ficha funciona igual.
+
 ## 7. La app instalada en el iPhone (Fase 6)
 
 Dirección: **https://finance-platform-jade.vercel.app** (apunta a la base de desarrollo `finance-dev` hasta la Fase 7). Hacelo con **Safari** (no Chrome) en el iPhone:
@@ -124,6 +135,7 @@ Anotá lo que se vea raro (sobre todo la barra de estado y el correo): son las d
 ## Límites conocidos
 
 - Una sola cuenta y una sola watchlist.
+- Los datos de la empresa son de Yahoo (no oficial): pueden faltar campos o cambiar sin aviso. El consenso de ganancias trae 4 trimestres, no 5.
 - Editar o borrar una operación importada: si volvés a subir el archivo original, se crea de nuevo.
 - Las importaciones anteriores a «Deshacer importación» no se pueden deshacer (no guardaban de qué importación salió cada operación).
 - El código de ingreso permite 5 intentos cada 15 minutos por email; si alguien los gasta, esa persona espera 15 minutos.

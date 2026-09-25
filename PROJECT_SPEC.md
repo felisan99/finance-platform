@@ -309,6 +309,9 @@ interface MarketDataProvider {
   // ambos lados de un split y dejar precios ajustados con eventos viejos.
   getDailyHistory(symbol: string, from: Date, to: Date): Promise<DailyHistory>;
   getProfile?(symbol: string): Promise<InstrumentProfile>;
+  // Ficha de un activo (§10.2): datos de la empresa o del fondo y barras del día. No guardan nada.
+  getCompanyData?(symbol: string, kind: "stock" | "etf"): Promise<CompanyData>;
+  getIntradaySeries?(symbol: string, range: "1w" | "1m"): Promise<IntradayPoint[]>;
 }
 ```
 
@@ -317,6 +320,9 @@ interface MarketDataProvider {
 - Rate limiting simple más reintentos con backoff exponencial.
 - Solo `YahooProvider` está implementado (Fase 3); `MARKET_DATA_PROVIDER` valida los otros dos nombres pero responden "no implementado".
 - Los montos del proveedor son strings decimales redondeados una sola vez (Yahoo trae ruido de float32, p. ej. `1730.97998046875`).
+- **Datos de la empresa** (`getCompanyData`): `quoteSummary` con `summaryDetail` y `defaultKeyStatistics` (acciones y ETFs) y, solo para acciones y en otra consulta, `earningsHistory` y `calendarEvents` (ganancias de los últimos 4 trimestres y próxima fecha de resultados). Un ETF no tiene ganancias: Yahoo responde «No fundamentals data found», que se trata como «no hay» y no se reintenta. Cada campo se valida por su cuenta con Zod y, si falta o cambia de tipo, queda vacío (la fila no se muestra); no se descarta todo por un dato roto. Son informativos: no entran a ningún cálculo ni se guardan.
+- **Serie intradía** (`getIntradaySeries`): `chart` con barras de 30 minutos (la semana, las últimas 5 ruedas) o de 1 hora (el mes).
+- Lo que devuelven estas dos consultas se cachea en el servidor (`unstable_cache`: 1 hora los datos de la empresa, 5 minutos las barras; los fallos no se cachean). Sin cambios de esquema.
 
 ### 7.2 Jobs (crons)
 | Job | Frecuencia | Qué hace |
@@ -444,6 +450,9 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 - Lista ordenable por valor, % del día, ganancia $ o ganancia %.
 - Toggle para mostrar posiciones cerradas.
 - Detalle por posición: gráfico de precio con marcadores de compra y venta, cantidad, costo promedio, costo base, valor, ganancia no realizada y realizada, dividendos, peso en el portafolio e historial de transacciones.
+- **Ficha de un activo** (posición o símbolo que se sigue): la tarjeta «Evolución del precio» con **rango variable 1S / 1M / 1A** (1A con los cierres diarios guardados y la cotización de hoy al final; 1S y 1M con barras del día de Yahoo, que se piden al tocarlas y se recuerdan en la pantalla; si Yahoo falla caen a los cierres diarios con un aviso), el cambio del período con signo y flecha, y el **rango de 52 semanas superpuesto**: líneas punteadas del máximo y el mínimo con su valor (en 1A siempre; en 1S y 1M solo si caen dentro de la escala del período) y, debajo, la barra de rango con el precio marcado. El rango de 52 semanas es el del proveedor (incluye los extremos dentro del día); si no viene, el de los cierres guardados.
+- **Datos de la empresa** (o «del fondo» en un ETF): cierre anterior, apertura, rango del día y de 52 semanas, volumen y volumen promedio (3 meses), capitalización, P/E (12 meses y próximos 12), BPA, dividendo anual y rentabilidad, acciones en circulación y flotantes, P/B, valor contable, precio/ventas y beta; para un ETF, además, patrimonio total, valor de la cuota (NAV), categoría y retorno del año. Las cantidades grandes se escriben con palabras («4,21 billones», «12,23 mil millones»: escala larga del español). Cada dato que falta es una fila que no se muestra.
+- **Ganancias** (solo acciones): el BPA real de los últimos 4 trimestres contra el consenso de los analistas, con el veredicto en texto (**Superó / En línea / No llegó**, «por US$ 0,61») y la próxima fecha de resultados. El trimestre se rotula por el calendario en el que cierra el período («T3 2025»).
 
 ### 10.3 Actividad (transacciones)
 - Lista con filtros (tipo, símbolo, fecha) y alta, edición y eliminación.
@@ -453,7 +462,7 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 
 ### 10.4 Watchlist
 - Agregar y quitar símbolos (hasta 50, en orden alfabético); ver precio, cambio del día, rango de 52 semanas y un minigráfico. El rango son los **cierres diarios** de las últimas 52 semanas (`prices_daily` no guarda máximos y mínimos intradiarios) y el precio actual se suma al rango.
-- Tocar un símbolo abre el mismo detalle que una posición; si no hay posición, se muestra solo precio, rango, gráfico de un año y el botón de seguir o dejar de seguir, sin costos ni operaciones.
+- Tocar un símbolo abre el mismo detalle que una posición; si no hay posición, se muestra precio, la evolución del precio con rango (1S/1M/1A) y el rango de 52 semanas, los datos de la empresa, las ganancias y el botón de seguir o dejar de seguir, sin costos ni operaciones.
 
 ### 10.5 Más
 - Cuentas y portafolios (crear, renombrar, método de costo), benchmark, moneda, exportar datos, cerrar sesión.

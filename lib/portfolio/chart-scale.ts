@@ -22,6 +22,18 @@ function niceStep(range: number, targetTicks: number): number {
 }
 
 /**
+ * Decimales que hacen falta para escribir `step` sin redondearlo: un paso de 2,5 lleva 1 (y no 0, que
+ * mostraría 343 en vez de 342,5) y uno de 0,25 lleva 2 (y no 1). Tope de 4.
+ */
+function decimalsOf(step: number): number {
+  for (let places = 0; places < 4; places++) {
+    const scaled = step * Math.pow(10, places);
+    if (Math.abs(scaled - Math.round(scaled)) < 1e-9) return places;
+  }
+  return 4;
+}
+
+/**
  * Escala para datos entre `min` y `max`. Con datos constantes abre un margen para que la línea no
  * quede pegada al borde.
  */
@@ -43,7 +55,7 @@ export function niceScale(min: number, max: number, targetTicks = 4): Scale {
   for (let k = first; k <= last; k++) {
     ticks.push(Number((k * step).toPrecision(12)));
   }
-  const decimals = step >= 1 ? 0 : Math.min(4, Math.ceil(-Math.log10(step)));
+  const decimals = decimalsOf(step);
   return {
     domain: [ticks[0] as number, ticks[ticks.length - 1] as number],
     ticks,

@@ -1,24 +1,29 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { Suspense } from "react";
+import {
+  CompanySkeleton,
+  CompanyStatsCard,
+} from "@/components/app/company-stats-card";
+import { EarningsCard } from "@/components/app/earnings-card";
 import { FollowButton } from "@/components/app/follow-button";
 import { Pnl } from "@/components/app/pnl";
-import { PriceChart } from "@/components/app/price-chart";
-import { RangeBar } from "@/components/app/range-bar";
+import {
+  PriceRangeSection,
+  PriceRangeSkeleton,
+} from "@/components/app/price-range-section";
 import { Notice, PageHeader } from "@/components/app/stat";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import type { Database } from "@/lib/db/database.types";
-import { addDays, isoDate } from "@/lib/market-jobs/dates";
-import { buildPositionChart } from "@/lib/portfolio/chart-data";
+import { kindOf, providerSymbolOf } from "@/lib/portfolio/company-data";
 import { formatDayMonth, formatPrice } from "@/lib/portfolio/format";
-import { withLiveBar } from "@/lib/portfolio/live-series";
-import { getPriceSeries } from "@/lib/portfolio/queries";
 import type { InstrumentRow } from "@/lib/portfolio/rows";
-import { RANGE_DAYS } from "@/lib/portfolio/watchlist";
 import { loadSymbolView } from "@/lib/portfolio/watchlist-data";
 
 /**
- * Detalle de un símbolo que se sigue pero no se tiene (spec §10.4): precio, cambio del día, rango
- * de 52 semanas y el gráfico de un año. Sin costos ni operaciones: no hay posición.
+ * Detalle de un símbolo que se sigue pero no se tiene (spec §10.4): precio, cambio del día, el
+ * gráfico con rango (1S/1M/1A) y el rango de 52 semanas, y los datos de la empresa. Sin costos ni
+ * operaciones: no hay posición.
  */
 export async function FollowedSymbolView({
   supabase,
@@ -27,21 +32,8 @@ export async function FollowedSymbolView({
   supabase: SupabaseClient<Database>;
   instrument: InstrumentRow;
 }) {
-  const now = new Date();
-  const [view, series] = await Promise.all([
-    loadSymbolView(supabase, instrument, now),
-    getPriceSeries(supabase, instrument.id, addDays(isoDate(now), -RANGE_DAYS)),
-  ]);
-  const chart = buildPositionChart(
-    withLiveBar(series, {
-      price: view.price,
-      asOf: view.priceAsOf,
-      source: view.priceSource,
-    }),
-    [],
-    instrument.symbol,
-    null,
-  );
+  const view = await loadSymbolView(supabase, instrument, new Date());
+  const kind = kindOf(instrument);
 
   return (
     <div className="flex flex-col gap-3">
@@ -97,28 +89,38 @@ export async function FollowedSymbolView({
       </Card>
 
       {view.price !== null && (
-        <Card size="sm">
-          <CardHeader>
-            <CardTitle className="text-sm">Rango de 52 semanas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RangeBar range={view.range} />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Mínimo y máximo de los cierres diarios, sin los extremos dentro
-              del día.
-            </p>
-          </CardContent>
-        </Card>
+        <Suspense fallback={<PriceRangeSkeleton />}>
+          <PriceRangeSection
+            client={supabase}
+            instrument={instrument}
+            price={{
+              price: view.price,
+              asOf: view.priceAsOf,
+              source: view.priceSource,
+            }}
+          />
+        </Suspense>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Precio de cierre (1 año)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PriceChart data={chart} symbol={instrument.symbol} />
-        </CardContent>
-      </Card>
+      <Suspense
+        fallback={
+          <CompanySkeleton
+            title={kind === "etf" ? "Datos del fondo" : "Datos de la empresa"}
+          />
+        }
+      >
+        <CompanyStatsCard
+          providerSymbol={providerSymbolOf(instrument)}
+          kind={kind}
+        />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <EarningsCard
+          providerSymbol={providerSymbolOf(instrument)}
+          kind={kind}
+        />
+      </Suspense>
 
       <p className="text-xs text-muted-foreground">
         Seguís este símbolo, pero no tenés una posición: por eso no hay costos

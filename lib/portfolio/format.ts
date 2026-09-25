@@ -75,6 +75,54 @@ export function formatQuantity(value: Dec | null): string {
 /** El valor exacto, sin redondear a centavos (hasta 8 decimales): para contrastar contra otras fuentes. */
 export const formatExact = formatQuantity;
 
+const ratio = new Intl.NumberFormat(LOCALE, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const wholeNumber = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+const compactNumber = new Intl.NumberFormat(LOCALE, {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+/** Razón (P/E, P/B, beta…): siempre 2 decimales, `17,26`. */
+export function formatRatio(value: Dec | null): string {
+  return value === null ? EMPTY : ratio.format(text(value));
+}
+
+// Escala larga del español (RAE): 10^9 es «mil millones» y 10^12 es «billón». Se escribe con
+// palabras porque «B» y «T» se leen distinto según el país; y `Intl` en es-UY mezcla criterios
+// («5081,23 M» pero «12,23 mil M»).
+const COMPACT_UNITS = [
+  { at: 1e12, one: "billón", many: "billones" },
+  { at: 1e9, one: "mil millones", many: "mil millones" },
+  { at: 1e6, one: "millón", many: "millones" },
+  { at: 1e3, one: "mil", many: "mil" },
+] as const;
+
+/**
+ * Una cantidad grande (volumen, acciones, capitalización) en palabras: `21,24 millones`,
+ * `12,23 mil millones`, `4,21 billones`. Menos de mil, el número entero. Es para mostrar: no se
+ * calcula nada con lo que sale de acá.
+ */
+export function formatCompact(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return EMPTY;
+  const abs = Math.abs(value);
+  if (abs < 1000) return wholeNumber.format(value);
+
+  let index = COMPACT_UNITS.findIndex((unit) => abs >= unit.at);
+  let scaled = abs / COMPACT_UNITS[index]!.at;
+  // 999.996 millones redondea a 1000 millones: es «1 mil millones». Todas las unidades van de a 1000.
+  if (Math.round(scaled * 100) / 100 >= 1000 && index > 0) {
+    index -= 1;
+    scaled = abs / COMPACT_UNITS[index]!.at;
+  }
+  const rounded = Math.round(scaled * 100) / 100;
+  const unit = COMPACT_UNITS[index]!;
+  const sign = value < 0 ? "-" : "";
+  return `${sign}${compactNumber.format(rounded)} ${rounded === 1 ? unit.one : unit.many}`;
+}
+
 /** Precio unitario: mínimo 2 decimales, hasta 4. */
 export function formatPrice(value: Dec | null): string {
   return value === null ? EMPTY : price.format(text(value));

@@ -1,7 +1,17 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import {
+  CompanySkeleton,
+  CompanyStatsCard,
+} from "@/components/app/company-stats-card";
+import { EarningsCard } from "@/components/app/earnings-card";
 import { FollowButton } from "@/components/app/follow-button";
 import { Pnl } from "@/components/app/pnl";
 import { PriceChart } from "@/components/app/price-chart";
+import {
+  PriceRangeSection,
+  PriceRangeSkeleton,
+} from "@/components/app/price-range-section";
 import { Notice, PageHeader, Stat } from "@/components/app/stat";
 import { TxRow } from "@/components/app/tx-row";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
 import { addDays, isoDate } from "@/lib/market-jobs/dates";
 import { buildPositionChart } from "@/lib/portfolio/chart-data";
+import { kindOf, providerSymbolOf } from "@/lib/portfolio/company-data";
 import {
   formatDayMonth,
   formatExact,
@@ -160,6 +171,18 @@ export default async function PositionDetailPage({
         </CardContent>
       </Card>
 
+      <Suspense fallback={<PriceRangeSkeleton />}>
+        <PriceRangeSection
+          client={supabase}
+          instrument={instrument}
+          price={{
+            price: position.price,
+            asOf: position.priceAsOf,
+            source: position.priceSource,
+          }}
+        />
+      </Suspense>
+
       <div className="grid grid-cols-2 gap-3">
         <Stat label="Cantidad">{formatQuantity(position.quantity)}</Stat>
         <Stat label="Costo promedio">{formatPrice(position.avgCost)}</Stat>
@@ -194,9 +217,35 @@ export default async function PositionDetailPage({
         <Stat label="Dividendos">{formatMoney(position.dividends)}</Stat>
       </div>
 
+      <Suspense
+        fallback={
+          <CompanySkeleton
+            title={
+              kindOf(instrument) === "etf"
+                ? "Datos del fondo"
+                : "Datos de la empresa"
+            }
+          />
+        }
+      >
+        <CompanyStatsCard
+          providerSymbol={providerSymbolOf(instrument)}
+          kind={kindOf(instrument)}
+        />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <EarningsCard
+          providerSymbol={providerSymbolOf(instrument)}
+          kind={kindOf(instrument)}
+        />
+      </Suspense>
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Precio de cierre</CardTitle>
+          <CardTitle className="text-sm">
+            Tus operaciones en el gráfico
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <PriceChart data={chart} symbol={symbol} />

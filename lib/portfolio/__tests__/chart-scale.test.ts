@@ -59,6 +59,42 @@ describe("niceScale", () => {
     expect(scale.domain[1]).toBeGreaterThan(100);
   });
 
+  it("un paso de 2,5 lleva un decimal: 342,5 no se muestra como 343", () => {
+    const scale = niceScale(333, 342);
+    expect(scale.ticks).toEqual([332.5, 335, 337.5, 340, 342.5]);
+    expect(scale.decimals).toBe(1);
+  });
+
+  it("un paso de 0,25 lleva dos decimales: 0,25 no se muestra como 0,3", () => {
+    const scale = niceScale(0.1, 1.1);
+    expect(scale.ticks).toEqual([0, 0.25, 0.5, 0.75, 1, 1.25]);
+    expect(scale.decimals).toBe(2);
+  });
+
+  it("un paso de 25 o de 250 es entero: no hay decimales de más", () => {
+    expect(niceScale(0, 100).decimals).toBe(0);
+    expect(niceScale(0, 1000).decimals).toBe(0);
+  });
+
+  it("las marcas nunca se repiten al redondear con los decimales de la escala", () => {
+    for (const [min, max] of [
+      [333, 342],
+      [0.1, 1.1],
+      [98.4, 103.1],
+      [1.2, 1.26],
+      [0, 7],
+      [2900, 3120],
+    ] as const) {
+      const scale = niceScale(min, max);
+      const shown = scale.ticks.map((t) => t.toFixed(scale.decimals));
+      expect(new Set(shown).size).toBe(shown.length);
+      // Y cada marca se muestra exacta, sin redondearla.
+      scale.ticks.forEach((t, i) => {
+        expect(Number(shown[i])).toBeCloseTo(t, 9);
+      });
+    }
+  });
+
   it("propiedad: el dominio contiene a los datos, las marcas están ordenadas y son pocas", () => {
     fc.assert(
       fc.property(

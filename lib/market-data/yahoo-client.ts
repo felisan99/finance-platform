@@ -30,6 +30,9 @@ export function createYahooClient(): YahooClient {
     chart: (symbol, options) => yahoo.chart(symbol, options),
     quote: (symbols) => yahoo.quote(symbols),
     search: (query, options) => yahoo.search(query, options),
-    quoteSummary: (symbol, options) => yahoo.quoteSummary(symbol, options),
+    // Sin la validación de la librería: lo que llega se valida con Zod en `yahoo.ts` y
+    // `yahoo-company.ts`, campo por campo (la librería tira todo si un solo campo cambia de tipo).
+    quoteSummary: (symbol, options) =>
+      yahoo.quoteSummary(symbol, options, { validateResult: false }),
   };
 }

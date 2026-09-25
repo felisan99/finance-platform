@@ -57,6 +57,7 @@ Implicancias para el proyecto:
 - Respondió a 12 `chart` seguidos sin errores (70–400 ms cada uno); el cliente igual espacia los pedidos (2 a la vez, 150 ms de separación) y reintenta 429/5xx/red con backoff.
 - Devuelve `close` nulo en algunos días hábiles, reajusta hacia atrás el historial en cada split y dividendo, y trae ruido de float32 en los precios: ver `docs/decisions.md`.
 - `yahoo-finance2` 4.0.2 trae ~100 paquetes (incluye un SDK de MCP con express y hono que la app no usa). Sin scripts de instalación; `pnpm audit` sin vulnerabilidades conocidas.
+- **Datos de la empresa y series intradía (2026-09-25):** `quoteSummary` (`summaryDetail`, `defaultKeyStatistics`, `earningsHistory`, `calendarEvents`) y `chart` de 30 min y 1 hora respondieron bien para GOOGL, AAPL, NVDA y VOO. Para un ETF, `earningsHistory` y `calendarEvents` fallan con «No fundamentals data found»: no se piden. Cada visita a una ficha puede sumar 2 consultas (datos y ganancias) y cada rango que se toca, 1; las cachea el servidor (1 hora y 5 minutos) y las limita `search_symbols` (30 por minuto por usuario). Yahoo ya sacó módulos de balances sin aviso en 2024: por eso todo campo es opcional.
 - **No verificado:** que Yahoo no bloquee las IPs de datacenter de Vercel. Se comprueba en el deploy (Fase 7) corriendo el cron una vez y mirando `market_job_runs`.
 
 ### Next.js en Vercel (Fase 4)

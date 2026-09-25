@@ -61,6 +61,71 @@ export interface InstrumentSearchResult {
   exchange: string | null;
 }
 
+/** Ventana de un gráfico intradiario: la semana (barras de 30 min) o el mes (barras de 1 hora). */
+export type IntradayRange = "1w" | "1m";
+
+export interface IntradayPoint {
+  /** Inicio de la barra. */
+  at: Date;
+  /** Cierre de la barra, como decimal en string. */
+  close: string;
+}
+
+export interface EarningsQuarter {
+  /** Fin del trimestre fiscal (YYYY-MM-DD). */
+  periodEnd: string;
+  epsActual: string | null;
+  /** Consenso de los analistas antes de publicar. */
+  epsEstimate: string | null;
+  /** Real − estimado, tal como lo informa el proveedor. */
+  epsDifference: string | null;
+}
+
+/**
+ * Datos de la empresa o del fondo para la ficha de un activo. Solo se muestran: no entran a ningún
+ * cálculo del portafolio ni se guardan. Cada dato puede faltar (`null`); los montos y las razones
+ * son strings decimales, las cantidades (volumen, acciones, capitalización) enteros.
+ */
+export interface CompanyData {
+  kind: "stock" | "etf";
+  currency: string | null;
+  previousClose: string | null;
+  open: string | null;
+  dayLow: string | null;
+  dayHigh: string | null;
+  /** Rango de 52 semanas del proveedor: incluye los extremos dentro del día. */
+  fiftyTwoWeekLow: string | null;
+  fiftyTwoWeekHigh: string | null;
+  volume: number | null;
+  /** Promedio de 3 meses. */
+  averageVolume: number | null;
+  marketCap: number | null;
+  trailingPE: string | null;
+  forwardPE: string | null;
+  /** BPA de los últimos 12 meses. */
+  epsTrailing: string | null;
+  /** Dividendo anual por acción. */
+  dividendRate: string | null;
+  /** Fracción: 0.0026 = 0,26 %. */
+  dividendYield: string | null;
+  sharesOutstanding: number | null;
+  floatShares: number | null;
+  priceToBook: string | null;
+  bookValue: string | null;
+  priceToSales: string | null;
+  beta: string | null;
+  /** Solo fondos: patrimonio total, valor de la cuota, categoría y retorno del año (fracción). */
+  totalAssets: number | null;
+  navPrice: string | null;
+  category: string | null;
+  ytdReturn: string | null;
+  /** YYYY-MM-DD. */
+  nextEarningsDate: string | null;
+  exDividendDate: string | null;
+  /** Hasta 4 trimestres ya publicados, del más viejo al más nuevo. Vacío para un ETF. */
+  earnings: EarningsQuarter[];
+}
+
 export interface MarketDataProvider {
   readonly name: string;
   search(query: string): Promise<InstrumentSearchResult[]>;
@@ -68,4 +133,11 @@ export interface MarketDataProvider {
   getQuotes(symbols: string[]): Promise<Quote[]>;
   getDailyHistory(symbol: string, from: Date, to: Date): Promise<DailyHistory>;
   getProfile?(symbol: string): Promise<InstrumentProfile>;
+  /** Datos de la empresa (`stock`) o del fondo (`etf`) para la ficha; no guarda nada. */
+  getCompanyData?(symbol: string, kind: "stock" | "etf"): Promise<CompanyData>;
+  /** Barras del gráfico de la semana o del mes, de la más vieja a la más nueva. */
+  getIntradaySeries?(
+    symbol: string,
+    range: IntradayRange,
+  ): Promise<IntradayPoint[]>;
 }

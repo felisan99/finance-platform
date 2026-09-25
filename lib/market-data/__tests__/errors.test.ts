@@ -12,6 +12,8 @@ describe("classifyYahooError", () => {
     ["No data found, symbol may be delisted", "NOT_FOUND"],
     ["Quote not found for ticker symbol: ZZZZ", "NOT_FOUND"],
     ["Symbol not found", "NOT_FOUND"],
+    // Un ETF no tiene ganancias: no es un corte, no se reintenta.
+    ["No fundamentals data found for symbol: VOO", "NOT_FOUND"],
   ])("mensaje %j → %s", (message, kind) => {
     expect(classifyYahooError(new Error(message), "ZZZZ")).toMatchObject({
       kind,

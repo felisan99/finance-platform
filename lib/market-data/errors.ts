@@ -37,10 +37,11 @@ export function isRetryable(error: unknown): boolean {
   return error instanceof MarketDataError && error.retryable;
 }
 
-// Mensajes de Yahoo para símbolos inexistentes o dados de baja. No se usa "not found" a secas:
-// también aparece en errores de red (ENOTFOUND) que sí merecen reintento.
+// Mensajes de Yahoo para símbolos inexistentes o dados de baja, o sin datos de empresa (un ETF no
+// tiene ganancias: "No fundamentals data found"). No se usa "not found" a secas: también aparece en
+// errores de red (ENOTFOUND) que sí merecen reintento.
 const NOT_FOUND_MESSAGE =
-  /no data found|symbol may be delisted|symbol not found|quote not found/i;
+  /no data found|no fundamentals data found|symbol may be delisted|symbol not found|quote not found/i;
 
 /**
  * Clasifica lo que lanza `yahoo-finance2`. Mira el `name` y el `code` en vez de `instanceof`

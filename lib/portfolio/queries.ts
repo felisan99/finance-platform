@@ -154,6 +154,21 @@ export async function getInstrumentIdsBySymbol(
   return found;
 }
 
+/** El instrumento con ese símbolo, si ya está en la base (es una tabla compartida de solo lectura). */
+export async function getInstrumentBySymbol(
+  client: Client,
+  symbol: string,
+): Promise<InstrumentRow | null> {
+  const { data, error } = await loose(client)
+    .from("instruments")
+    .select(INSTRUMENT_COLUMNS)
+    .eq("symbol", symbol)
+    .maybeSingle();
+  if (error) throw new Error(`db instruments: ${error.message}`);
+  if (data === null) return null;
+  return parseRows(instrumentRowSchema, [data], "instruments")[0] ?? null;
+}
+
 /**
  * El símbolo con el que el proveedor conoce a uno que ya está en la base, si tiene uno propio
  * (`provider_symbol`); `null` si no está o usa el mismo.

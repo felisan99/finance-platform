@@ -1,14 +1,19 @@
 import { z } from "zod";
 import { D } from "@/lib/engine/decimal";
 import { MarketDataError, classifyYahooError } from "./errors";
+import { round } from "./numbers";
 import { createLimiter, withRetry, type Sleep } from "./retry";
 import { cleanText } from "./sanitize";
+import { parseCompanyData } from "./yahoo-company";
 import type {
+  CompanyData,
   CorporateAction,
   DailyBar,
   DailyHistory,
   InstrumentProfile,
   InstrumentSearchResult,
+  IntradayPoint,
+  IntradayRange,
   MarketDataProvider,
   Quote,
 } from "./types";
@@ -21,7 +26,12 @@ import type {
 export interface YahooClient {
   chart(
     symbol: string,
-    options: { period1: Date; period2: Date; interval: "1d"; events: string },
+    options: {
+      period1: Date;
+      period2: Date;
+      interval: "1d" | "30m" | "1h";
+      events?: string;
+    },
   ): Promise<unknown>;
   quote(symbols: string[]): Promise<unknown>;
   search(
@@ -30,7 +40,16 @@ export interface YahooClient {
   ): Promise<unknown>;
   quoteSummary(
     symbol: string,
-    options: { modules: Array<"assetProfile" | "price"> },
+    options: {
+      modules: Array<
+        | "assetProfile"
+        | "price"
+        | "summaryDetail"
+        | "defaultKeyStatistics"
+        | "earningsHistory"
+        | "calendarEvents"
+      >;
+    },
   ): Promise<unknown>;
 }
 
@@ -126,14 +145,6 @@ const summarySchema = z.object({
     })
     .nullish(),
 });
-
-/** Redondea a `decimals` lugares (ROUND_HALF_UP) y devuelve el string sin ceros de relleno. */
-function round(value: number, decimals: number): string {
-  const text = new D(value)
-    .toDecimalPlaces(decimals, D.ROUND_HALF_UP)
-    .toFixed();
-  return text === "-0" ? "0" : text;
-}
 
 /**
  * Decimales de un precio. Yahoo trae ruido de float32 (1730.97998046875): se redondea a los
@@ -415,5 +426,107 @@ export function createYahooProvider(
     };
   }
 
-  return { name: "yahoo", search, getQuotes, getDailyHistory, getProfile };
+  /**
+   * Datos de la empresa para la ficha. Los de `summaryDetail` y `defaultKeyStatistics` valen para
+   * acciones y ETFs; las ganancias y el calendario existen solo para acciones y van en otra
+   * consulta: si esa falla porque Yahoo no tiene datos (empresa nueva, sin resultados) se sigue sin
+   * ellas, pero un corte de red o un límite de ritmo no se disimula (el resultado no se cachearía).
+   */
+  async function getCompanyData(
+    symbol: string,
+    kind: "stock" | "etf",
+  ): Promise<CompanyData> {
+    assertProviderSymbol(symbol);
+    const base = await call(symbol, () =>
+      client.quoteSummary(symbol, {
+        modules: ["summaryDetail", "defaultKeyStatistics"],
+      }),
+    );
+    let extra: unknown = null;
+    if (kind === "stock") {
+      try {
+        extra = await call(symbol, () =>
+          client.quoteSummary(symbol, {
+            modules: ["earningsHistory", "calendarEvents"],
+          }),
+        );
+      } catch (error) {
+        const missing =
+          error instanceof MarketDataError &&
+          (error.kind === "NOT_FOUND" || error.kind === "BAD_DATA");
+        if (!missing) throw error;
+      }
+    }
+    return parseCompanyData(kind, base, extra, symbol);
+  }
+
+  // La semana muestra las últimas 5 ruedas (barras de 30 min) y el mes, un mes calendario (barras
+  // de 1 hora). Se pide un poco más de ventana y se recorta.
+  const INTRADAY = {
+    "1w": { days: 7, interval: "30m", sessions: 5 },
+    "1m": { days: 31, interval: "1h", sessions: null },
+  } as const;
+
+  async function getIntradaySeries(
+    symbol: string,
+    range: IntradayRange,
+  ): Promise<IntradayPoint[]> {
+    assertProviderSymbol(symbol);
+    const spec = INTRADAY[range];
+    const to = now();
+    const raw = await call(symbol, () =>
+      client.chart(symbol, {
+        period1: new Date(to.getTime() - spec.days * 86_400_000),
+        period2: to,
+        interval: spec.interval,
+      }),
+    );
+    const chart = parseOrThrow(chartSchema, raw, symbol);
+    const timeZone = chart.meta.exchangeTimezoneName;
+
+    const byInstant = new Map<number, IntradayPoint>();
+    for (const quote of chart.quotes) {
+      const close = quote.close;
+      if (close == null || close <= 0) continue;
+      const decimals = priceDecimals(chart.meta.priceHint, close);
+      byInstant.set(quote.date.getTime(), {
+        at: quote.date,
+        close: round(close, decimals),
+      });
+    }
+    const points = [...byInstant.values()].sort(
+      (a, b) => a.at.getTime() - b.at.getTime(),
+    );
+    if (spec.sessions === null) return points;
+
+    let sessionOf: (at: Date) => string;
+    try {
+      sessionOf = (at) => localDate(at, timeZone);
+      sessionOf(to); // la zona horaria de la bolsa puede venir inválida
+    } catch (cause) {
+      throw new MarketDataError(
+        "BAD_DATA",
+        "zona horaria de la bolsa inválida",
+        {
+          symbol,
+          cause,
+        },
+      );
+    }
+    const days = [...new Set(points.map((p) => sessionOf(p.at)))].slice(
+      -spec.sessions,
+    );
+    const keep = new Set(days);
+    return points.filter((p) => keep.has(sessionOf(p.at)));
+  }
+
+  return {
+    name: "yahoo",
+    search,
+    getQuotes,
+    getDailyHistory,
+    getProfile,
+    getCompanyData,
+    getIntradaySeries,
+  };
 }

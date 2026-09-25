@@ -415,7 +415,12 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(html).toContain("VOO");
     expect(html).toContain("Exacto: 5.724,77");
     expect(html).toContain("Operaciones (8)");
-    expect(html).toContain("Precio de cierre");
+    // La ficha: la evolución del precio (1S/1M/1A) y el gráfico con las operaciones de la persona.
+    expect(html).toContain("Evolución del precio");
+    expect(html).toContain("Tus operaciones en el gráfico");
+    expect(html).toContain("Datos del fondo"); // VOO es un ETF
+    // Un error del servidor dentro de una tarjeta con `<Suspense>` no cambia el 200: deja un `digest`.
+    expect(html).not.toContain("digest");
     // Tolera minúsculas y punto en la URL, como el alta manual.
     expect((await page("/positions/voo", a)).status).toBe(200);
     // Una posición cerrada también tiene detalle.
@@ -790,7 +795,11 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     // El detalle de un símbolo que se sigue pero no se tiene.
     const detail = await page(`/positions/${symbol}`, b);
     expect(detail.status).toBe(200);
+    // Sin datos de la empresa (el símbolo es inventado y Yahoo no lo conoce) la tarjeta del gráfico
+    // sigue: el rango de 52 semanas sale de los cierres guardados.
+    expect(detail.html).toContain("Evolución del precio");
     expect(detail.html).toContain("Rango de 52 semanas");
+    expect(detail.html).not.toContain("digest");
     expect(detail.html).toContain("Dejar de seguir");
     expect(detail.html).toContain("no tenés una posición");
     expect(detail.html).not.toContain("Costo promedio");
