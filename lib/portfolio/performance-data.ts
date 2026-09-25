@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/db/database.types";
 import { addDays, computePerformance, d, type DailyClose } from "@/lib/engine";
+import { describeError } from "@/lib/market-data";
 import { buildPerformanceView, type PerformanceView } from "./performance-view";
 import { getBenchmark, getCloseSeries } from "./queries";
 import type { DailyCloseRow } from "./rows";
@@ -67,4 +68,28 @@ export async function loadPerformance(
     benchmark: benchmarkCloses.length > 0 ? benchmarkCloses : null,
     benchmarkSymbol: benchmark?.symbol ?? null,
   });
+}
+
+/** Lo que salió de pedir el rendimiento, para que varias secciones de Inicio lo compartan. */
+export type PerformanceOutcome =
+  | { status: "ok"; view: PerformanceView }
+  | { status: "empty" }
+  | { status: "error" };
+
+/**
+ * `loadPerformance` sin excepciones: la promesa nunca se rechaza, así se puede empezar a leer antes
+ * de renderizar y pasársela a varias secciones (cada una en su `<Suspense>`) sin que un fallo
+ * tumbe el resto de Inicio ni quede una promesa rechazada sin atender.
+ */
+export async function loadPerformanceOutcome(
+  client: SupabaseClient<Database>,
+  snapshot: PortfolioSnapshot,
+): Promise<PerformanceOutcome> {
+  try {
+    const view = await loadPerformance(client, snapshot);
+    return view ? { status: "ok", view } : { status: "empty" };
+  } catch (error) {
+    console.error("[performance]", describeError(error));
+    return { status: "error" };
+  }
 }

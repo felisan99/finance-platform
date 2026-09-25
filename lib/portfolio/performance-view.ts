@@ -1,5 +1,9 @@
 import {
+  MIN_VOLATILITY_DAYS,
   MIN_XIRR_DAYS,
+  computeMonthlyReturns,
+  computeRisk,
+  d,
   periodCurve,
   type DailyClose,
   type Dec,
@@ -7,9 +11,10 @@ import {
   type PerformanceWarning,
   type PeriodId,
   type PeriodResult,
+  type RiskResult,
 } from "@/lib/engine";
-import { formatDateKey } from "./chart-format";
-import { EMPTY, formatPercent, formatPoints } from "./format";
+import { formatDateKey, formatDayMonthKey } from "./chart-format";
+import { EMPTY, formatMoney, formatPercent, formatPoints } from "./format";
 import { toneOf, type Tone } from "./tone";
 
 // Rendimiento para la pantalla (spec §10.1): el cálculo es de `lib/engine/performance.ts`; acá se
@@ -39,6 +44,8 @@ export interface CurvePointView {
   portfolio: number;
   /** Benchmark base 100; `null` si no hay datos. */
   benchmark: number | null;
+  /** Ganancia acumulada del período en USD (0 en el día base). */
+  gain: number;
 }
 
 export interface PeriodView {
@@ -56,7 +63,51 @@ export interface PeriodView {
   xirrHint: string | null;
   benchmark: MetricView;
   difference: MetricView;
+  /** Ganancia en dinero del período (valor final − valor inicial − aportes netos), con signo. */
+  gain: MetricView;
   points: CurvePointView[];
+}
+
+/** Un mes del gráfico de barras: porcentajes (5,06 = +5,06 %) para dibujar y textos para leer. */
+export interface MonthlyBarView {
+  /** `YYYY-MM` */
+  month: string;
+  /** Mes abreviado para el eje: `mar`. */
+  label: string;
+  /** `marzo de 2026` (tooltip y tabla). */
+  title: string;
+  portfolio: number | null;
+  benchmark: number | null;
+  portfolioText: string;
+  portfolioTone: Tone | null;
+  benchmarkText: string;
+  benchmarkTone: Tone | null;
+  /** `desde el 06/03` / `en curso`, o `null` si el mes está completo. */
+  note: string | null;
+}
+
+export interface RiskView {
+  /** Desde cuándo cuenta, `dd/mm/aaaa`. */
+  since: string;
+  /** Días con retorno que entraron. */
+  days: number;
+  maxDrawdown: MetricView;
+  /** Cuándo fue y si se recuperó; `null` si no hubo caídas. */
+  maxDrawdownDetail: string | null;
+  currentDrawdown: MetricView;
+  volatility: MetricView;
+  /** `false` con pocos días: no se calcula. */
+  hasVolatility: boolean;
+  /** Por qué no hay volatilidad, si no la hay. */
+  volatilityHint: string | null;
+  bestDay: MetricView;
+  bestDayDate: string;
+  worstDay: MetricView;
+  worstDayDate: string;
+  /** Distancia al máximo día por día, en % (≤ 0), para el gráfico de caídas. */
+  curve: Array<{ date: string; drawdown: number }>;
+  /** Advertencia de poca historia, o `null`. */
+  note: string | null;
 }
 
 export interface PerformanceView {
@@ -64,6 +115,10 @@ export interface PerformanceView {
   /** "S&P 500" para SPY; otro símbolo se muestra tal cual. */
   benchmarkLabel: string;
   hasBenchmark: boolean;
+  /** Rendimiento por mes de los últimos 12 meses con datos. */
+  monthly: MonthlyBarView[];
+  /** Riesgo de todo el historial; `null` si no hay días con retorno. */
+  risk: RiskView | null;
   /** Fecha del último cierre que entra en la serie, `dd/mm/aaaa`. */
   asOf: string;
   /** Avisos sobre los datos, ya redactados. */
@@ -107,6 +162,115 @@ function toNumber(value: Dec): number {
   return value.toNumber();
 }
 
+/** Meses que muestra el gráfico de barras (un año hacia atrás). */
+export const MONTHLY_BARS = 12;
+
+const monthShort = new Intl.DateTimeFormat("es-UY", {
+  month: "short",
+  timeZone: "UTC",
+});
+const monthLong = new Intl.DateTimeFormat("es-UY", {
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+/** El mes abreviado de es-UY viene como `Set.`: en el eje va en minúscula y sin punto. */
+const monthLabel = (month: string) =>
+  monthShort
+    .format(new Date(`${month}-01T00:00:00Z`))
+    .replace(/\.$/, "")
+    .toLowerCase();
+/** `setiembre de 2026` → `Setiembre de 2026`. */
+const monthTitle = (month: string) => {
+  const text = monthLong.format(new Date(`${month}-01T00:00:00Z`));
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
+
+const percentNumber = (fraction: Dec): number => fraction.mul(100).toNumber();
+
+function buildMonthlyBars(
+  result: PerformanceResult,
+  benchmark: readonly DailyClose[] | null,
+  firstDate: string | null,
+): MonthlyBarView[] {
+  return computeMonthlyReturns(result.series, benchmark)
+    .slice(-MONTHLY_BARS)
+    .map((m): MonthlyBarView => {
+      const notes: string[] = [];
+      if (m.startsMidMonth && firstDate !== null) {
+        notes.push(`desde el ${formatDayMonthKey(firstDate)}`);
+      }
+      if (m.inProgress) notes.push("en curso");
+      return {
+        month: m.month,
+        label: monthLabel(m.month),
+        title: monthTitle(m.month),
+        portfolio: m.portfolio === null ? null : percentNumber(m.portfolio),
+        benchmark: m.benchmark === null ? null : percentNumber(m.benchmark),
+        portfolioText: metric(m.portfolio).text,
+        portfolioTone: metric(m.portfolio).tone,
+        benchmarkText: metric(m.benchmark).text,
+        benchmarkTone: metric(m.benchmark).tone,
+        note: notes.length === 0 ? null : notes.join(", "),
+      };
+    });
+}
+
+/** Con menos de un año de ruedas la volatilidad y la caída máxima son orientativas. */
+const RISK_RELIABLE_DAYS = 252;
+
+function buildRiskView(risk: RiskResult, all: PeriodResult): RiskView {
+  const drawdown = risk.maxDrawdown;
+  const volatility =
+    risk.volatility === null ? null : d(risk.volatility.toFixed(8));
+  return {
+    since: formatDateKey(all.startDate),
+    days: risk.days,
+    maxDrawdown:
+      drawdown === null
+        ? { text: "Sin caídas", tone: "flat" }
+        : {
+            text: formatPercent(drawdown.depth, { signed: true }),
+            tone: toneOf(drawdown.depth, 4),
+          },
+    maxDrawdownDetail:
+      drawdown === null
+        ? null
+        : `${formatDayMonthKey(drawdown.peakDate)} → ${formatDayMonthKey(drawdown.troughDate)} · ${
+            drawdown.recoveredDate === null
+              ? "sin recuperar"
+              : `recuperada el ${formatDayMonthKey(drawdown.recoveredDate)}`
+          }`,
+    currentDrawdown: risk.currentDrawdown.isZero()
+      ? { text: "En máximos", tone: "gain" }
+      : {
+          text: formatPercent(risk.currentDrawdown, { signed: true }),
+          tone: toneOf(risk.currentDrawdown, 4),
+        },
+    volatility:
+      volatility === null
+        ? { text: EMPTY, tone: null }
+        : { text: formatPercent(volatility), tone: null },
+    hasVolatility: volatility !== null,
+    volatilityHint:
+      volatility === null
+        ? `Hacen falta ${MIN_VOLATILITY_DAYS} días con datos (hay ${risk.days})`
+        : null,
+    bestDay: metric(risk.bestDay?.value ?? null),
+    bestDayDate: risk.bestDay ? formatDateKey(risk.bestDay.date) : EMPTY,
+    worstDay: metric(risk.worstDay?.value ?? null),
+    worstDayDate: risk.worstDay ? formatDateKey(risk.worstDay.date) : EMPTY,
+    curve: risk.curve.map((point) => ({
+      date: point.date,
+      drawdown: percentNumber(point.drawdown),
+    })),
+    note:
+      risk.days < RISK_RELIABLE_DAYS
+        ? "Con menos de un año de historia estos números son orientativos."
+        : null,
+  };
+}
+
 /**
  * Arma la vista de Rendimiento. `benchmark` son los cierres ajustados por dividendos del
  * benchmark (los mismos que se le pasaron al motor). `null` si no hay serie que mostrar.
@@ -138,19 +302,33 @@ export function buildPerformanceView(input: {
         text: formatPoints(period.difference),
         tone: toneOf(period.difference, 4),
       },
+      gain: {
+        text: formatMoney(period.gain, { signed: true }),
+        tone: toneOf(period.gain, 2),
+      },
       points: periodCurve(result.series, benchmark, period).map((point) => ({
         date: point.date,
         value: point.value === null ? null : toNumber(point.value),
         portfolio: toNumber(point.portfolio),
         benchmark: point.benchmark === null ? null : toNumber(point.benchmark),
+        gain: toNumber(point.gain),
       })),
     };
   });
+
+  const all = result.periods.find((p) => p.id === "MAX");
+  const risk =
+    all === undefined
+      ? null
+      : computeRisk(result.series.points, all.baseDate, all.endDate);
+  const first = result.series.points[0];
 
   return {
     periods,
     benchmarkLabel: benchmarkLabel(benchmarkSymbol),
     hasBenchmark: !result.warnings.some((w) => w.code === "NO_BENCHMARK"),
+    monthly: buildMonthlyBars(result, benchmark, first?.date ?? null),
+    risk: risk === null || all === undefined ? null : buildRiskView(risk, all),
     asOf: formatDateKey(last.date),
     notes: result.warnings.flatMap((w) => noteOf(w) ?? []),
   };

@@ -64,11 +64,22 @@ Resultado esperado: DDOG con **costo base 503,82** y el **efectivo baja a 378,92
 En **Inicio**, la tarjeta **Rendimiento** (aparece unos instantes después del resto, mientras se leen los precios):
 
 - **Períodos** (1S, 1M, 3M, YTD, 1A, Todo): cambian el gráfico y los cuatro datos. Los que son más largos que tu historial (por ejemplo YTD y 1A si empezaste en marzo) muestran lo mismo que Todo y dicen "(todo el historial)".
-- **Valor / vs S&P 500:** "Valor" es el valor total en dólares (sube a saltos cuando depositás); "vs S&P 500" son tu portafolio y el S&P 500 (con dividendos) en base 100 desde el inicio del período.
+- **Ganancia / Valor / vs S&P 500:** "Ganancia" (la que se ve al abrir) es cuánto ganaste o perdiste en dólares desde el inicio del período, verde arriba del cero y rojo abajo: depositar o retirar no cuenta como ganancia ni como pérdida. "Valor" es el valor total en dólares (sube a saltos cuando depositás); "vs S&P 500" son tu portafolio y el S&P 500 (con dividendos) en base 100 desde el inicio del período.
 - **Datos:** TWR (rendimiento ponderado por tiempo, no le afectan los depósitos), XIRR (tasa anual ponderada por dinero; en períodos de menos de 30 días dice "Muy corto para una tasa anual"), S&P 500 y la diferencia en puntos porcentuales.
 - Referencia: con el CSV de Delta importado y **sin** el DDOG cargado a mano (a los cierres del 24/09/2026, desde el 06/03/2026): TWR +16,48 %, XIRR +28,06 %, S&P 500 +13,48 %, diferencia +3,00 pp. Con el DDOG y con precios más nuevos los números cambian un poco.
 - Si no aparece el S&P 500: tocá **Actualizar precios** (baja el historial del benchmark en segundo plano) y recargá.
 - El gráfico usa cierres diarios: el valor de la tarjeta de arriba (cotización del momento) puede diferir del último punto hasta que cierre el mercado.
+
+## 5b. Inicio completo (Inicio v2)
+
+De arriba abajo, con el CSV de Delta importado y sin el DDOG (a los cierres del 24/09/2026 los números son los de referencia; con precios más nuevos cambian un poco):
+
+- **Tarjeta del valor total:** debajo del cambio del día, **Ganancia total** (con su porcentaje "sobre lo aportado") y **Aportado neto** (depósitos menos retiros: **US$ 9.300,00**). La ganancia total es el valor total menos lo aportado y **tiene que ser igual a Ganancia no realizada + Ganancia realizada (+ Dividendos)**: hoy ≈ +945,51 = 490,48 + 247,02. Si falta el precio de alguna posición no se muestra (el total sería parcial).
+- **Ganancia por posición:** barras que salen del centro (verde a la derecha, rojo a la izquierda) con el monto de cada símbolo, abiertas y **cerradas** (MELI +180,55 y URTH +42,70 son exactos). **Total** suma lo realizado, lo no realizado y los dividendos; la suma de abajo tiene que ser la Ganancia total de arriba. **Hoy** muestra lo que aportó cada posición al cambio del día (suma = el "Hoy" de la primera tarjeta). Con más de 8 posiciones las de menor peso se agrupan en "Otras", pero una pérdida grande nunca se esconde ahí.
+- **Tus posiciones:** las 5 más grandes con un minigráfico de los últimos 30 días, el cambio de hoy y la ganancia sobre el costo. Tocar una abre su detalle.
+- **Rendimiento por mes:** barras de tu portafolio (negro) y del S&P 500 (azul) por mes calendario; el primer mes cuenta desde tu primera operación y el último sigue en curso (lo dice abajo). "Ver los valores de cada mes" abre la tabla con los porcentajes exactos.
+- **Riesgo** (plegado; tocá para abrir): caída máxima (hoy ≈ −5,47 %, del 09/03 al 30/03, recuperada el 08/04), caída actual, mejor y peor día (≈ +2,74 % el 31/03 y −2,98 % el 05/06), volatilidad anual (≈ 14,15 %) y el gráfico de caídas desde el máximo. Con menos de un año de historia lo dice: son números orientativos.
+- **Casos raros para probar:** una cuenta con solo un depósito (sin posiciones ni tendencias), una compra sin ningún depósito (no aparece la ganancia total) y una cuenta con todo vendido (solo posiciones cerradas). Ninguna debería mostrar errores.
 
 ## 6. Watchlist (Fase 6)
 

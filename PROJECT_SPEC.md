@@ -406,10 +406,13 @@ Guardar un export de Delta como `lib/engine/__fixtures__/delta_export.csv`. Con 
 Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con: **Inicio, Posiciones, Watchlist, Actividad y Más**.
 
 ### 10.1 Inicio (dashboard)
-- Valor total, cambio del día ($ y %), ganancia no realizada y realizada.
-- Gráfico de valor con selector de período; toggle para comparar contra el benchmark (TWR del portafolio vs. SPY, normalizados a 100).
+- Valor total, cambio del día ($ y %), **ganancia total y aportado neto** (valor − depósitos + retiros, con su % sobre lo aportado), ganancia no realizada y realizada.
+- Gráfico con selector de período y tres modos: **ganancia acumulada en US$** (por defecto: valor − aportes netos, sin saltos por depósitos), valor, y comparación contra el benchmark (TWR del portafolio vs. SPY, normalizados a 100).
 - Tarjetas: TWR, XIRR, efectivo disponible, dividendos del año.
-- Top ganadores y perdedores del día.
+- **Ganancia por posición**: barras divergentes por símbolo, abiertas y cerradas (Total u Hoy), que reemplazan a los top ganadores y perdedores del día.
+- Composición (por posición o por tipo) y **tus posiciones** más grandes con un minigráfico del último mes.
+- **Rendimiento por mes** (portafolio vs. benchmark) y **riesgo** (caída máxima, volatilidad, mejor y peor día y gráfico de caídas; plegado).
+*(Hecho en el Inicio v2 después de la Fase 6; ver `docs/decisions.md`.)*
 
 ### 10.2 Posiciones
 - Lista ordenable por valor, % del día, ganancia $ o ganancia %.

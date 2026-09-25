@@ -380,6 +380,30 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     }
   });
 
+  it("Inicio v2: ganancia total, ganancia por posición, tendencias, rendimiento por mes y riesgo", async () => {
+    const { status, html } = await page("/", a);
+    expect(status).toBe(200);
+    // Hero: lo aportado son los depósitos del fixture (spec §8.3: 9300 sin retiros).
+    expect(html).toContain("Ganancia total");
+    expect(html).toContain("Aportado neto");
+    expect(html).toContain("US$ 9.300,00");
+    expect(html).toContain("sobre lo aportado");
+    // Gráfico principal: el modo Ganancia (por defecto) y su ganancia del período.
+    expect(html).toContain("Ganancia del período");
+    // Ganancia por posición: las cerradas traen su realizado exacto (spec §8.3).
+    expect(html).toContain("Ganancia por posición");
+    expect(html).toContain("+US$ 180,55"); // MELI
+    expect(html).toContain("+US$ 42,70"); // URTH
+    expect(html).toContain("cerrada");
+    expect(html).toContain("Tus posiciones");
+    expect(html).toContain("Rendimiento por mes");
+    expect(html).toContain("Riesgo");
+    expect(html).toContain("Caída máxima");
+    // Reemplazadas por las barras de ganancia por posición.
+    expect(html).not.toContain("Mejores del día");
+    expect(html).not.toContain("Peores del día");
+  });
+
   it("el detalle de una posición: cantidad, costo exacto, operaciones y gráfico", async () => {
     const { status, html } = await page("/positions/VOO", a);
     expect(status).toBe(200);

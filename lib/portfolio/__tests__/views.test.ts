@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { computeEngine, d, valuePortfolio, type PriceInfo } from "@/lib/engine";
-import { buy, deposit, dividend, sell } from "@/lib/engine/__tests__/helpers";
+import {
+  buy,
+  cashTx,
+  deposit,
+  dividend,
+  sell,
+  withdrawal,
+} from "@/lib/engine/__tests__/helpers";
 import {
   ACTIVITY_PAGE_SIZE,
   activityQuery,
@@ -154,61 +161,104 @@ describe("splitPositions", () => {
 describe("buildDashboard", () => {
   const now = new Date("2026-09-24T18:00:00Z");
 
-  it("mejores y peores del día por variación porcentual", () => {
-    const view = buildDashboard(sample(), [], now);
-    expect(view.gainers.map((m) => m.symbol)).toEqual(["CCC", "AAA"]); // DDD (0 %) no es ganadora
-    expect(view.losers.map((m) => m.symbol)).toEqual(["BBB"]);
-    expect(view.gainers[0]?.dayChange.toFixed()).toBe("50"); // (30 − 25) × 10
-  });
+  describe("ganancia total (valor − aportado)", () => {
+    const at = new Date("2026-09-24T18:00:00Z");
+    const view = (
+      txs: Parameters<typeof computeEngine>[0],
+      prices: Map<string, PriceInfo>,
+    ) => buildDashboard(valuePortfolio(computeEngine(txs), prices), txs, at);
 
-  it("varias peores: de la más negativa hacia arriba; varias mejores: de la más positiva hacia abajo", () => {
-    const txs = ["A", "B", "C", "D"].map((s) => buy(T, s, "1", "100"));
-    const prices = new Map([
-      ["A", price("95", "100")], // −5 %
-      ["B", price("80", "100")], // −20 %
-      ["C", price("90", "100")], // −10 %
-      ["D", price("103", "100")], // +3 %
-    ]);
-    const view = buildDashboard(
-      valuePortfolio(computeEngine(txs), prices),
-      [],
-      now,
-    );
-    expect(view.losers.map((m) => m.symbol)).toEqual(["B", "C", "A"]);
-    expect(view.gainers.map((m) => m.symbol)).toEqual(["D"]);
-  });
+    it("depósito, compra y suba de precio: 1100 − 1000 = 100 (10 % de lo aportado)", () => {
+      const v = view(
+        [deposit(T, "1000"), buy(T, "AAA", "10", "50")],
+        new Map([["AAA", price("60", "60")]]),
+      );
+      expect(v.netContributed.toFixed()).toBe("1000");
+      expect(v.totalGain!.toFixed()).toBe("100");
+      expect(v.totalGainPct!.toFixed()).toBe("0.1");
+    });
 
-  it("como mucho tres de cada lado, con empates por símbolo", () => {
-    const txs = ["A", "B", "C", "D", "E"].map((s) => buy(T, s, "1", "10"));
-    const prices = new Map(
-      ["A", "B", "C", "D", "E"].map((s) => [s, price("11", "10")] as const),
-    );
-    const view = buildDashboard(
-      valuePortfolio(computeEngine(txs), prices),
-      [],
-      now,
-    );
-    expect(view.gainers.map((m) => m.symbol)).toEqual(["A", "B", "C"]);
-    expect(view.losers).toEqual([]);
-  });
+    it("un retiro baja lo aportado y no cuenta como pérdida: 900 − 800 = 100 (12,5 %)", () => {
+      const v = view(
+        [deposit(T, "1000"), buy(T, "AAA", "10", "50"), withdrawal(T, "200")],
+        new Map([["AAA", price("60", "60")]]),
+      );
+      expect(v.netContributed.toFixed()).toBe("800");
+      expect(v.totalGain!.toFixed()).toBe("100");
+      expect(v.totalGainPct!.toFixed()).toBe("0.125");
+    });
 
-  it("las cerradas y las posiciones sin cierre anterior no compiten", () => {
-    const result = computeEngine([
-      buy(T, "AAA", "1", "10"),
-      buy(T, "BBB", "1", "10"),
-    ]);
-    const view = buildDashboard(
-      valuePortfolio(
+    it("con todos los tipos de movimiento coincide con realizado + no realizado + dividendos + intereses − comisiones − impuestos", () => {
+      // Efectivo: 5000 − 1002 + 479 + 3 − 5 + 2 − 1 − 500 = 3976. Posición: 6 a costo 100,2 (601,2),
+      // precio 110 → 660. Total 4636; aportado 4500 → ganancia 136.
+      // Realizado: 479 − 4 × 100,2 = 78,2. No realizado: 660 − 601,2 = 58,8.
+      // 58,8 + 78,2 + 3 (dividendo) + 2 (interés) − 5 (comisión) − 1 (impuesto) = 136.
+      const txs = [
+        deposit(T, "5000"),
+        buy(T, "AAA", "10", "100", "2"),
+        sell("2026-01-06T15:00:00Z", "AAA", "4", "120", "1"),
+        dividend("2026-01-07T15:00:00Z", "AAA", "3"),
+        cashTx("FEE", "2026-01-08T15:00:00Z", "5"),
+        cashTx("INTEREST", "2026-01-09T15:00:00Z", "2"),
+        cashTx("TAX", "2026-01-10T15:00:00Z", "1"),
+        withdrawal("2026-01-11T15:00:00Z", "500"),
+      ];
+      const result = computeEngine(txs);
+      const valued = valuePortfolio(
         result,
-        new Map([
-          ["AAA", price("12", null)],
-          ["BBB", price("12", "10")],
-        ]),
-      ),
-      [],
-      now,
-    );
-    expect(view.gainers.map((m) => m.symbol)).toEqual(["BBB"]);
+        new Map([["AAA", price("110", "110")]]),
+      );
+      const v = buildDashboard(valued, txs, at);
+      expect(v.totalGain!.toFixed()).toBe("136");
+      const t = result.totals;
+      expect(
+        valued.unrealizedPnl
+          .plus(t.realizedPnl)
+          .plus(t.dividends)
+          .plus(t.interest)
+          .minus(t.fees)
+          .minus(t.taxes)
+          .toFixed(),
+      ).toBe("136");
+    });
+
+    it("una pérdida es negativa", () => {
+      const v = view(
+        [deposit(T, "1000"), buy(T, "AAA", "10", "50")],
+        new Map([["AAA", price("40", "40")]]),
+      );
+      expect(v.totalGain!.toFixed()).toBe("-100");
+      expect(v.totalGainPct!.toFixed()).toBe("-0.1");
+    });
+
+    it("sin el precio de alguna posición el total es parcial: no hay ganancia total", () => {
+      const v = view(
+        [
+          deposit(T, "1000"),
+          buy(T, "AAA", "10", "50"),
+          buy(T, "BBB", "1", "5"),
+        ],
+        new Map([["AAA", price("60", "60")]]),
+      );
+      expect(v.missingPrices).toEqual(["BBB"]);
+      expect(v.totalGain).toBeNull();
+      expect(v.totalGainPct).toBeNull();
+    });
+
+    it("sin aportes positivos no hay contra qué comparar", () => {
+      const noDeposits = view(
+        [buy(T, "AAA", "1", "10")],
+        new Map([["AAA", price("12", "12")]]),
+      );
+      expect(noDeposits.totalGain).toBeNull();
+      // Se retiró más de lo que se puso: lo aportado neto es negativo.
+      const overdrawn = view(
+        [deposit(T, "100"), withdrawal(T, "300")],
+        new Map(),
+      );
+      expect(overdrawn.netContributed.toFixed()).toBe("-200");
+      expect(overdrawn.totalGain).toBeNull();
+    });
   });
 
   it("dividendos del año calendario, en hora de Montevideo", () => {

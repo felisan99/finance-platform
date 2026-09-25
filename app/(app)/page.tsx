@@ -1,58 +1,34 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { AllocationCard } from "@/components/app/allocation-card";
+import { ContributionCard } from "@/components/app/contribution-card";
 import { EmptyPortfolio } from "@/components/app/empty-state";
 import {
+  MonthlyReturnsSection,
   PerformanceSection,
   PerformanceSkeleton,
+  RiskSection,
+  SectionSkeleton,
 } from "@/components/app/performance-section";
 import { Pnl } from "@/components/app/pnl";
 import { RefreshButton } from "@/components/app/refresh-button";
 import { SnapshotSaver } from "@/components/app/snapshot-saver";
 import { Notice, PageHeader, Stat } from "@/components/app/stat";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TrendSection } from "@/components/app/trend-section";
+import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
 import { buildAllocationViews } from "@/lib/portfolio/allocation-view";
-import { buildDashboard, type Mover } from "@/lib/portfolio/dashboard";
+import { buildContributionView } from "@/lib/portfolio/contribution-view";
+import { buildDashboard } from "@/lib/portfolio/dashboard";
 import {
   formatDayMonth,
   formatExact,
   formatMoney,
 } from "@/lib/portfolio/format";
+import { loadPerformanceOutcome } from "@/lib/portfolio/performance-data";
 import { loadPortfolioSnapshot } from "@/lib/portfolio/queries";
 import { buildCachedSnapshot } from "@/lib/portfolio/snapshot-cache";
 import { localYear } from "@/lib/portfolio/time";
-
-function Movers({ title, movers }: { title: string; movers: Mover[] }) {
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <CardTitle className="text-sm">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {movers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Ninguna hoy</p>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            {movers.map((m) => (
-              <li key={m.symbol}>
-                <Link
-                  href={`/positions/${encodeURIComponent(m.symbol)}`}
-                  className="flex items-baseline justify-between gap-2 text-sm"
-                >
-                  <span className="font-medium">{m.symbol}</span>
-                  <span>
-                    <Pnl value={m.dayChangePct} kind="percent" />
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -74,35 +50,67 @@ export default async function HomePage() {
     valued,
     (symbol) => snapshot.instrumentBySymbol.get(symbol)?.type ?? null,
   );
+  const contribution = buildContributionView(valued, snapshot.engine.totals);
+  // Los cierres de años de historial tardan más que el resto: se empieza a leer ya y las tres
+  // secciones que lo usan (gráfico, por mes y riesgo) esperan la misma promesa, cada una en su
+  // `<Suspense>`. Así Inicio aparece sin esperarlos y se lee una sola vez.
+  const performance = loadPerformanceOutcome(supabase, snapshot);
+
   return (
     <div className="flex flex-col gap-3">
       <SnapshotSaver json={JSON.stringify(buildCachedSnapshot(valued, now))} />
       <PageHeader title="Inicio" subtitle={snapshot.account.name} />
 
       <Card>
-        <CardContent className="flex flex-col gap-1">
-          <p className="text-sm text-muted-foreground">Valor total</p>
-          <p className="text-3xl font-semibold tabular-nums">
-            {formatMoney(valued.totalValue)}
-          </p>
-          <p className="text-sm">
-            <span className="text-muted-foreground">Hoy </span>
-            <Pnl value={valued.dayChange} kind="money" />{" "}
-            <span className="text-muted-foreground">(</span>
-            <Pnl value={valued.dayChangePct} kind="percent" />
-            <span className="text-muted-foreground">)</span>
-          </p>
-          {view.oldestPriceAt && (
-            <p className="text-xs text-muted-foreground">
-              Precios al {formatDayMonth(view.oldestPriceAt)}
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm text-muted-foreground">Valor total</p>
+            <p className="text-3xl font-semibold tabular-nums">
+              {formatMoney(valued.totalValue)}
             </p>
+            <p className="text-sm">
+              <span className="text-muted-foreground">Hoy </span>
+              <Pnl value={valued.dayChange} kind="money" />{" "}
+              <span className="text-muted-foreground">(</span>
+              <Pnl value={valued.dayChangePct} kind="percent" />
+              <span className="text-muted-foreground">)</span>
+            </p>
+          </div>
+
+          {view.netContributed.gt(0) && (
+            <div className="grid grid-cols-2 gap-3 border-t pt-3">
+              <div className="flex flex-col gap-0.5">
+                <p className="text-xs text-muted-foreground">Ganancia total</p>
+                <p className="text-base font-semibold tabular-nums">
+                  <Pnl value={view.totalGain} kind="money" />
+                </p>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  <Pnl value={view.totalGainPct} kind="percent" /> sobre lo
+                  aportado
+                </p>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-xs text-muted-foreground">Aportado neto</p>
+                <p className="text-base font-semibold tabular-nums">
+                  {formatMoney(view.netContributed)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Depósitos menos retiros
+                </p>
+              </div>
+            </div>
           )}
+
+          <div className="flex items-center justify-between gap-3 border-t pt-3">
+            <p className="text-xs text-muted-foreground">
+              {view.oldestPriceAt
+                ? `Precios al ${formatDayMonth(view.oldestPriceAt)}`
+                : ""}
+            </p>
+            <RefreshButton />
+          </div>
         </CardContent>
       </Card>
-
-      <div className="flex justify-end">
-        <RefreshButton />
-      </div>
 
       {view.missingPrices.length > 0 && (
         <Notice tone="warning">
@@ -121,8 +129,10 @@ export default async function HomePage() {
       )}
 
       <Suspense fallback={<PerformanceSkeleton />}>
-        <PerformanceSection snapshot={snapshot} />
+        <PerformanceSection outcome={performance} />
       </Suspense>
+
+      <ContributionCard view={contribution} />
 
       <div className="grid grid-cols-2 gap-3">
         <Stat
@@ -144,14 +154,17 @@ export default async function HomePage() {
 
       {allocation && <AllocationCard data={allocation} />}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Movers title="Mejores del día" movers={view.gainers} />
-        <Movers title="Peores del día" movers={view.losers} />
-      </div>
+      <Suspense fallback={<SectionSkeleton title="Tus posiciones" />}>
+        <TrendSection snapshot={snapshot} now={now} />
+      </Suspense>
 
-      <Link href="/positions" className="text-center text-sm underline">
-        Ver todas las posiciones
-      </Link>
+      <Suspense fallback={<SectionSkeleton title="Rendimiento por mes" />}>
+        <MonthlyReturnsSection outcome={performance} />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <RiskSection outcome={performance} />
+      </Suspense>
     </div>
   );
 }

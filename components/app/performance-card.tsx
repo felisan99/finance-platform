@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -9,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Segmented } from "@/components/app/segmented";
 import { PnlText } from "@/components/app/pnl-text";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -20,6 +23,7 @@ import { niceScale } from "@/lib/portfolio/chart-scale";
 import {
   formatChartIndex,
   formatChartMoney,
+  formatChartMoneySigned,
   formatChartTick,
   formatDateKey,
   formatDayMonthKey,
@@ -29,58 +33,15 @@ import type {
   MetricView,
   PerformanceView,
 } from "@/lib/portfolio/performance-view";
-import { cn } from "@/lib/utils";
 
-type Mode = "value" | "compare";
+type Mode = "gain" | "value" | "compare";
 
 const config = {
+  gain: { label: "Ganancia", color: "var(--gain)" },
   value: { label: "Valor", color: "var(--foreground)" },
   portfolio: { label: "Tu portafolio", color: "var(--foreground)" },
   benchmark: { label: "Benchmark", color: "var(--alloc-1)" },
 } satisfies ChartConfig;
-
-function Segmented<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-  className,
-}: {
-  label: string;
-  options: ReadonlyArray<{ id: T; text: string; disabled?: boolean }>;
-  value: T;
-  onChange: (id: T) => void;
-  className?: string;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label={label}
-      className={cn(
-        "inline-flex shrink-0 rounded-lg bg-muted p-0.5",
-        className,
-      )}
-    >
-      {options.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          aria-pressed={option.id === value}
-          disabled={option.disabled}
-          onClick={() => onChange(option.id)}
-          className={cn(
-            "h-8 flex-1 rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
-            option.id === value
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {option.text}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function CurveTooltip({
   active,
@@ -98,7 +59,11 @@ function CurveTooltip({
   return (
     <div className="grid gap-0.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
       <span className="font-medium">{formatDateKey(point.date)}</span>
-      {mode === "value" && point.value !== null ? (
+      {mode === "gain" ? (
+        <span className="text-muted-foreground tabular-nums">
+          Ganancia {formatChartMoneySigned(point.gain)}
+        </span>
+      ) : mode === "value" && point.value !== null ? (
         <span className="text-muted-foreground tabular-nums">
           {formatChartMoney(point.value)}
         </span>
@@ -139,51 +104,70 @@ function Metric({
 }
 
 /**
- * Rendimiento del portafolio (spec §10.1): gráfico con selector de período y comparación contra el
- * benchmark, más TWR, XIRR, benchmark y diferencia del período elegido. Solo dibuja y cambia de
- * período: los textos, los tonos y las curvas ya vienen calculados del servidor
+ * Rendimiento del portafolio (spec §10.1): gráfico con selector de período y tres modos —la
+ * ganancia acumulada en dinero (por defecto), el valor y la comparación contra el benchmark—, más
+ * TWR, XIRR, benchmark y diferencia del período elegido. Solo dibuja y cambia de período: los
+ * textos, los tonos y las curvas ya vienen calculados del servidor
  * (`lib/portfolio/performance-view.ts`).
  */
 export function PerformanceCard({ view }: { view: PerformanceView }) {
   const [periodId, setPeriodId] = useState(
     view.periods.find((p) => p.id === "MAX")?.id ?? view.periods[0]!.id,
   );
-  const [wantedMode, setMode] = useState<Mode>("value");
-  const mode: Mode = view.hasBenchmark ? wantedMode : "value";
+  const [wantedMode, setMode] = useState<Mode>("gain");
+  const mode: Mode =
+    wantedMode === "compare" && !view.hasBenchmark ? "gain" : wantedMode;
   const period =
     view.periods.find((p) => p.id === periodId) ?? view.periods[0]!;
+  const gradientId = useId().replace(/[^a-zA-Z0-9]/g, "");
 
   const points =
     mode === "value"
       ? period.points.filter((p) => p.value !== null)
       : period.points;
   const keys =
-    mode === "value"
-      ? (["value"] as const)
-      : (["portfolio", "benchmark"] as const);
-  const numbers = points.flatMap((p) =>
-    keys.flatMap((key) => {
-      const v = p[key];
-      return v === null ? [] : [v];
-    }),
-  );
+    mode === "compare"
+      ? (["portfolio", "benchmark"] as const)
+      : (["value"] as const);
+  const numbers =
+    mode === "gain"
+      ? [0, ...points.map((p) => p.gain)]
+      : points.flatMap((p) =>
+          keys.flatMap((key) => {
+            const v = p[key];
+            return v === null ? [] : [v];
+          }),
+        );
   if (mode === "compare") numbers.push(100);
   const scale = niceScale(Math.min(...numbers), Math.max(...numbers));
 
+  // Degradé de la ganancia: verde arriba del cero y rojo abajo. El relleno se mide sobre el
+  // rectángulo que va de la línea a la base (siempre incluye el 0); el trazo, solo sobre la línea.
+  const gains = points.map((p) => p.gain);
+  const dataMax = Math.max(0, ...gains);
+  const dataMin = Math.min(0, ...gains);
+  const fillZero = dataMax === dataMin ? 1 : dataMax / (dataMax - dataMin);
+  const flat = dataMax === dataMin;
+
   const description =
-    mode === "value"
-      ? `Gráfico del valor del portafolio desde el ${period.since}.`
-      : `Gráfico del rendimiento de tu portafolio contra ${view.benchmarkLabel} desde el ${period.since}, en base 100.`;
+    mode === "gain"
+      ? `Gráfico de la ganancia acumulada de tu portafolio en dólares desde el ${period.since}.`
+      : mode === "value"
+        ? `Gráfico del valor del portafolio desde el ${period.since}.`
+        : `Gráfico del rendimiento de tu portafolio contra ${view.benchmarkLabel} desde el ${period.since}, en base 100.`;
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-3">
+      <CardHeader>
         <CardTitle>Rendimiento</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
         <Segmented
           label="Qué mostrar"
           value={mode}
           onChange={setMode}
           options={[
+            { id: "gain", text: "Ganancia" },
             { id: "value", text: "Valor" },
             {
               id: "compare",
@@ -191,9 +175,8 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
               disabled: !view.hasBenchmark,
             },
           ]}
+          className="w-full"
         />
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
         <Segmented
           label="Período"
           value={period.id}
@@ -201,6 +184,17 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
           options={view.periods.map((p) => ({ id: p.id, text: p.label }))}
           className="w-full"
         />
+
+        {mode === "gain" && (
+          <div className="flex flex-col gap-0.5">
+            <p className="text-xs text-muted-foreground">
+              Ganancia del período
+            </p>
+            <p className="text-2xl font-semibold tabular-nums">
+              <PnlText text={period.gain.text} tone={period.gain.tone} />
+            </p>
+          </div>
+        )}
 
         {points.length < 2 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
@@ -213,54 +207,141 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
             role="img"
             aria-label={description}
           >
-            <LineChart
-              data={points}
-              margin={{ left: 0, right: 8, top: 8, bottom: 0 }}
-            >
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickFormatter={formatDayMonthKey}
-                minTickGap={36}
-                tickMargin={6}
-              />
-              <YAxis
-                domain={scale.domain}
-                ticks={scale.ticks}
-                interval={0}
-                width={mode === "value" ? 48 : 44}
-                tickFormatter={(value: number) =>
-                  formatChartTick(value, scale.decimals)
-                }
-              />
-              <ChartTooltip
-                content={
-                  <CurveTooltip
-                    mode={mode}
-                    benchmarkLabel={view.benchmarkLabel}
-                  />
-                }
-              />
-              {mode === "compare" && (
-                <ReferenceLine
-                  y={100}
-                  stroke="var(--muted-foreground)"
-                  strokeDasharray="4 4"
+            {mode === "gain" ? (
+              <AreaChart
+                data={points}
+                margin={{ left: 0, right: 8, top: 8, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient
+                    id={`${gradientId}fill`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset={0}
+                      stopColor="var(--gain)"
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset={fillZero}
+                      stopColor="var(--gain)"
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset={fillZero}
+                      stopColor="var(--loss)"
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset={1}
+                      stopColor="var(--loss)"
+                      stopOpacity={0.3}
+                    />
+                  </linearGradient>
+                  <linearGradient
+                    id={`${gradientId}line`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset={0} stopColor="var(--gain)" />
+                    <stop offset={fillZero} stopColor="var(--gain)" />
+                    <stop offset={fillZero} stopColor="var(--loss)" />
+                    <stop offset={1} stopColor="var(--loss)" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDayMonthKey}
+                  minTickGap={36}
+                  tickMargin={6}
                 />
-              )}
-              {keys.map((key) => (
-                <Line
-                  key={key}
-                  dataKey={key}
+                <YAxis
+                  domain={scale.domain}
+                  ticks={scale.ticks}
+                  interval={0}
+                  width={48}
+                  tickFormatter={(value: number) =>
+                    formatChartTick(value, scale.decimals)
+                  }
+                />
+                <ChartTooltip
+                  content={
+                    <CurveTooltip
+                      mode={mode}
+                      benchmarkLabel={view.benchmarkLabel}
+                    />
+                  }
+                />
+                <ReferenceLine y={0} stroke="var(--muted-foreground)" />
+                <Area
+                  dataKey="gain"
                   type="monotone"
-                  stroke={`var(--color-${key})`}
-                  strokeWidth={key === "benchmark" ? 1.5 : 2}
+                  baseValue={0}
+                  stroke={
+                    flat ? "var(--muted-foreground)" : `url(#${gradientId}line)`
+                  }
+                  strokeWidth={2}
+                  fill={`url(#${gradientId}fill)`}
                   dot={false}
-                  connectNulls
                   isAnimationActive={false}
                 />
-              ))}
-            </LineChart>
+              </AreaChart>
+            ) : (
+              <LineChart
+                data={points}
+                margin={{ left: 0, right: 8, top: 8, bottom: 0 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDayMonthKey}
+                  minTickGap={36}
+                  tickMargin={6}
+                />
+                <YAxis
+                  domain={scale.domain}
+                  ticks={scale.ticks}
+                  interval={0}
+                  width={mode === "value" ? 48 : 44}
+                  tickFormatter={(value: number) =>
+                    formatChartTick(value, scale.decimals)
+                  }
+                />
+                <ChartTooltip
+                  content={
+                    <CurveTooltip
+                      mode={mode}
+                      benchmarkLabel={view.benchmarkLabel}
+                    />
+                  }
+                />
+                {mode === "compare" && (
+                  <ReferenceLine
+                    y={100}
+                    stroke="var(--muted-foreground)"
+                    strokeDasharray="4 4"
+                  />
+                )}
+                {keys.map((key) => (
+                  <Line
+                    key={key}
+                    dataKey={key}
+                    type="monotone"
+                    stroke={`var(--color-${key})`}
+                    strokeWidth={key === "benchmark" ? 1.5 : 2}
+                    dot={false}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                ))}
+              </LineChart>
+            )}
           </ChartContainer>
         )}
 
@@ -322,9 +403,11 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
           </p>
         ))}
         <p className="text-xs text-muted-foreground">
-          {mode === "value"
-            ? `El valor incluye tus depósitos y retiros (por eso sube a saltos): el rendimiento está en “vs ${view.benchmarkLabel}”. `
-            : ""}
+          {mode === "gain"
+            ? "La ganancia es el valor menos lo que pusiste y sacaste: depositar o retirar no cuenta como ganancia ni como pérdida. "
+            : mode === "value"
+              ? `El valor incluye tus depósitos y retiros (por eso sube a saltos): la ganancia y el rendimiento están en “Ganancia” y “vs ${view.benchmarkLabel}”. `
+              : ""}
           El gráfico usa cierres diarios; el valor total de arriba usa la
           cotización del momento.
         </p>

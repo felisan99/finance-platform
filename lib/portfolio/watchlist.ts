@@ -69,6 +69,19 @@ export function buildRange(
 }
 
 /** Un símbolo, con lo que hay de él en la base. Sin cotización ni cierres queda "sin precio". */
+/**
+ * Cierres recientes (de más viejo a más nuevo) para un minigráfico. Con menos de dos no hay línea
+ * que dibujar: vacío. Los usa también "Tus posiciones" de Inicio.
+ */
+export function sparkOf(
+  market: Pick<WatchlistMarketRow, "recent"> | null,
+): number[] {
+  const values = (market?.recent ?? [])
+    .map(([, close]) => Number(close))
+    .filter((value) => Number.isFinite(value));
+  return values.length >= 2 ? values : [];
+}
+
 export function buildWatchlistRow(input: WatchlistInput): WatchlistRowView {
   const { instrument, quote, market } = input;
 
@@ -97,10 +110,6 @@ export function buildWatchlistRow(input: WatchlistInput): WatchlistRowView {
       ? picked.price.minus(previous)
       : null;
 
-  const spark = (market?.recent ?? [])
-    .map(([, close]) => Number(close))
-    .filter((value) => Number.isFinite(value));
-
   return {
     instrumentId: instrument.id,
     symbol: instrument.symbol,
@@ -119,7 +128,7 @@ export function buildWatchlistRow(input: WatchlistInput): WatchlistRowView {
           market?.high_close != null ? d(market.high_close) : null,
         )
       : null,
-    spark: spark.length >= 2 ? spark : [],
+    spark: sparkOf(market),
   };
 }
 

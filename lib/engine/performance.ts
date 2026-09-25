@@ -50,6 +50,12 @@ export interface PeriodResult {
   benchmarkReturn: Dec | null;
   /** `twr − benchmarkReturn`, en fracción (puntos porcentuales / 100). */
   difference: Dec | null;
+  /**
+   * Ganancia en dinero del período: `V_fin − V_base − Σ flujos externos (base, fin]`. Incluye lo
+   * realizado, lo no realizado, dividendos e intereses, menos comisiones e impuestos. En "Todo"
+   * es el valor final menos lo aportado neto.
+   */
+  gain: Dec;
 }
 
 export type PerformanceWarning =
@@ -136,6 +142,28 @@ function periodFlows(
   return flows;
 }
 
+/**
+ * Ganancia en dinero de `(baseDate, endDate]`: lo que el valor creció menos lo que se puso o se
+ * sacó de afuera. Un depósito hace subir el valor pero no es ganancia; un retiro lo baja y tampoco
+ * es pérdida. El día base sin valor (todavía no había portafolio) cuenta como 0.
+ */
+function periodGain(
+  series: DailySeries,
+  valueByDate: ReadonlyMap<string, Dec>,
+  baseDate: string,
+  endDate: string,
+): Dec {
+  let external = ZERO;
+  for (const point of series.points) {
+    if (point.date > baseDate && point.date <= endDate) {
+      external = external.plus(point.flow);
+    }
+  }
+  const endValue = valueByDate.get(endDate) ?? ZERO;
+  const baseValue = valueByDate.get(baseDate) ?? ZERO;
+  return endValue.minus(baseValue).minus(external);
+}
+
 export function computePerformance(input: PerformanceInput): PerformanceResult {
   const series = buildDailySeries(input);
   const last = series.points[series.points.length - 1];
@@ -169,6 +197,7 @@ export function computePerformance(input: PerformanceInput): PerformanceResult {
           : null,
       benchmarkReturn: bench,
       difference: twr !== null && bench !== null ? twr.minus(bench) : null,
+      gain: periodGain(series, valueByDate, baseDate, endDate),
     };
   });
 
@@ -194,6 +223,8 @@ export interface CurvePoint {
   portfolio: Dec;
   /** Benchmark normalizado a 100 en el mismo día base; `null` si no hay datos. */
   benchmark: Dec | null;
+  /** Ganancia acumulada en dinero desde el día base (0 en el día base); ver `PeriodResult.gain`. */
+  gain: Dec;
 }
 
 /**
@@ -225,17 +256,21 @@ export function periodCurve(
       value: baseValue,
       portfolio: hundred,
       benchmark: benchAt(period.baseDate),
+      gain: ZERO,
     },
   ];
   let index = hundred;
+  let external = ZERO;
   for (const point of series.points) {
     if (point.date <= period.baseDate || point.date > period.endDate) continue;
     if (point.growth !== null) index = index.mul(point.growth);
+    external = external.plus(point.flow);
     curve.push({
       date: point.date,
       value: point.value,
       portfolio: index,
       benchmark: benchAt(point.date),
+      gain: point.value.minus(baseValue ?? ZERO).minus(external),
     });
   }
   return curve;

@@ -54,3 +54,12 @@ export type {
   PeriodId,
   PeriodResult,
 } from "./performance";
+export { MIN_VOLATILITY_DAYS, computeRisk } from "./risk";
+export type {
+  DayReturn,
+  DrawdownPoint,
+  DrawdownStat,
+  RiskResult,
+} from "./risk";
+export { computeMonthlyReturns } from "./monthly";
+export type { MonthlyReturn } from "./monthly";

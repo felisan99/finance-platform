@@ -6,13 +6,6 @@ import {
 } from "@/lib/engine";
 import { localYear } from "./time";
 
-export interface Mover {
-  symbol: string;
-  dayChange: Dec;
-  /** Fracción sobre el cierre anterior. */
-  dayChangePct: Dec;
-}
-
 /** Lo que muestra Inicio (spec §10.1), ya resuelto: la pantalla solo formatea. */
 export interface DashboardView {
   /** `false` si todavía no hay ninguna transacción: se muestra el estado vacío. */
@@ -20,10 +13,16 @@ export interface DashboardView {
   valued: ValuedPortfolio;
   /** Dividendos cobrados en el año calendario de `now` (hora de Montevideo). */
   dividendsThisYear: Dec;
-  /** Hasta 3, de mayor a menor variación porcentual del día. */
-  gainers: Mover[];
-  /** Hasta 3, de la peor variación porcentual del día hacia arriba. */
-  losers: Mover[];
+  /** Depósitos menos retiros de todo el historial: la plata que la persona puso de su bolsillo. */
+  netContributed: Dec;
+  /**
+   * Valor total menos lo aportado neto: lo que el portafolio ganó (o perdió) en total, con lo
+   * realizado, lo no realizado y los dividendos. `null` si el valor total es parcial (falta algún
+   * precio) o si no hay aportes positivos que comparar.
+   */
+  totalGain: Dec | null;
+  /** `totalGain` sobre lo aportado (no es un rendimiento ponderado por tiempo: para eso está el TWR). */
+  totalGainPct: Dec | null;
   /** El total no incluye a estas posiciones abiertas porque no tienen precio. */
   missingPrices: string[];
   /** Advertencia del motor: probablemente falta cargar un depósito. */
@@ -31,11 +30,6 @@ export interface DashboardView {
   /** La fecha más antigua de los precios usados (la que hay que mostrar como "precios al …"). */
   oldestPriceAt: Date | null;
 }
-
-const TOP = 3;
-
-const bySymbol = (a: Mover, b: Mover) =>
-  a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0;
 
 export function buildDashboard(
   valued: ValuedPortfolio,
@@ -51,25 +45,17 @@ export function buildDashboard(
     ZERO,
   );
 
-  const movers: Mover[] = valued.positions.flatMap((p) =>
-    p.isOpen && p.dayChange !== null && p.dayChangePct !== null
-      ? [
-          {
-            symbol: p.symbol,
-            dayChange: p.dayChange,
-            dayChangePct: p.dayChangePct,
-          },
-        ]
-      : [],
+  const netContributed = transactions.reduce(
+    (sum, tx) =>
+      tx.type === "DEPOSIT"
+        ? sum.plus(tx.amount)
+        : tx.type === "WITHDRAWAL"
+          ? sum.minus(tx.amount)
+          : sum,
+    ZERO,
   );
-  const gainers = movers
-    .filter((m) => m.dayChange.gt(0))
-    .sort((a, b) => b.dayChangePct.cmp(a.dayChangePct) || bySymbol(a, b))
-    .slice(0, TOP);
-  const losers = movers
-    .filter((m) => m.dayChange.lt(0))
-    .sort((a, b) => a.dayChangePct.cmp(b.dayChangePct) || bySymbol(a, b))
-    .slice(0, TOP);
+  const comparable = valued.missingPrices.length === 0 && netContributed.gt(0);
+  const totalGain = comparable ? valued.totalValue.minus(netContributed) : null;
 
   const priceDates = valued.positions.flatMap((p) =>
     p.priceAsOf ? [p.priceAsOf] : [],
@@ -83,8 +69,9 @@ export function buildDashboard(
     hasTransactions: transactions.length > 0,
     valued,
     dividendsThisYear,
-    gainers,
-    losers,
+    netContributed,
+    totalGain,
+    totalGainPct: totalGain === null ? null : totalGain.div(netContributed),
     missingPrices: valued.missingPrices,
     negativeCash: valued.cash.lt(0),
     oldestPriceAt,

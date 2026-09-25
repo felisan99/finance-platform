@@ -235,3 +235,110 @@ describe("benchmarkLabel", () => {
     expect(benchmarkLabel(null)).toBe("Benchmark");
   });
 });
+
+describe("ganancia en dinero (Inicio v2)", () => {
+  const full = view(spy);
+  const max = full.periods.find((p) => p.id === "MAX")!;
+
+  it("la ganancia del período va con signo y tono: 2420 − 2100 = +US$ 320", () => {
+    expect(plain(max.gain.text)).toBe("+US$ 320,00");
+    expect(max.gain.tone).toBe("gain");
+  });
+
+  it("la curva de ganancia arranca en 0 y no salta con los depósitos", () => {
+    expect(max.points.map((p) => p.gain)).toEqual([0, 0, 100, 100, 320]);
+  });
+});
+
+describe("rendimiento por mes (Inicio v2)", () => {
+  const full = view(spy);
+
+  it("un mes con sus porcentajes para dibujar y sus textos: +21 % contra +5 %", () => {
+    expect(full.monthly).toHaveLength(1);
+    const [september] = full.monthly;
+    expect(september).toMatchObject({
+      month: "2026-09",
+      label: "set",
+      title: "Setiembre de 2026",
+      portfolio: 21,
+      benchmark: 5,
+      portfolioTone: "gain",
+      benchmarkTone: "gain",
+    });
+    expect(plain(september!.portfolioText)).toBe("+21,00%");
+    expect(plain(september!.benchmarkText)).toBe("+5,00%");
+  });
+
+  it("avisa que el mes arrancó a mitad y que sigue en curso", () => {
+    expect(full.monthly[0]!.note).toBe("desde el 21/09, en curso");
+  });
+
+  it("sin benchmark, las barras del S&P quedan vacías", () => {
+    const [september] = view(null).monthly;
+    expect(september!.benchmark).toBeNull();
+    expect(september!.benchmarkText).toBe("—");
+    expect(september!.benchmarkTone).toBeNull();
+    expect(september!.portfolio).toBe(21);
+  });
+});
+
+describe("riesgo (Inicio v2)", () => {
+  it("un índice que solo sube: sin caídas, en máximos y con poca historia", () => {
+    const risk = view(spy).risk!;
+    expect(risk.maxDrawdown).toEqual({ text: "Sin caídas", tone: "flat" });
+    expect(risk.maxDrawdownDetail).toBeNull();
+    expect(risk.currentDrawdown).toEqual({ text: "En máximos", tone: "gain" });
+    expect(risk.days).toBe(4);
+    // 4 días no alcanzan para una volatilidad.
+    expect(risk.volatility).toEqual({ text: "—", tone: null });
+    expect(risk.volatilityHint).toBe("Hacen falta 20 días con datos (hay 4)");
+    expect(risk.since).toBe("21/09/2026");
+    expect(risk.note).toBe(
+      "Con menos de un año de historia estos números son orientativos.",
+    );
+    // Mejor día: +10 % el 22 (el 24 también; gana el primero).
+    expect(plain(risk.bestDay.text)).toBe("+10,00%");
+    expect(risk.bestDayDate).toBe("22/09/2026");
+    expect(risk.curve.map((p) => p.drawdown)).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("una caída de 10 % desde el máximo, sin recuperar", () => {
+    // Depósito 1000 y compra de 10 a 100. Cierres: 100, 110, 99, 105 → valores 1000, 1100, 990,
+    // 1050. Índice 100, 100, 110, 99, 105. Máximo 110 (22/9), mínimo 99 (23/9): −10 %.
+    // Al final 105 / 110 − 1 = −4,545 %.
+    const result = computePerformance({
+      transactions: [
+        deposit("2026-09-21T15:00:00Z", "1000"),
+        buy("2026-09-21T15:00:00Z", "VOO", "10", "100"),
+      ],
+      closes: new Map([
+        [
+          "VOO",
+          closes([
+            ["2026-09-21", "100"],
+            ["2026-09-22", "110"],
+            ["2026-09-23", "99"],
+            ["2026-09-24", "105"],
+          ]),
+        ],
+      ]),
+      benchmark: null,
+      endDate: "2026-09-24",
+    });
+    const risk = buildPerformanceView({
+      result,
+      benchmark: null,
+      benchmarkSymbol: null,
+    })!.risk!;
+    expect(plain(risk.maxDrawdown.text)).toBe("-10,00%");
+    expect(risk.maxDrawdown.tone).toBe("loss");
+    expect(risk.maxDrawdownDetail).toBe("22/09 → 23/09 · sin recuperar");
+    expect(plain(risk.currentDrawdown.text)).toBe("-4,55%");
+    expect(risk.currentDrawdown.tone).toBe("loss");
+    expect(plain(risk.worstDay.text)).toBe("-10,00%");
+    expect(risk.worstDayDate).toBe("23/09/2026");
+    expect(risk.curve.map((p) => Math.round(p.drawdown * 1e6) / 1e6)).toEqual([
+      0, 0, 0, -10, -4.545455,
+    ]);
+  });
+});

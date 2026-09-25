@@ -2,7 +2,7 @@
 
 Web app personal para seguir un portafolio de inversiones (acciones y ETFs de EE.UU.), con costo de operación cero. La especificación completa está en [`PROJECT_SPEC.md`](PROJECT_SPEC.md); las decisiones que se apartan del spec, en [`docs/decisions.md`](docs/decisions.md).
 
-Estado: Fases 0 a 6 hechas (motor de cálculo puro, importador de Delta, base de datos y acceso por invitación con **código de 6 dígitos por email**, datos de mercado y crons de precios, interfaz principal: Inicio con el rendimiento —TWR, XIRR y comparación con el S&P 500— y la composición del portafolio, Posiciones, Actividad, importación de CSV, **Watchlist** y **app instalable (PWA)** con pantalla sin conexión). Falta la prueba en un iPhone real y la Fase 7 (producción). Para probarla a mano: [`docs/comprobacion-manual.md`](docs/comprobacion-manual.md). Hay un despliegue en Vercel apuntando a la base de desarrollo (ver `docs/decisions.md`, Fase 6).
+Estado: Fases 0 a 6 hechas (motor de cálculo puro, importador de Delta, base de datos y acceso por invitación con **código de 6 dígitos por email**, datos de mercado y crons de precios, interfaz principal: Inicio con la ganancia total, el rendimiento —ganancia acumulada, TWR, XIRR y comparación con el S&P 500—, la ganancia por posición, la composición, las tendencias, el rendimiento por mes y el riesgo, Posiciones, Actividad, importación de CSV, **Watchlist** y **app instalable (PWA)** con pantalla sin conexión). Falta la prueba en un iPhone real y la Fase 7 (producción). Para probarla a mano: [`docs/comprobacion-manual.md`](docs/comprobacion-manual.md). Hay un despliegue en Vercel apuntando a la base de desarrollo (ver `docs/decisions.md`, Fase 6).
 
 ## Empezar
 
