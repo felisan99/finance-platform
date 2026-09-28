@@ -13,7 +13,11 @@ import type { Json } from "@/lib/db/database.types";
 import { ensureInstruments } from "@/lib/market-jobs/instruments";
 import { parseDeltaCsv } from "@/lib/importers";
 import { draftsToRpcRows } from "../mappers";
-import { listPortfolios, loadPortfolioSnapshot } from "../queries";
+import {
+  getCloseSeries,
+  listPortfolios,
+  loadPortfolioSnapshot,
+} from "../queries";
 import { FIXTURE_CSV } from "./fixture";
 
 // Las funciones SQL de la Fase 4 contra finance-dev (`pnpm test:integration`): importación atómica,
@@ -463,6 +467,90 @@ describe("RPCs de la Fase 4 (integración, finance-dev)", () => {
         (
           await createAnon().rpc("instrument_prices", {
             p_instrument_ids: [instrumentId],
+          })
+        ).error?.code,
+      ).toBe(PG.insufficientPrivilege);
+    });
+  });
+
+  describe("price_series (getCloseSeries)", () => {
+    it("trae series de más de 1000 días en una llamada, desde la fecha pedida, con close o adj_close", async () => {
+      const [long, empty] = await Promise.all(
+        ["Serie larga", "Sin precios"].map(
+          async (name) =>
+            must(
+              await admin
+                .from("instruments")
+                .insert({ symbol: randomSymbol(), name, type: "STOCK" })
+                .select("id")
+                .single(),
+              "instrumento",
+            ).id,
+        ),
+      );
+      instrumentIds.push(long!, empty!);
+      // 1100 días corridos desde 2020-01-01; los primeros 100 sin adj_close.
+      const start = Date.UTC(2020, 0, 1);
+      const rows = Array.from({ length: 1100 }, (_, i) => ({
+        instrument_id: long!,
+        date: new Date(start + i * 86_400_000).toISOString().slice(0, 10),
+        close: i + 1,
+        adj_close: i < 100 ? null : i + 0.5,
+      }));
+      must(
+        await admin.from("prices_daily").insert(rows).select("date"),
+        "precios",
+      );
+
+      const closes = await getCloseSeries(
+        a.client,
+        [long!, empty!, long!],
+        "2020-01-01",
+        "close",
+      );
+      expect([...closes.keys()].sort()).toEqual([long!, empty!].sort());
+      expect(closes.get(empty!)).toEqual([]);
+      const series = closes.get(long!)!;
+      expect(series).toHaveLength(1100);
+      expect(series[0]).toEqual({ date: "2020-01-01", value: "1.000000" });
+      expect(series.at(-1)).toEqual({
+        date: rows.at(-1)!.date,
+        value: "1100.000000",
+      });
+      expect(series.map((r) => r.date)).toEqual(rows.map((r) => r.date));
+
+      const adjusted = (
+        await getCloseSeries(a.client, [long!], rows[50]!.date, "adj_close")
+      ).get(long!)!;
+      // Desde el día 50, pero los que no tienen adj_close (hasta el 99) no vienen.
+      expect(adjusted).toHaveLength(1000);
+      expect(adjusted[0]).toEqual({
+        date: rows[100]!.date,
+        value: "100.500000",
+      });
+    });
+
+    it("máximo 50 instrumentos por llamada y sin sesión no se puede llamar", async () => {
+      const ids = Array.from({ length: 51 }, () => crypto.randomUUID());
+      expect(
+        (
+          await a.client.rpc("price_series", {
+            p_instrument_ids: ids,
+            p_from: "2020-01-01",
+            p_adjusted: false,
+          })
+        ).error?.code,
+      ).toBe("22023");
+      // getCloseSeries parte la lista: con 51 no falla.
+      await expect(
+        getCloseSeries(a.client, ids, "2020-01-01", "close"),
+      ).resolves.toHaveProperty("size", 51);
+      expect(
+        (
+          await createAnon().rpc("price_series", {
+            p_instrument_ids: [instrumentId],
+            p_from: "2020-01-01",
+            p_adjusted: false,
           })
         ).error?.code,
       ).toBe(PG.insufficientPrivilege);

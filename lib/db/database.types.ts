@@ -587,6 +587,18 @@ export type Database = {
           prev_date: string
         }[]
       }
+      price_series: {
+        Args: {
+          p_adjusted: boolean
+          p_from: string
+          p_instrument_ids: string[]
+        }
+        Returns: {
+          closes: string[]
+          dates: string[]
+          instrument_id: string
+        }[]
+      }
       recent_imports: {
         Args: { p_limit?: number }
         Returns: {

@@ -35,16 +35,27 @@ export async function loadPerformance(
   const fromDate = addDays(firstTx.toISOString().slice(0, 10), -MARGIN_DAYS);
 
   const heldIds = [...snapshot.instrumentById.keys()];
-  const benchmark = await getBenchmark(client, snapshot.benchmarkSymbol);
-  const [held, benchmarkRows, benchmarkQuotes] = await Promise.all([
-    getCloseSeries(client, heldIds, fromDate, "close"),
-    benchmark.instrumentId
-      ? getCloseSeries(client, [benchmark.instrumentId], fromDate, "adj_close")
-      : Promise.resolve(new Map<string, DailyCloseRow[]>()),
-    benchmark.instrumentId
-      ? getQuoteRows(client, [benchmark.instrumentId])
-      : Promise.resolve([]),
-  ]);
+  // Los cierres de lo que se tuvo no dependen del benchmark: se leen mientras se lo busca.
+  const [held, { benchmark, benchmarkRows, benchmarkQuotes }] =
+    await Promise.all([
+      getCloseSeries(client, heldIds, fromDate, "close"),
+      getBenchmark(client, snapshot.benchmarkSymbol).then(async (benchmark) => {
+        const [benchmarkRows, benchmarkQuotes] = await Promise.all([
+          benchmark.instrumentId
+            ? getCloseSeries(
+                client,
+                [benchmark.instrumentId],
+                fromDate,
+                "adj_close",
+              )
+            : new Map<string, DailyCloseRow[]>(),
+          benchmark.instrumentId
+            ? getQuoteRows(client, [benchmark.instrumentId])
+            : [],
+        ]);
+        return { benchmark, benchmarkRows, benchmarkQuotes };
+      }),
+    ]);
 
   const closes = new Map<string, DailyClose[]>();
   for (const [id, rows] of held) {

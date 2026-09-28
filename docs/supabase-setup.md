@@ -65,7 +65,7 @@ Se puede ejecutar con `pnpm supabase db query --linked "…"` o desde el Table E
 - **`active_instruments()`** devuelve los instrumentos con transacciones o en alguna watchlist (de cualquier usuario) **y el benchmark de todo portafolio con operaciones** (`SPY` por defecto, sembrado por la migración `benchmark_history`), con su primera fecha (la del portafolio, para el benchmark), `history_from` y último precio. Solo la puede llamar `service_role`.
 - Un instrumento nuevo se descarga solo: el próximo cron lo ve sin historial y lo baja desde su primera transacción (menos 7 días), o 5 años atrás si solo está en una watchlist.
 - Para forzar que un instrumento se vuelva a descargar completo: `update public.instruments set history_backfilled_at = null where symbol = 'VOO';` (el próximo cron lo hace).
-- **Leer series largas de `prices_daily` por páginas**: PostgREST corta cada respuesta en 1000 filas y cinco años de un instrumento son ~1260 (ver `docs/decisions.md`, observación 9).
+- **Leer series largas de `prices_daily` por páginas o con `price_series`**: PostgREST corta cada respuesta en 1000 filas y cinco años de un instrumento son ~1260 (ver `docs/decisions.md`, observación 9). Varias series juntas van con el RPC `price_series`, una fila por instrumento.
 - El advisor de seguridad puede avisar `auth_leaked_password_protection`: es de plan Pro y no aplica (la app no usa contraseñas).
 
 ## Funciones de la app (Fases 4 y 6)

@@ -104,6 +104,16 @@ export const dailyCloseRowSchema = z.object({
 });
 export type DailyCloseRow = z.infer<typeof dailyCloseRowSchema>;
 
+/** La serie de un instrumento del RPC `price_series`: fechas y cierres en arreglos paralelos. */
+export const priceSeriesRowSchema = z
+  .object({
+    instrument_id: z.string(),
+    dates: z.array(dailyCloseRowSchema.shape.date),
+    closes: z.array(z.string()),
+  })
+  .refine((row) => row.dates.length === row.closes.length);
+export type PriceSeriesRow = z.infer<typeof priceSeriesRowSchema>;
+
 /** Una importación reciente (RPC `recent_imports`), con cuántas transacciones le quedan ligadas. */
 export const recentImportRowSchema = z.object({
   import_id: z.string(),

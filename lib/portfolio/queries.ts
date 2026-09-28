@@ -20,7 +20,7 @@ import {
   accountTransactionRowSchema,
   portfolioRowSchema,
   closesRowSchema,
-  dailyCloseRowSchema,
+  priceSeriesRowSchema,
   instrumentRowSchema,
   parseRows,
   quoteRowSchema,
@@ -369,13 +369,13 @@ export async function getBenchmarkInstrument(
   return getInstrumentBySymbol(client, symbol);
 }
 
-/** Cuántos instrumentos se leen a la vez: una consulta paginada por cada uno. */
-const SERIES_CONCURRENCY = 6;
+/** Instrumentos por llamada al RPC `price_series` (una fila por instrumento: no llega a las 1000). */
+const PRICE_SERIES_CHUNK = 50;
 
 /**
- * Cierres diarios (`close` o `adj_close`) de varios instrumentos desde `fromDate`. Cada serie se
- * pagina (PostgREST corta en 1000 filas); los instrumentos se leen en paralelo, de a pocos. Los
- * instrumentos sin filas quedan con una lista vacía.
+ * Cierres diarios (`close` o `adj_close`) de varios instrumentos desde `fromDate`, con el RPC
+ * `price_series`: una llamada cada 50 instrumentos en vez de una consulta paginada por cada uno.
+ * Los instrumentos sin filas quedan con una lista vacía.
  */
 export async function getCloseSeries(
   client: Client,
@@ -383,25 +383,24 @@ export async function getCloseSeries(
   fromDate: string,
   column: "close" | "adj_close",
 ): Promise<Map<string, DailyCloseRow[]>> {
-  const result = new Map<string, DailyCloseRow[]>();
-  for (const group of chunk(instrumentIds, SERIES_CONCURRENCY)) {
-    await Promise.all(
-      group.map(async (instrumentId) => {
-        const rows = await fetchAllPages((from, to) => {
-          let query = loose(client)
-            .from("prices_daily")
-            .select(`date, value:${column}::text`)
-            .eq("instrument_id", instrumentId)
-            .gte("date", fromDate);
-          if (column === "adj_close")
-            query = query.not("adj_close", "is", null);
-          return query.order("date").range(from, to);
-        });
-        result.set(
-          instrumentId,
-          parseRows(dailyCloseRowSchema, rows, "prices_daily"),
-        );
-      }),
+  const unique = [...new Set(instrumentIds)];
+  const result = new Map<string, DailyCloseRow[]>(unique.map((id) => [id, []]));
+  const groups = await Promise.all(
+    chunk(unique, PRICE_SERIES_CHUNK).map(async (group) => {
+      const { data, error } = await client.rpc("price_series", {
+        p_instrument_ids: group,
+        p_from: fromDate,
+        p_adjusted: column === "adj_close",
+      });
+      if (error) throw new Error(`db price_series: ${error.message}`);
+      return parseRows(priceSeriesRowSchema, data, "price_series");
+    }),
+  );
+  for (const row of groups.flat()) {
+    if (!result.has(row.instrument_id)) continue;
+    result.set(
+      row.instrument_id,
+      row.dates.map((date, i) => ({ date, value: row.closes[i]! })),
     );
   }
   return result;
