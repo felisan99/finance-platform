@@ -10,6 +10,8 @@ import {
   formatDayHeader,
   formatDayMonth,
   formatMoney,
+  formatMoneyWhole,
+  formatMonthYear,
   formatPercent,
   formatPoints,
   formatPrice,
@@ -221,5 +223,19 @@ describe("formatos de gráfico (reciben number)", () => {
     expect(plain(formatChartMoney(10468.73))).toBe("US$ 10.468,73");
     expect(formatChartIndex(105)).toBe("105,00");
     expect(formatChartIndex(100.98039)).toBe("100,98");
+  });
+});
+
+describe("formatMoneyWhole y formatMonthYear («Antes de comprar»)", () => {
+  it("un monto redondo, sin centavos", () => {
+    expect(plain(formatMoneyWhole(d("1000")))).toBe("US$ 1.000");
+    expect(plain(formatMoneyWhole(d("1234.5")))).toBe("US$ 1.235");
+    expect(formatMoneyWhole(null)).toBe(EMPTY);
+  });
+
+  it("el mes y el año de una fecha de calendario, sin corrimiento por zona horaria", () => {
+    expect(formatMonthYear("2022-10-03")).toBe("octubre de 2022");
+    expect(formatMonthYear("2026-09-30")).toBe("setiembre de 2026");
+    expect(formatMonthYear("2021-01-01")).toBe("enero de 2021");
   });
 });

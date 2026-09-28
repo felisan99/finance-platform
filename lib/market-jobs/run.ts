@@ -16,7 +16,10 @@ import {
 export const OVERLAP_DAYS = 7;
 /** El historial arranca unos días antes de la primera transacción (rueda previa, feriados). */
 export const TX_MARGIN_DAYS = 7;
-/** Historial de un instrumento que solo está en una watchlist (spec §7.2). */
+/**
+ * Historial mínimo de todo instrumento (spec §7.2): «Antes de comprar» mira el último año de la
+ * cartera y hasta 5 años del candidato, también de lo que se compró hace poco.
+ */
 export const WATCHLIST_YEARS = 5;
 /** Si un cierre ya guardado difiere más que esto de lo que hoy informa Yahoo, se reajustó (split). */
 export const ADJUST_TOLERANCE = new D("0.001");
@@ -28,18 +31,16 @@ export const MAX_ISSUES = 50;
 
 /**
  * Desde qué fecha hace falta historial: la más antigua entre la primera transacción (con margen)
- * y, si está en una watchlist, los últimos 5 años.
+ * y los últimos 5 años. Antes los 5 años eran solo de la watchlist; un instrumento que se compró
+ * hace poco se completa solo en la próxima corrida (`needsBackfill`).
  */
 export function desiredStart(
   instrument: ActiveInstrument,
   today: string,
 ): string {
-  const candidates: string[] = [];
+  const candidates = [addYears(today, -WATCHLIST_YEARS)];
   if (instrument.firstTxDate) {
     candidates.push(addDays(instrument.firstTxDate, -TX_MARGIN_DAYS));
-  }
-  if (instrument.inWatchlist || candidates.length === 0) {
-    candidates.push(addYears(today, -WATCHLIST_YEARS));
   }
   return candidates.sort()[0] as string;
 }

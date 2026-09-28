@@ -16,6 +16,8 @@ import { FakeMarket, MemoryStore, marketState } from "./memory";
 const NOW = new Date("2026-09-24T22:00:00.000Z");
 const SERIES_FROM = "2026-01-01";
 const SERIES_TO = "2026-09-23";
+// Todo instrumento guarda al menos 5 años (desiredStart): la ventana del primer backfill.
+const FIVE_YEARS = "2021-09-24";
 
 function setup() {
   const market = new FakeMarket();
@@ -63,23 +65,27 @@ describe("desiredStart", () => {
 
   it.each([
     [
-      "solo transacciones: primera transacción menos 7 días",
+      "transacción reciente: igual 5 años atrás (lo pide «Antes de comprar»)",
       { firstTxDate: "2026-03-09" },
-      "2026-03-02",
+      "2021-09-24",
     ],
     ["solo watchlist: 5 años atrás", { inWatchlist: true }, "2021-09-24"],
     [
-      "ambas y transacción reciente: manda la watchlist (más historial)",
+      "ambas y transacción reciente: 5 años atrás",
       { firstTxDate: "2026-03-09", inWatchlist: true },
       "2021-09-24",
     ],
     [
-      "ambas y transacción de hace más de 5 años: manda la transacción",
-      { firstTxDate: "2019-01-10", inWatchlist: true },
+      "transacción de hace más de 5 años: manda la transacción menos 7 días",
+      { firstTxDate: "2019-01-10" },
       "2019-01-03",
     ],
+    [
+      "el margen de 7 días cruza el año",
+      { firstTxDate: "2021-01-03" },
+      "2020-12-27",
+    ],
     ["ninguna (no debería pasar): 5 años", {}, "2021-09-24"],
-    ["cruza el año", { firstTxDate: "2026-01-03" }, "2025-12-27"],
   ])("%s", (_label, patch, expected) => {
     expect(desiredStart({ ...base, ...patch }, "2026-09-24")).toBe(expected);
   });
@@ -121,13 +127,13 @@ describe("runMarketJob: backfill inicial e incremental", () => {
     expect(result.status).toBe("ok");
     expect(result.issues).toEqual([]);
     expect(market.calls.history).toEqual([
-      { symbol: "VOO", from: "2026-03-02", to: "2026-09-25" },
+      { symbol: "VOO", from: FIVE_YEARS, to: "2026-09-25" },
     ]);
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-03-02"),
+      only(market.snapshot("VOO"), FIVE_YEARS),
     );
     const voo = store.instruments.get(store.idOf("VOO"));
-    expect(voo?.historyFrom).toBe("2026-03-02");
+    expect(voo?.historyFrom).toBe(FIVE_YEARS);
     expect(voo?.historyBackfilledAt).toBe(NOW.toISOString());
     expect(result.summary).toMatchObject({
       job: "daily-prices",
@@ -218,13 +224,13 @@ describe("runMarketJob: backfill inicial e incremental", () => {
     store.addInstrument("NEW", {
       firstTxDate: "2026-09-10",
       historyBackfilledAt: "2026-09-10T00:00:00.000Z",
-      historyFrom: "2026-09-03",
+      historyFrom: FIVE_YEARS,
     });
 
     await run();
 
     expect(market.calls.history).toEqual([
-      { symbol: "NEW", from: "2026-09-03", to: "2026-09-25" },
+      { symbol: "NEW", from: FIVE_YEARS, to: "2026-09-25" },
     ]);
     expect(store.closesOf("NEW").length).toBeGreaterThan(0);
   });
@@ -258,26 +264,38 @@ describe("runMarketJob: backfill inicial e incremental", () => {
 });
 
 describe("runMarketJob: ventana de historial", () => {
-  it("una transacción más vieja que el historial guardado lo extiende hacia atrás", async () => {
-    const { market, store, run, add } = setup();
-    const voo = add("VOO", "2026-03-09");
-    await run();
-    expect(store.closesOf("VOO")[0]?.date).toBe("2026-03-02");
+  it("una compra reciente igual guarda 5 años de historial (lo usa «Antes de comprar»)", async () => {
+    const { market, store, run } = setup();
+    market.addSeries("VOO", "2020-01-01", SERIES_TO);
+    store.addInstrument("VOO", { firstTxDate: "2026-03-09" });
 
-    voo.firstTxDate = "2026-01-15"; // el usuario cargó una compra anterior
+    await run();
+
+    expect(market.calls.history[0]?.from).toBe(FIVE_YEARS);
+    expect(store.closesOf("VOO")[0]?.date).toBe(FIVE_YEARS);
+  });
+
+  it("una transacción más vieja que el historial guardado lo extiende hacia atrás", async () => {
+    const { market, store, run } = setup();
+    market.addSeries("VOO", "2020-01-01", SERIES_TO);
+    const voo = store.addInstrument("VOO", { firstTxDate: "2026-03-09" });
+    await run();
+    expect(store.closesOf("VOO")[0]?.date).toBe(FIVE_YEARS);
+
+    voo.firstTxDate = "2020-06-15"; // el usuario cargó una compra de hace más de 5 años
 
     const result = await run();
 
     expect(result.summary).toMatchObject({ backfilled: 1, incremental: 0 });
     expect(market.calls.history.at(-1)).toEqual({
       symbol: "VOO",
-      from: "2026-01-08",
+      from: "2020-06-08",
       to: "2026-09-25",
     });
-    expect(voo.historyFrom).toBe("2026-01-08");
-    expect(store.closesOf("VOO")[0]?.date).toBe("2026-01-08");
+    expect(voo.historyFrom).toBe("2020-06-08");
+    expect(store.closesOf("VOO")[0]?.date).toBe("2020-06-08");
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-01-08"),
+      only(market.snapshot("VOO"), "2020-06-08"),
     );
   });
 
@@ -336,7 +354,7 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
     });
     // Nada quedó en la escala vieja: lo guardado es exactamente lo que Yahoo devuelve hoy.
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-03-02"),
+      only(market.snapshot("VOO"), FIVE_YEARS),
     );
     expect(
       store.closesOf("VOO").find((r) => r.date === "2026-03-09")?.close,
@@ -347,13 +365,13 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
     // Ventana incremental primero y después la descarga completa desde el mismo inicio.
     expect(market.calls.history.slice(-2)).toEqual([
       { symbol: "VOO", from: "2026-09-16", to: "2026-09-25" },
-      { symbol: "VOO", from: "2026-03-02", to: "2026-09-25" },
+      { symbol: "VOO", from: FIVE_YEARS, to: "2026-09-25" },
     ]);
     // El instrumento queda "pendiente" y recién al final se marca como descargado.
     const marks = store.log.filter((l) => l.startsWith("mark"));
     expect(marks).toEqual([
       "markNeedsBackfill VOO",
-      "markBackfilled VOO 2026-03-02",
+      `markBackfilled VOO ${FIVE_YEARS}`,
     ]);
   });
 
@@ -383,7 +401,7 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
       { type: "SPLIT", exDate: "2026-09-24", ratio: "0.1" },
     ]);
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-03-02"),
+      only(market.snapshot("VOO"), FIVE_YEARS),
     );
   });
 
@@ -408,7 +426,7 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
       .find((r) => r.date === "2026-03-09")?.adjClose;
     expect(adjAfter).toBe(new D(adjBefore as string).times("0.99").toFixed());
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-03-02"),
+      only(market.snapshot("VOO"), FIVE_YEARS),
     );
   });
 
@@ -451,7 +469,7 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
 
     expect(result.summary.rebackfilled).toBe(1);
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-03-02"),
+      only(market.snapshot("VOO"), FIVE_YEARS),
     );
   });
 
@@ -473,7 +491,7 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
       false,
     );
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-03-02"),
+      only(market.snapshot("VOO"), FIVE_YEARS),
     );
   });
 
@@ -510,7 +528,7 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
       { type: "SPLIT", exDate: "2026-09-24", ratio: "10" },
     ]);
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-03-02"),
+      only(market.snapshot("VOO"), FIVE_YEARS),
     );
   });
 
@@ -540,7 +558,7 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
     const next = await run();
     expect(next.summary.backfilled).toBe(1);
     expect(store.closesOf("VOO")).toEqual(
-      only(market.snapshot("VOO"), "2026-03-02"),
+      only(market.snapshot("VOO"), FIVE_YEARS),
     );
     expect(next.status).toBe("ok");
   });
@@ -581,7 +599,7 @@ describe("runMarketJob: fallos y presupuesto", () => {
       failed: 0,
     });
     expect(store.closesOf("BBB")).toEqual(
-      only(market.snapshot("BBB"), "2026-03-02"),
+      only(market.snapshot("BBB"), FIVE_YEARS),
     );
   });
 

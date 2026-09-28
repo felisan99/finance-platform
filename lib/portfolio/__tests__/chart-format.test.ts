@@ -3,6 +3,7 @@ import {
   formatChartMoney,
   formatChartMoneySigned,
   formatChartPercent,
+  formatChartThousandsTick,
   formatChartTick,
   formatDateKey,
   formatDayMonthKey,
@@ -33,5 +34,12 @@ describe("formatos de gráficos", () => {
     expect(formatChartTick(2500, 0)).toBe("2500");
     expect(formatDateKey("2026-09-23")).toBe("23/09/2026");
     expect(formatDayMonthKey("2026-09-23")).toBe("23/09");
+  });
+
+  it("marcas de un eje en miles, con los decimales del paso dividido", () => {
+    expect(formatChartThousandsTick(250000, 0)).toBe("250 mil");
+    expect(formatChartThousandsTick(2500, 1)).toBe("2,5 mil");
+    expect(formatChartThousandsTick(1500000, 0)).toBe("1500 mil");
+    expect(formatChartThousandsTick(0, 0)).toBe("0");
   });
 });

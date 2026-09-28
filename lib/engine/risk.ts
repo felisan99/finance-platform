@@ -134,8 +134,17 @@ export function computeRisk(
 }
 
 function annualizedVolatility(returns: readonly DayReturn[]): number | null {
-  if (returns.length < MIN_VOLATILITY_DAYS) return null;
-  const values = returns.map((r) => r.value.toNumber());
+  return annualizedVolatilityOf(returns.map((r) => r.value.toNumber()));
+}
+
+/**
+ * Volatilidad anualizada de retornos diarios en fracción (desvío muestral × √252). `null` con menos
+ * de `MIN_VOLATILITY_DAYS` retornos. Es una tasa para mostrar: `number`, no un monto.
+ */
+export function annualizedVolatilityOf(
+  values: readonly number[],
+): number | null {
+  if (values.length < MIN_VOLATILITY_DAYS) return null;
   const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
   const variance =
     values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (values.length - 1);

@@ -60,3 +60,10 @@ const chartPercentSigned = new Intl.NumberFormat(LOCALE, {
 /** Puntos porcentuales ya multiplicados por 100 (5,06 = 5,06 %) con signo: `+5,06%`. */
 export const formatChartPercent = (value: number): string =>
   `${chartPercentSigned.format(value)}%`;
+
+/** Marca de un eje en miles: `250000` → `250 mil` (el cero, solo). `decimals` son los del paso ya dividido por mil. */
+export const formatChartThousandsTick = (
+  value: number,
+  decimals: number,
+): string =>
+  value === 0 ? "0" : `${formatChartTick(value / 1000, decimals)} mil`;

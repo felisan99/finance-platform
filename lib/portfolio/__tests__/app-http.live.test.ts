@@ -20,6 +20,7 @@ import {
   rowToTransaction,
 } from "../mappers";
 import {
+  getInstrumentIdsBySymbol,
   getInstruments,
   getPrimaryAccount,
   getTransactionIdsByImport,
@@ -419,8 +420,22 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(html).toContain("Evolución del precio");
     expect(html).toContain("Tus operaciones en el gráfico");
     expect(html).toContain("Datos del fondo"); // VOO es un ETF
+    // «Antes de comprar»: la cartera antes y después, y la simulación de aportes (5 años de VOO).
+    const plain = text(html);
+    expect(plain).toContain("Antes de comprar");
+    expect(plain).toContain("Qué le hace a tu cartera");
+    expect(plain).toContain("VOO en tu cartera");
+    expect(plain).toContain("Volatilidad (1 año)");
+    expect(plain).toContain("Parecido con el resto de tu cartera");
+    expect(plain).toContain("¿Lo habrías aguantado?");
+    expect(plain).toMatch(
+      /US\$ [\d.]+ por mes desde \w+ de 20\d\d \(\d+ aportes\)/,
+    );
+    expect(plain).toContain("Lo mismo en S&amp;P 500");
+    expect(plain).toContain("no es una recomendación de compra");
     // Un error del servidor dentro de una tarjeta con `<Suspense>` no cambia el 200: deja un `digest`.
     expect(html).not.toContain("digest");
+    expect(plain).not.toContain("No pudimos calcular esto ahora");
     // Tolera minúsculas y punto en la URL, como el alta manual.
     expect((await page("/positions/voo", a)).status).toBe(200);
     // Una posición cerrada también tiene detalle.
@@ -802,6 +817,9 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(detail.html).not.toContain("digest");
     expect(detail.html).toContain("Dejar de seguir");
     expect(detail.html).toContain("no tenés una posición");
+    // Sin cierres ajustados por dividendos (solo `close`) no hay nada que simular: la tarjeta no está
+    // (el título sí viaja en el esqueleto de carga; lo que no llega es el contenido).
+    expect(detail.html).not.toContain("¿Lo habrías aguantado?");
     expect(detail.html).not.toContain("Costo promedio");
     expect(detail.html).not.toContain("Operaciones (");
 
@@ -821,6 +839,68 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect((await page("/watchlist", b)).html).toContain(
       "Todavía no seguís ningún símbolo",
     );
+  });
+
+  it("«Antes de comprar» con historia real: sin cartera, con cartera y con una salida a bolsa reciente", async () => {
+    // Instrumentos reales de finance-dev (los mantiene el cron): NVDA tiene 5 años de cierres y
+    // CRCL salió a bolsa en junio de 2025.
+    const ids = await getInstrumentIdsBySymbol(admin, ["NVDA", "CRCL"]);
+    const nvda = ids.get("NVDA");
+    const crcl = ids.get("CRCL");
+    if (!nvda || !crcl) throw new Error("faltan NVDA o CRCL en finance-dev");
+
+    const follow = async (session: Session, instrumentId: string) => {
+      const { data: list } = await session.client
+        .from("watchlists")
+        .select("id")
+        .limit(1)
+        .single();
+      const { error } = await session.client.from("watchlist_items").insert({
+        watchlist_id: list!.id,
+        instrument_id: instrumentId,
+        user_id: session.userId,
+      });
+      expect(error).toBeNull();
+    };
+    await follow(b, nvda);
+    await follow(a, nvda);
+    await follow(a, crcl);
+
+    try {
+      // Sin posiciones: no hay "antes", pero sí la simulación con 1, 3 y 5 años.
+      const alone = await page("/positions/NVDA", b);
+      expect(alone.status).toBe(200);
+      const aloneText = text(alone.html);
+      expect(aloneText).toContain("Antes de comprar");
+      expect(aloneText).toContain("Cuando tengas posiciones");
+      expect(aloneText).toContain("Sin depósitos en los últimos 12 meses");
+      expect(aloneText).toMatch(/>1 año</);
+      expect(aloneText).toMatch(/>5 años</);
+      expect(alone.html).not.toContain("digest");
+
+      // Con la cartera del fixture: NVDA suma al grupo Tecnología y se compara con lo que hay.
+      const withPortfolio = text((await page("/positions/NVDA", a)).html);
+      expect(withPortfolio).toContain("NVDA en tu cartera");
+      expect(withPortfolio).toContain("Tecnología");
+      expect(withPortfolio).toMatch(/Lo que más se le parece: [A-Z]+ \(/);
+
+      // Una salida a bolsa reciente: 1 año y «Todo», que arranca en junio de 2025.
+      const ipo = await page("/positions/CRCL", a);
+      expect(ipo.status).toBe(200);
+      const ipoText = text(ipo.html);
+      expect(ipoText).toMatch(/>Todo</);
+      expect(ipoText).not.toMatch(/>5 años</);
+      expect(ipoText).toContain("de 2025 (");
+      expect(ipo.html).not.toContain("digest");
+      expect(ipoText).not.toContain("No pudimos calcular esto ahora");
+    } finally {
+      for (const session of [a, b]) {
+        await session.client
+          .from("watchlist_items")
+          .delete()
+          .in("instrument_id", [nvda, crcl]);
+      }
+    }
   });
 
   it("«Actualizar precios»: con la cotización de hoy el gráfico llega al mismo valor que Inicio, y sin la del benchmark queda en el cierre", async () => {

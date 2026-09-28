@@ -67,6 +67,19 @@ export function formatPercent(
   return formatter.format(text(clean(fraction, 4)));
 }
 
+const moneyWhole = new Intl.NumberFormat(LOCALE, {
+  style: "currency",
+  currency: "USD",
+  currencyDisplay: "symbol",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+/** Un monto redondo sin centavos: `US$ 1.000` (montos elegidos, no resultados). */
+export function formatMoneyWhole(value: Dec | null): string {
+  return value === null ? EMPTY : moneyWhole.format(text(value.round()));
+}
+
 /** Cantidad de acciones: hasta 8 decimales, sin ceros de relleno. */
 export function formatQuantity(value: Dec | null): string {
   return value === null ? EMPTY : quantity.format(text(value));
@@ -150,6 +163,17 @@ const dayHeader = new Intl.DateTimeFormat(LOCALE, {
 /** Encabezado de un día (`miércoles, 23 de setiembre`) a partir de su clave `YYYY-MM-DD`. */
 export function formatDayHeader(dateKey: string): string {
   return dayHeader.format(new Date(`${dateKey}T12:00:00Z`));
+}
+
+const monthYear = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: "UTC",
+  month: "long",
+  year: "numeric",
+});
+
+/** El mes de una fecha de calendario: `2022-10-03` → `octubre de 2022`. */
+export function formatMonthYear(dateKey: string): string {
+  return monthYear.format(new Date(`${dateKey.slice(0, 7)}-15T12:00:00Z`));
 }
 
 export { APP_TZ };

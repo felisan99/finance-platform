@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Suspense } from "react";
 import {
+  BeforeBuySection,
+  BeforeBuySkeleton,
+} from "@/components/app/before-buy-section";
+import {
   CompanySkeleton,
   CompanyStatsCard,
 } from "@/components/app/company-stats-card";
@@ -18,18 +22,22 @@ import type { Database } from "@/lib/db/database.types";
 import { kindOf, providerSymbolOf } from "@/lib/portfolio/company-data";
 import { formatDayMonth, formatPrice } from "@/lib/portfolio/format";
 import type { InstrumentRow } from "@/lib/portfolio/rows";
+import type { PortfolioSnapshot } from "@/lib/portfolio/snapshot";
 import { loadSymbolView } from "@/lib/portfolio/watchlist-data";
 
 /**
  * Detalle de un símbolo que se sigue pero no se tiene (spec §10.4): precio, cambio del día, el
- * gráfico con rango (1S/1M/1A) y el rango de 52 semanas, y los datos de la empresa. Sin costos ni
- * operaciones: no hay posición.
+ * gráfico con rango (1S/1M/1A) y el rango de 52 semanas, «Antes de comprar» y los datos de la
+ * empresa. Sin costos ni operaciones: no hay posición.
  */
 export async function FollowedSymbolView({
   supabase,
+  snapshot,
   instrument,
 }: {
   supabase: SupabaseClient<Database>;
+  // La cartera de la persona, para «Antes de comprar»; `null` si todavía no tiene cuenta.
+  snapshot: PortfolioSnapshot | null;
   instrument: InstrumentRow;
 }) {
   const view = await loadSymbolView(supabase, instrument, new Date());
@@ -101,6 +109,14 @@ export async function FollowedSymbolView({
           />
         </Suspense>
       )}
+
+      <Suspense fallback={<BeforeBuySkeleton />}>
+        <BeforeBuySection
+          client={supabase}
+          snapshot={snapshot}
+          instrument={instrument}
+        />
+      </Suspense>
 
       <Suspense
         fallback={

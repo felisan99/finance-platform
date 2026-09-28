@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import {
+  BeforeBuySection,
+  BeforeBuySkeleton,
+} from "@/components/app/before-buy-section";
+import {
   CompanySkeleton,
   CompanyStatsCard,
 } from "@/components/app/company-stats-card";
@@ -71,6 +75,7 @@ export default async function PositionDetailPage({
     return (
       <FollowedSymbolView
         supabase={supabase}
+        snapshot={snapshot}
         instrument={followedItem.instruments}
       />
     );
@@ -180,6 +185,14 @@ export default async function PositionDetailPage({
             asOf: position.priceAsOf,
             source: position.priceSource,
           }}
+        />
+      </Suspense>
+
+      <Suspense fallback={<BeforeBuySkeleton />}>
+        <BeforeBuySection
+          client={supabase}
+          snapshot={snapshot}
+          instrument={instrument}
         />
       </Suspense>
 

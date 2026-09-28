@@ -54,7 +54,11 @@ export type {
   PeriodId,
   PeriodResult,
 } from "./performance";
-export { MIN_VOLATILITY_DAYS, computeRisk } from "./risk";
+export {
+  MIN_VOLATILITY_DAYS,
+  annualizedVolatilityOf,
+  computeRisk,
+} from "./risk";
 export type {
   DayReturn,
   DrawdownPoint,
@@ -63,3 +67,22 @@ export type {
 } from "./risk";
 export { computeMonthlyReturns } from "./monthly";
 export type { MonthlyReturn } from "./monthly";
+export {
+  MIN_SHARED_DAYS,
+  alignReturns,
+  analyzeFit,
+  correlation,
+  priceDrawdown,
+  simulateAddition,
+  simulateMonthlyPlan,
+  typicalMonthlyDeposit,
+} from "./what-if";
+export type {
+  AdditionResult,
+  AlignedReturns,
+  Composition,
+  FitResult,
+  MonthlyPlanResult,
+  PlanPoint,
+  Underwater,
+} from "./what-if";
