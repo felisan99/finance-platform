@@ -18,6 +18,12 @@ project_id = "finance-platform"
 [auth]
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000/**"]
+# Token de acceso de 1 semana (el máximo; por defecto 1 h). Cada renovación rota el refresh token
+# y, si la respuesta con las cookies nuevas no llega (iOS suspende la app instalada a mitad de una
+# petición), el siguiente uso del token viejo pasados 10 s revoca la sesión entera: con 1 h la
+# sesión del teléfono moría en un par de días. Costo aceptado: un token de acceso robado o de una
+# sesión cerrada sigue valiendo hasta vencer (las cookies son HttpOnly). Ver docs/decisions.md.
+jwt_expiry = 604800
 
 # Registro solo por invitación: rechaza el alta si el email no está en public.allowed_emails
 # (función creada en la migración signup_gate_and_defaults).
