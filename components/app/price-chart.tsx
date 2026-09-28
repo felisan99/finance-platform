@@ -16,6 +16,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import type { PositionChartData } from "@/lib/portfolio/chart-data";
+import { axisWidthFor } from "@/lib/portfolio/chart-format";
 
 const config = {
   close: { label: "Cierre", color: "var(--foreground)" },
@@ -78,7 +79,10 @@ export function PriceChart({
           />
           <YAxis
             domain={[min - pad, max + pad]}
-            width={46}
+            width={axisWidthFor(
+              [min - pad, max + pad].map((v) => String(Math.round(v))),
+              46,
+            )}
             tickFormatter={(value: number) => String(Math.round(value))}
           />
           <ChartTooltip

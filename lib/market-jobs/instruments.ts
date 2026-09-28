@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { chunk } from "@/lib/db/paginate";
 import type { Database } from "@/lib/db/database.types";
 import { MarketDataError, type MarketDataProvider } from "@/lib/market-data";
+import type { InstrumentType } from "@/lib/market-data/types";
 import { cleanText } from "@/lib/market-data/sanitize";
 import { SYMBOL_PATTERN } from "@/lib/validation/transaction";
 
@@ -12,7 +13,7 @@ import { SYMBOL_PATTERN } from "@/lib/validation/transaction";
 export interface NewInstrument {
   symbol: string;
   name: string | null;
-  type: "STOCK" | "ETF";
+  type: InstrumentType;
 }
 
 /** Tope por llamada: una importación no puede llenar la tabla compartida de símbolos. */
@@ -82,7 +83,8 @@ export type ResolveResult =
 
 /**
  * Verifica un símbolo NUEVO contra el proveedor antes de crearlo (alta manual): tiene que existir,
- * ser una acción o ETF y cotizar en USD. Así un error de tipeo no llena la tabla compartida.
+ * ser una acción, un ETF o una cripto, y cotizar en USD (así `BTC-EUR` queda afuera). Así un error
+ * de tipeo no llena la tabla compartida.
  */
 export async function resolveNewInstrument(
   provider: MarketDataProvider,
@@ -111,7 +113,10 @@ export async function resolveNewInstrument(
       ? await provider.getProfile(symbol)
       : null;
     if (!profile?.type) {
-      return fail("UNSUPPORTED", "Por ahora solo se admiten acciones y ETFs");
+      return fail(
+        "UNSUPPORTED",
+        "Por ahora solo se admiten acciones, ETFs y cripto en USD",
+      );
     }
     if (profile.currency !== null && profile.currency !== "USD") {
       return fail(

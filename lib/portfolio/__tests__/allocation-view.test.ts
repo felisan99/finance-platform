@@ -114,8 +114,8 @@ describe("buildAllocationViews: tipos raros", () => {
   it("se normaliza el tipo (espacios y mayúsculas) y uno desconocido se muestra capitalizado", () => {
     const types: Record<string, string | null> = {
       AAA: " etf ",
-      BBB: "crypto",
-      CCC: null,
+      BBB: "crypto", // la cripto se llama «Cripto»
+      CCC: "bond",
     };
     const type = view(
       buildAllocationViews(valued, (s) => types[s] ?? null),
@@ -124,8 +124,8 @@ describe("buildAllocationViews: tipos raros", () => {
     expect(type.map((s) => s.label)).toEqual([
       "Efectivo", // 1000 − 300 = 700
       "ETF", // AAA 300
-      "Crypto", // BBB 200
-      "Sin clasificar", // CCC 100
+      "Cripto", // BBB 200
+      "Bond", // CCC 100: desconocido, capitalizado
     ]);
   });
 

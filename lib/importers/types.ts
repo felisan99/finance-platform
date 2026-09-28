@@ -1,4 +1,5 @@
 import type { Transaction } from "@/lib/engine";
+import type { InstrumentType } from "@/lib/market-data/types";
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
   ? Omit<T, K>
@@ -27,7 +28,7 @@ export type TransactionDraft = DistributiveOmit<
 export interface InstrumentInfo {
   symbol: string;
   name: string | null;
-  type: "STOCK" | "ETF";
+  type: InstrumentType;
 }
 
 export type SkipReason =

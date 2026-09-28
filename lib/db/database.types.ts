@@ -558,7 +558,10 @@ export type Database = {
         }[]
       }
       clear_login_attempts: { Args: { p_key: string }; Returns: undefined }
-      create_portfolio: { Args: { p_name: string }; Returns: string }
+      create_portfolio: {
+        Args: { p_benchmark?: string; p_name: string }
+        Returns: string
+      }
       hook_before_user_created: { Args: { event: Json }; Returns: Json }
       import_transactions: {
         Args: {

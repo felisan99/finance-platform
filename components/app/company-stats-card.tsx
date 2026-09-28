@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buildCompanyRows } from "@/lib/portfolio/company-view";
-import { loadCompanyData } from "@/lib/portfolio/company-data";
+import type { CompanyKind } from "@/lib/market-data";
+import { companyTitle, loadCompanyData } from "@/lib/portfolio/company-data";
 
 /** Lo que se ve mientras se traen los datos de la empresa. */
 export function CompanySkeleton({ title }: { title: string }) {
@@ -27,9 +28,9 @@ export async function CompanyStatsCard({
   kind,
 }: {
   providerSymbol: string;
-  kind: "stock" | "etf";
+  kind: CompanyKind;
 }) {
-  const title = kind === "etf" ? "Datos del fondo" : "Datos de la empresa";
+  const title = companyTitle(kind);
   const data = await loadCompanyData(providerSymbol, kind);
   if (data === null) {
     return (

@@ -1,3 +1,4 @@
+import { benchmarkLabel } from "./benchmarks";
 import {
   MIN_VOLATILITY_DAYS,
   MIN_XIRR_DAYS,
@@ -136,10 +137,7 @@ export interface PerformanceView {
   notes: string[];
 }
 
-export function benchmarkLabel(symbol: string | null): string {
-  if (symbol === null) return "Benchmark";
-  return symbol === "SPY" ? "S&P 500" : symbol;
-}
+export { benchmarkLabel } from "./benchmarks";
 
 function metric(value: Dec | null): MetricView {
   if (value === null) return { text: EMPTY, tone: null };

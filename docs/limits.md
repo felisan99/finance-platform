@@ -58,6 +58,10 @@ Implicancias para el proyecto:
 - Devuelve `close` nulo en algunos días hábiles, reajusta hacia atrás el historial en cada split y dividendo, y trae ruido de float32 en los precios: ver `docs/decisions.md`.
 - `yahoo-finance2` 4.0.2 trae ~100 paquetes (incluye un SDK de MCP con express y hono que la app no usa). Sin scripts de instalación; `pnpm audit` sin vulnerabilidades conocidas.
 - **Datos de la empresa y series intradía (2026-09-25):** `quoteSummary` (`summaryDetail`, `defaultKeyStatistics`, `earningsHistory`, `calendarEvents`) y `chart` de 30 min y 1 hora respondieron bien para GOOGL, AAPL, NVDA y VOO. Para un ETF, `earningsHistory` y `calendarEvents` fallan con «No fundamentals data found»: no se piden. Cada visita a una ficha puede sumar 2 consultas (datos y ganancias) y cada rango que se toca, 1; las cachea el servidor (1 hora y 5 minutos) y las limita `search_symbols` (30 por minuto por usuario). Yahoo ya sacó módulos de balances sin aviso en 2024: por eso todo campo es opcional.
+- **Cripto (2026-09-28):** `search`, `quote`, `quoteSummary` y `chart` responden para `BTC-USD` y `ETH-USD`, con `quoteType` `CRYPTOCURRENCY` y bolsa `CCC`.
+  - El historial viene en UTC (`exchangeTimezoneName: "UTC"`) con barras todos los días. La sesión «regular» es el día UTC entero, así que la barra del día en curso se descarta como la de una rueda abierta.
+  - 5 años de BTC-USD son 1826 filas.
+  - El cron corre de lunes a viernes: las barras del fin de semana entran el lunes (se relee una semana hacia atrás), y un fin de semana la cotización de hoy llega con «Actualizar precios».
 - **No verificado:** que Yahoo no bloquee las IPs de datacenter de Vercel. Se comprueba en el deploy (Fase 7) corriendo el cron una vez y mirando `market_job_runs`.
 
 ### Next.js en Vercel (Fase 4)

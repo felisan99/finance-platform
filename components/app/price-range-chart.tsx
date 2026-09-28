@@ -20,6 +20,7 @@ import {
 import { niceScale } from "@/lib/portfolio/chart-scale";
 import {
   formatChartMoney,
+  axisWidthFor,
   formatChartTick,
 } from "@/lib/portfolio/chart-format";
 import {
@@ -188,7 +189,12 @@ export function PriceRangeChart({
                 domain={scale.domain}
                 ticks={scale.ticks}
                 interval={0}
-                width={48}
+                width={axisWidthFor(
+                  scale.ticks.map((tick) =>
+                    formatChartTick(tick, scale.decimals),
+                  ),
+                  48,
+                )}
                 tickFormatter={(value: number) =>
                   formatChartTick(value, scale.decimals)
                 }

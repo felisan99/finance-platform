@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import {
+  BenchmarkForm,
   DeletePortfolioForm,
   RenamePortfolioForm,
 } from "@/components/app/portfolio-forms";
@@ -35,6 +36,18 @@ export default async function PortfolioSettingsPage({
         </CardHeader>
         <CardContent>
           <RenamePortfolioForm id={portfolio.id} name={portfolio.name} />
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle className="text-sm">Comparar el rendimiento</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <BenchmarkForm
+            id={portfolio.id}
+            benchmark={portfolio.benchmarkSymbol}
+          />
         </CardContent>
       </Card>
 

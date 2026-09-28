@@ -224,3 +224,33 @@ describe("buildCompanyRows: ETF", () => {
     }
   });
 });
+
+describe("buildCompanyRows: cripto", () => {
+  it("solo lo que tiene sentido para una moneda: precios, volumen y capitalización", () => {
+    const btc: CompanyData = {
+      ...empty,
+      kind: "crypto",
+      previousClose: "84458.09",
+      open: "84458.09",
+      dayLow: "83100",
+      dayHigh: "84900.5",
+      fiftyTwoWeekLow: "60000",
+      fiftyTwoWeekHigh: "110000",
+      volume: 36_658_421_071,
+      marketCap: 1_676_000_000_000,
+      // Aunque Yahoo mandara algo de esto, en una moneda no se muestra.
+      trailingPE: "12",
+      dividendYield: "0.01",
+      sharesOutstanding: 20_090_481,
+    };
+    expect(buildCompanyRows(btc).map((row) => row.label)).toEqual([
+      "Cierre anterior",
+      "Apertura",
+      "Rango del día",
+      "Rango de 52 semanas",
+      "Volumen",
+      "Capitalización",
+    ]);
+    expect(buildCompanyRows(btc).at(-1)?.value).toBe("US$ 1,68 billones");
+  });
+});

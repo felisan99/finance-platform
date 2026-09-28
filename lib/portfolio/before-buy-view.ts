@@ -48,6 +48,7 @@ const QUESTION_DEPTH = d("-0.1");
 
 const SECTOR_LABELS: Record<string, string> = {
   ETF: "ETFs",
+  CRYPTO: "Cripto",
   Technology: "Tecnología",
   Healthcare: "Salud",
   "Financial Services": "Servicios financieros",
@@ -137,7 +138,7 @@ export interface BeforeBuyInput {
   /** `null` si la persona todavía no tiene cuenta. */
   valued: ValuedPortfolio | null;
   transactions: readonly Transaction[];
-  /** Sector (o "ETF") de cada símbolo, para la fila del grupo. */
+  /** Sector (o "ETF", "CRYPTO") de cada símbolo, para la fila del grupo. */
   groupOf: (symbol: string) => string | null;
   /** Cierres ajustados por dividendos (`adj_close`) del candidato, hasta 5 años. */
   candidateCloses: readonly DailyClose[];

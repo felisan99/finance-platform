@@ -102,6 +102,48 @@ describe("varios portafolios (integración, finance-dev)", () => {
     ]);
   });
 
+  it("create_portfolio con benchmark: el elegido queda guardado; uno con formato inválido, no", async () => {
+    const id = must(
+      await a.client.rpc("create_portfolio", {
+        p_name: "Cripto con BTC",
+        p_benchmark: "BTC-USD",
+      }),
+      "alta con benchmark",
+    );
+    expect(
+      must(
+        await admin
+          .from("portfolios")
+          .select("benchmark_symbol")
+          .eq("id", id)
+          .single(),
+        "benchmark",
+      ).benchmark_symbol,
+    ).toBe("BTC-USD");
+    const bad = await a.client.rpc("create_portfolio", {
+      p_name: "Mal benchmark",
+      p_benchmark: "btc usd",
+    });
+    expect(bad.error?.code).toBe(PG.checkViolation);
+    // Se borra para que los que siguen cuenten igual.
+    await a.client.from("portfolios").delete().eq("id", id);
+  });
+
+  it("instruments admite el tipo CRYPTO (y sigue rechazando uno inventado)", async () => {
+    const symbol = `ZT${Math.random().toString(16).slice(2, 6).toUpperCase()}-USD`;
+    const created = await admin
+      .from("instruments")
+      .insert({ symbol, name: "Moneda de prueba", type: "CRYPTO" })
+      .select("id")
+      .single();
+    expect(created.error).toBeNull();
+    const invented = await admin
+      .from("instruments")
+      .insert({ symbol: `${symbol}X`, type: "BOND" });
+    expect(invented.error?.code).toBe(PG.checkViolation);
+    await admin.from("instruments").delete().eq("id", created.data!.id);
+  });
+
   it("sin sesión no se puede crear", async () => {
     const { error } = await createAnon().rpc("create_portfolio", {
       p_name: "Anónimo",

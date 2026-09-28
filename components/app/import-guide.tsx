@@ -15,10 +15,14 @@ const COLUMNS: ReadonlyArray<readonly [string, string, string]> = [
   [
     "simbolo",
     "Compra, venta, dividendo",
-    "El ticker de EE.UU.: VOO, AAPL, BRK-B",
+    "El ticker de EE.UU. (VOO, AAPL, BRK-B) o la cripto en USD (BTC-USD)",
   ],
-  ["cantidad", "Compra, venta", "Cuántas acciones (admite fracciones: 0.5)"],
-  ["precio", "Compra, venta", "Precio POR acción en USD (no el total)"],
+  [
+    "cantidad",
+    "Compra, venta",
+    "Cuántas acciones o monedas (admite fracciones: 0.5)",
+  ],
+  ["precio", "Compra, venta", "Precio POR unidad en USD (no el total)"],
   ["monto", "Depósito, retiro, dividendo", "El total en USD"],
   ["comision", "Opcional", "Comisión de la operación en USD"],
   ["notas", "Opcional", "Lo que quieras anotar"],

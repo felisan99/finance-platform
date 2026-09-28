@@ -13,6 +13,7 @@ import {
   type RangeInputPoint,
 } from "./range-chart";
 import type { InstrumentRow } from "./rows";
+import type { CompanyKind } from "@/lib/market-data";
 
 // Lectura de los datos de la empresa y de las series intradía a Yahoo, con caché. Son datos públicos
 // (los mismos para todos), no de una persona: se comparten entre usuarios y visitas. La caché de
@@ -26,10 +27,7 @@ export const COMPANY_TTL_SECONDS = 60 * 60;
 export const INTRADAY_TTL_SECONDS = 5 * 60;
 
 const fetchCompany = unstable_cache(
-  async (
-    providerSymbol: string,
-    kind: "stock" | "etf",
-  ): Promise<CompanyData> => {
+  async (providerSymbol: string, kind: CompanyKind): Promise<CompanyData> => {
     const provider = await getMarketDataProvider();
     if (!provider.getCompanyData) {
       throw new Error("el proveedor configurado no da datos de la empresa");
@@ -59,9 +57,20 @@ const fetchIntraday = unstable_cache(
   { revalidate: INTRADAY_TTL_SECONDS },
 );
 
-export const kindOf = (
-  instrument: Pick<InstrumentRow, "type">,
-): "stock" | "etf" => (instrument.type === "ETF" ? "etf" : "stock");
+export const kindOf = (instrument: Pick<InstrumentRow, "type">): CompanyKind =>
+  instrument.type === "ETF"
+    ? "etf"
+    : instrument.type === "CRYPTO"
+      ? "crypto"
+      : "stock";
+
+/** El título de la tarjeta de datos según lo que es el activo. */
+export const companyTitle = (kind: CompanyKind): string =>
+  kind === "etf"
+    ? "Datos del fondo"
+    : kind === "crypto"
+      ? "Datos de la moneda"
+      : "Datos de la empresa";
 
 /** El símbolo con el que Yahoo conoce al instrumento (casi siempre el mismo). */
 export const providerSymbolOf = (
@@ -75,7 +84,7 @@ export const providerSymbolOf = (
 export const loadCompanyData = cache(
   async (
     providerSymbol: string,
-    kind: "stock" | "etf",
+    kind: CompanyKind,
   ): Promise<CompanyData | null> => {
     try {
       return await fetchCompany(providerSymbol, kind);

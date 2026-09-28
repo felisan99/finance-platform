@@ -286,7 +286,7 @@ describe("resolveNewInstrument", () => {
     });
   });
 
-  it("solo acciones y ETFs: un fondo común o un índice (tipo desconocido) se rechazan", async () => {
+  it("solo acciones, ETFs y cripto: un fondo común o un índice (tipo desconocido) se rechazan", async () => {
     const { provider: p } = provider({
       quotes: { VTSAX: {} },
       profiles: { VTSAX: { type: null } },
@@ -294,7 +294,25 @@ describe("resolveNewInstrument", () => {
     expect(await resolveNewInstrument(p, "VTSAX")).toMatchObject({
       ok: false,
       reason: "UNSUPPORTED",
-      message: expect.stringMatching(/acciones y ETFs/),
+      message: expect.stringMatching(/acciones, ETFs y cripto en USD/),
+    });
+  });
+
+  it("una cripto en USD se admite; la misma en otra moneda, no", async () => {
+    const { provider: p } = provider({
+      quotes: { "BTC-USD": {}, "BTC-EUR": { currency: "EUR" } },
+      profiles: {
+        "BTC-USD": { type: "CRYPTO", name: "Bitcoin USD", sector: null },
+        "BTC-EUR": { type: "CRYPTO", currency: "EUR" },
+      },
+    });
+    expect(await resolveNewInstrument(p, "BTC-USD")).toEqual({
+      ok: true,
+      instrument: { symbol: "BTC-USD", name: "Bitcoin USD", type: "CRYPTO" },
+    });
+    expect(await resolveNewInstrument(p, "BTC-EUR")).toMatchObject({
+      ok: false,
+      reason: "UNSUPPORTED",
     });
   });
 

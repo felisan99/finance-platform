@@ -42,6 +42,15 @@ export function formatChartTick(value: number, decimals: number): string {
   return format.format(value);
 }
 
+/**
+ * Ancho del eje vertical según su marca más larga: Recharts parte en dos renglones (o corta) una
+ * marca que no entra, y con precios de seis cifras (Bitcoin) «125000» no entra en 48 px.
+ */
+export function axisWidthFor(texts: readonly string[], min = 44): number {
+  const longest = texts.reduce((max, text) => Math.max(max, text.length), 0);
+  return Math.max(min, longest * 8 + 14);
+}
+
 const chartMoneySigned = new Intl.NumberFormat(LOCALE, {
   style: "currency",
   currency: "USD",

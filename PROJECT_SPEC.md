@@ -25,7 +25,7 @@
 
 ## 1. Visión
 
-Una web app personal para hacer seguimiento de un portafolio de inversiones (acciones y ETFs de EE.UU., broker Interactive Brokers), con métricas serias de rendimiento, instalable en el iPhone como PWA, con **costo de operación cero** y la posibilidad de compartirla con algunos amigos, cada uno con sus propios datos aislados.
+Una web app personal para hacer seguimiento de un portafolio de inversiones (acciones y ETFs de EE.UU., broker Interactive Brokers; desde el 2026-09-28 también cripto en USD, en portafolios aparte), con métricas serias de rendimiento, instalable en el iPhone como PWA, con **costo de operación cero** y la posibilidad de compartirla con algunos amigos, cada uno con sus propios datos aislados.
 
 ### Objetivos
 - Registrar todas las operaciones (compras, ventas, dividendos, depósitos, retiros, comisiones, splits) y derivar de ellas **posiciones, efectivo y métricas**. Las transacciones son la única fuente de verdad.
@@ -194,7 +194,7 @@ create table instruments (
   id uuid primary key default gen_random_uuid(),
   symbol text not null unique,          -- símbolo canónico, ej. 'VOO', 'BRK-B'
   name text,
-  type text,                            -- 'STOCK' | 'ETF'
+  type text,                            -- 'STOCK' | 'ETF' | 'CRYPTO'
   exchange text,
   currency text not null default 'USD',
   sector text, industry text,
@@ -276,6 +276,12 @@ Si el efectivo queda negativo, se muestra una advertencia (probable transacción
 Para cada día hábil desde la primera transacción: reconstruir cantidades y efectivo a esa fecha y valuar con `prices_daily`. Para días sin precio (feriados), usar el último cierre conocido. Guardar la serie calculada en memoria o en caché; no es fuente de verdad.
 *(Hecho en la Fase 5, `lib/engine/series.ts`: días hábiles en hora de Nueva York; los cierres —ajustados por splits hacia atrás— se multiplican por la razón de los `SPLIT` del libro que todavía no ocurrieron, para que precio y cantidad estén en las mismas unidades; sin ningún cierre previo, la posición se valúa a costo. Se recalcula por pedido, sin caché.)*
 
+*(**Cripto y fines de semana**, 2026-09-28: la grilla sigue siendo de días hábiles, así los retornos diarios de la cripto se comparan con los de las acciones y la volatilidad se anualiza con 252.
+- La cripto cotiza todos los días. Si la serie termina un sábado o un domingo (hay una cotización o un cierre de ese día), ese día es el **último punto**, así el gráfico cierra con el valor de Inicio. Una operación de ese fin de semana cuenta ahí.
+- Al llegar el lunes, ese punto desaparece y el lunes absorbe el movimiento del fin de semana.
+- El punto en vivo sigue siendo todo o nada con el benchmark en días hábiles. Un fin de semana, un benchmark de acciones que no cotiza queda con su último cierre.
+- En «Antes de comprar», los retornos también se miran en días hábiles, aunque se comparen dos criptos.)*
+
 *(**Punto en vivo**, `lib/portfolio/live-series.ts`: el cron guarda el cierre una vez por día, al terminar la rueda, así que durante la rueda la serie llegaba hasta ayer mientras el valor de Inicio ya usaba la cotización. Ahora, si una cotización es de un día de rueda posterior al último cierre de su serie, se suma como el último punto (día de Nueva York, sin tocar `lib/engine`: entra como un cierre más). Sirve al gráfico, el TWR, el XIRR, la ganancia del período, el rendimiento por mes, el riesgo, los minigráficos y el gráfico de precio de una posición. Es todo o nada entre el portafolio y el benchmark: si el benchmark no llega en vivo al mismo día, ninguna serie suma punto y queda con cierres. Sin ningún cierre previo tampoco hay punto (un salto de costo a mercado no es rendimiento). Con la cotización del mismo día que el último cierre, gana el cierre; al llegar el cierre del día el punto en vivo desaparece solo. La tarjeta lo rotula («cierres al 24/09 y cotización del 25/09 11:47»).)*
 
 ### 6.5 Rendimientos
@@ -322,7 +328,7 @@ interface MarketDataProvider {
 - Rate limiting simple más reintentos con backoff exponencial.
 - Solo `YahooProvider` está implementado (Fase 3); `MARKET_DATA_PROVIDER` valida los otros dos nombres pero responden "no implementado".
 - Los montos del proveedor son strings decimales redondeados una sola vez (Yahoo trae ruido de float32, p. ej. `1730.97998046875`).
-- **Datos de la empresa** (`getCompanyData`): `quoteSummary` con `summaryDetail` y `defaultKeyStatistics` (acciones y ETFs) y, solo para acciones y en otra consulta, `earningsHistory` y `calendarEvents` (ganancias de los últimos 4 trimestres y próxima fecha de resultados). Un ETF no tiene ganancias: Yahoo responde «No fundamentals data found», que se trata como «no hay» y no se reintenta. Cada campo se valida por su cuenta con Zod y, si falta o cambia de tipo, queda vacío (la fila no se muestra); no se descarta todo por un dato roto. Son informativos: no entran a ningún cálculo ni se guardan.
+- **Datos de la empresa** (`getCompanyData`): `quoteSummary` con `summaryDetail` y `defaultKeyStatistics` (acciones y ETFs) y, solo para acciones y en otra consulta, `earningsHistory` y `calendarEvents` (ganancias de los últimos 4 trimestres y próxima fecha de resultados). Un ETF no tiene ganancias: Yahoo responde «No fundamentals data found», que se trata como «no hay» y no se reintenta. Una cripto muestra «Datos de la moneda» (precios, rango, volumen y capitalización, a centavos) y no pide ganancias. Cada campo se valida por su cuenta con Zod y, si falta o cambia de tipo, queda vacío (la fila no se muestra); no se descarta todo por un dato roto. Son informativos: no entran a ningún cálculo ni se guardan.
 - **Serie intradía** (`getIntradaySeries`): `chart` con barras de 30 minutos (la semana, las últimas 5 ruedas) o de 1 hora (el mes).
 - Lo que devuelven estas dos consultas se cachea en el servidor (`unstable_cache`: 1 hora los datos de la empresa, 5 minutos las barras; los fallos no se cachean). Sin cambios de esquema.
 
@@ -454,6 +460,17 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
   - El alta y la importación no arrancan en ningún portafolio: hay que elegirlo.
   - Si un portafolio tiene efectivo negativo, Inicio lo nombra aunque la suma dé positiva.
 
+**Cripto** (etapa 3, 2026-09-28): monedas grandes cotizadas en USD, cargadas a mano o con el formato simple.
+- **Símbolo:** el par de Yahoo, `BTC-USD`. No se usa `BTC`, que es el ticker de un ETF de Grayscale y compartirían precios.
+- **Tipo:** `instruments.type = 'CRYPTO'`.
+- **Yahoo:** la búsqueda ofrece `CRYPTOCURRENCY` solo en pares `-USD` de la bolsa `CCC`; quedan afuera los futuros (`BTC=F`) y los pares en otra moneda (`BTC-EUR`). Las barras diarias vienen en días UTC, también los fines de semana, y la del día UTC en curso no se guarda: su «rueda» es el día entero.
+- **Pantallas:**
+  - Se rotula «Cripto» en Posiciones, la ficha, el buscador, la Watchlist y la composición por tipo.
+  - La ficha muestra «Datos de la moneda» y no muestra ganancias.
+  - «Antes de comprar» agrupa las cripto como «Cripto».
+- **Benchmark:** cada portafolio elige contra qué compararse, S&P 500 o Bitcoin. «Todo junto» usa el que comparten o, si no comparten uno, SPY.
+- **Importar:** de Delta sigue sin importarse cripto; por eso el mensaje de tipo no soportado dice cómo cargarla.
+
 ### 10.1 Inicio (dashboard)
 - Valor total, cambio del día ($ y %), **ganancia total y aportado neto** (valor − depósitos + retiros, con su % sobre lo aportado), ganancia no realizada y realizada.
 - Gráfico con selector de período y tres modos: **ganancia acumulada en US$** (por defecto: valor − aportes netos, sin saltos por depósitos), valor, y comparación contra el benchmark (TWR del portafolio vs. SPY, normalizados a 100).
@@ -488,7 +505,7 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 
 ### 10.5 Más
 - Cuentas y portafolios (crear, renombrar, método de costo), benchmark, moneda, exportar datos, cerrar sesión.
-*(Hecho, 2026-09-28: «Portafolios» (`/more/portfolios`) permite crear uno nuevo, y al crearlo pasa a ser el que se mira. Cada portafolio se puede renombrar o borrar; para borrar hay que escribir su nombre, avisa cuántas operaciones se van con él y no se puede borrar el último. Las cuentas no se muestran. El benchmark se elige en la etapa 3 (cripto), cuando haya otro además de SPY.)*
+*(Hecho, 2026-09-28: «Portafolios» (`/more/portfolios`) permite crear uno nuevo, y al crearlo pasa a ser el que se mira. Cada portafolio se puede renombrar o borrar; para borrar hay que escribir su nombre, avisa cuántas operaciones se van con él y no se puede borrar el último. Las cuentas no se muestran. Etapa 3: el benchmark se elige al crear el portafolio y en sus ajustes, con «Comparar con» S&P 500 (SPY) o Bitcoin (BTC-USD).)*
 
 ### 10.6 PWA
 - `manifest.webmanifest` con `display: standalone`, íconos (incluido `apple-touch-icon` de 180×180), `theme_color` y soporte para modo claro y oscuro.

@@ -22,11 +22,16 @@ const MARGIN_DAYS = 10;
 const toCloses = (rows: readonly DailyCloseRow[] | undefined): DailyClose[] =>
   (rows ?? []).map((row) => ({ date: row.date, close: d(row.value) }));
 
-/** El sector de un instrumento, o "ETF" para un fondo (no traen sector). */
+/**
+ * El grupo de un instrumento: su sector, o "ETF" para un fondo y "CRYPTO" para una moneda (no
+ * traen sector).
+ */
 export const groupOfInstrument = (
   instrument: Pick<InstrumentRow, "type" | "sector">,
 ): string | null =>
-  instrument.type === "ETF" ? "ETF" : instrument.sector?.trim() || null;
+  instrument.type === "ETF" || instrument.type === "CRYPTO"
+    ? instrument.type
+    : instrument.sector?.trim() || null;
 
 /**
  * Lee lo que necesita «Antes de comprar»: 5 años de cierres ajustados por dividendos del candidato

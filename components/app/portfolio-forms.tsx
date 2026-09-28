@@ -5,12 +5,15 @@ import { Field } from "@/components/app/field";
 import { Notice } from "@/components/app/stat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   createPortfolio,
   deletePortfolio,
   renamePortfolio,
+  setPortfolioBenchmark,
   type PortfolioFormState,
 } from "@/app/(app)/more/portfolios/actions";
+import { BENCHMARKS } from "@/lib/portfolio/benchmarks";
 import { plural } from "@/lib/portfolio/plural";
 import { PORTFOLIO_NAME_MAX } from "@/lib/validation/portfolio";
 
@@ -46,8 +49,65 @@ export function CreatePortfolioForm() {
           }
         />
       </Field>
+      <BenchmarkField id="new-benchmark" defaultValue="SPY" />
       <Button type="submit" disabled={pending}>
         {pending ? "Creando…" : "Crear portafolio"}
+      </Button>
+    </form>
+  );
+}
+
+/** «Comparar con»: la lista corta de benchmarks, con una pista de para qué sirve cada uno. */
+function BenchmarkField({
+  id,
+  defaultValue,
+}: {
+  id: string;
+  defaultValue: string;
+}) {
+  return (
+    <Field
+      id={id}
+      label="Comparar con"
+      hint="El rendimiento se compara contra esto (S&P 500 para acciones, Bitcoin para cripto)."
+    >
+      <NativeSelect
+        id={id}
+        name="benchmark"
+        defaultValue={defaultValue}
+        aria-describedby={`${id}-hint`}
+      >
+        {BENCHMARKS.map((benchmark) => (
+          <option key={benchmark.symbol} value={benchmark.symbol}>
+            {benchmark.label} ({benchmark.symbol})
+          </option>
+        ))}
+      </NativeSelect>
+    </Field>
+  );
+}
+
+/** Contra qué se compara un portafolio. */
+export function BenchmarkForm({
+  id,
+  benchmark,
+}: {
+  id: string;
+  benchmark: string;
+}) {
+  const [state, action, pending] = useActionState(
+    setPortfolioBenchmark,
+    initial,
+  );
+  return (
+    <form action={action} className="flex flex-col gap-3" noValidate>
+      <input type="hidden" name="id" value={id} />
+      {state.status === "error" && (
+        <Notice tone="error">{state.message}</Notice>
+      )}
+      <BenchmarkField id="portfolio-benchmark" defaultValue={benchmark} />
+      <Button type="submit" disabled={pending}>
+        {pending ? "Guardando…" : "Guardar"}
       </Button>
     </form>
   );

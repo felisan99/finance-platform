@@ -376,6 +376,44 @@ Felipe pidió la vista «Todo junto» desde el inicio, y aprobó la etapa 2 junt
   - Suite en vivo por HTTP 24/24. El caso de varios portafolios ahora cubre «Todo junto»: Inicio con el valor total igual al del cálculo, el TWR sin `digest`, Actividad con las dos etiquetas, la exportación con la columna y el nombre, el alta y la importación que piden elegir, y la ficha rotulada. También cubre a una persona con un solo portafolio y la cookie `all`.
   - Chrome headless a 390 px contra `next start`: 42 comprobaciones. Incluyen «Todo junto» con el aportado de los dos, el gráfico, Actividad con etiquetas, el alta sin portafolio que avisa en el campo y conserva lo escrito, y el guardado en el portafolio elegido.
 
+## Varios portafolios, etapa 3: cripto (2026-09-28)
+
+Felipe aprobó la etapa 3 junto con el commit de la etapa 2 (`fb14db1`). Alcance acordado: monedas grandes en USD, cargadas a mano, sin staking ni comisiones pagadas en cripto.
+
+- **Yahoo real primero:**
+  - La búsqueda de «bitcoin» devuelve `BTC-USD` (`CRYPTOCURRENCY`, bolsa `CCC`), junto con `BCH-USD`, futuros `BTC=F` y, buscando «BTC», también `BTC-EUR`.
+  - El perfil no trae sector.
+  - El historial viene en días UTC con fines de semana, y la sesión regular de hoy es de 00:00 a 23:59 UTC. Por eso el código que ya descartaba la barra de una rueda abierta descarta la del día UTC en curso sin cambios; está probado con la respuesta real.
+- **Base** (migración `crypto`): `instruments.type` admite `CRYPTO`, y `create_portfolio` recibe el benchmark (por defecto SPY). La firma vieja se borra y la nueva acepta una llamada con solo el nombre.
+- **Símbolo canónico `BTC-USD`, no `BTC`:** `BTC` es el ticker del Grayscale Bitcoin Mini Trust y compartirían precios. En la búsqueda solo entran pares `-USD` de `CCC`. En el alta, `resolveNewInstrument` admite `CRYPTO` si cotiza en USD (así `BTC-EUR` queda afuera también a mano).
+- **El calendario.** Es la decisión más delicada de la etapa.
+  - La grilla de la serie sigue siendo de días hábiles, para que la volatilidad y los retornos diarios sean comparables con los de las acciones y no haya que tocar el motor.
+  - Con eso, un fin de semana el gráfico terminaba el viernes mientras Inicio ya valuaba la cripto con el precio del sábado o del domingo: se rompía la regla «el último punto es el valor de Inicio».
+  - Arreglo: si la serie termina un fin de semana, ese día es el último punto, y una operación de ese fin de semana cuenta ahí. El lunes el punto desaparece y el lunes absorbe el movimiento.
+  - En la misma línea, el punto en vivo sigue siendo todo o nada con el benchmark en días hábiles. Un fin de semana, en cambio, no exige que SPY (que no cotiza) llegue al mismo día.
+  - En «Antes de comprar», la alineación de retornos usa solo días hábiles aunque se comparen dos criptos, así la volatilidad se anualiza siempre con 252.
+  - Esto cambió a propósito un test viejo, que decía que la serie terminaba el viernes. Hay propiedades nuevas: con cualquier cotización de la cripto del domingo, el último punto es el valor de Inicio y la ganancia de «Todo» es valor − depósitos.
+- **Pantallas:**
+  - `typeLabelOf` junta los rótulos que estaban repetidos en cuatro lugares, y agrega «Cripto».
+  - La composición por tipo y el grupo de «Antes de comprar» dicen «Cripto».
+  - La ficha muestra «Datos de la moneda»: cierre anterior, apertura, rangos, volumen y capitalización. No muestra P/E, dividendos ni ganancias.
+  - El precio del alta dice «por unidad (acción o moneda)».
+  - El buscador sugiere `BTC-USD`.
+  - La guía de importación menciona la cripto.
+  - Un export de Delta con cripto sigue sin importarse, y el mensaje dice cómo cargarla.
+- **Benchmark por portafolio:** una lista corta en `lib/portfolio/benchmarks.ts` (S&P 500 y Bitcoin), porque cada benchmark es un instrumento que el cron tiene que mantener. Se elige al crear el portafolio y en sus ajustes. Al elegirlo, se asegura que el instrumento exista (`resolveInstrumentId`) y su historial se descarga en segundo plano. «Todo junto» usa el que comparten los portafolios o SPY. `active_instruments()` no se tocó: el benchmark de un portafolio entra cuando ese portafolio tiene operaciones, como antes.
+- **Dos problemas que aparecieron con precios de seis cifras** (al probar en Chrome):
+  - El eje del gráfico de precio cortaba «150000» a «50000». Los ejes de los gráficos de precio y de rendimiento ahora toman el ancho de su marca más larga (`axisWidthFor`).
+  - Yahoo manda los precios de la cripto con decimales de ruido: el mínimo de 52 semanas salía «57.747,766». Los precios de la ficha de una cripto van a centavos desde US$ 1, y hasta 6 decimales por debajo. Los de acciones y ETFs no cambian: Yahoo puede traer medio centavo en el rango del día, y un test lo cuida.
+- **El backfill pendiente se completó:** la prueba en Chrome disparó la descarga en segundo plano, que también completó los 5 años de BSX, ILF, TTWO y URTH pendientes desde «Antes de comprar». Se hizo con la bolsa abierta y la barra de hoy no se guardó: la última de las acciones es la del viernes. Por eso se actualizaron las expectativas de la prueba visual de «Antes de comprar», que ya no tiene historia corta. BTC-USD y ETH-USD quedaron en `finance-dev` con 5 años (1826 días); como nadie los tiene ni los sigue, el cron no los actualiza hasta que alguien los use.
+- **Verificación:**
+  - 1649 unitarias (eran 1630). 17 mutaciones sobre la serie, el punto en vivo, la alineación, Yahoo, los datos de la moneda, los rótulos, el benchmark y los ejes, todas detectadas.
+  - Integración: 111/111, con dos casos nuevos: el alta con benchmark (con un benchmark inválido la base la rechaza) y el tipo `CRYPTO`.
+  - En vivo contra Yahoo: 8/8, con BTC-USD de punta a punta.
+  - Suite en vivo por HTTP: 25/25, con un caso nuevo de portafolio cripto contra Bitcoin.
+  - Chrome headless a 390 px contra `next start` con Yahoo real: 27 comprobaciones. Crear «Cripto» contra Bitcoin, buscar «bitcoin» y elegir BTC-USD con el precio de referencia, guardar, esperar el historial, revisar Inicio «vs Bitcoin», Posiciones, la ficha, «Todo junto» contra S&P 500 con «Cripto» en la composición, seguir ETH-USD, «Antes de comprar» contra Bitcoin y cambiar el benchmark. Sin errores de JS ni de CSP.
+  - Se repitieron los recorridos anteriores: varios portafolios 42/42 y «Antes de comprar» 36/36.
+
 ## Observaciones del spec para fases posteriores
 
 1. **Splits y precios.** Resuelto en la Fase 3 del lado de los datos (ver "Desvíos y decisiones de la Fase 3"); el des-ajuste al valuar es de la Fase 5. El motor aplica solo transacciones `SPLIT`; `corporate_actions` informa o propone splits, pero no se aplican dos veces.

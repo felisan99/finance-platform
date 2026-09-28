@@ -1,4 +1,4 @@
-import { addDays, addMonths, marketDay } from "./dates";
+import { addDays, addMonths, isWeekday, marketDay } from "./dates";
 import { D, ZERO, type Dec } from "./decimal";
 import { annualizedVolatilityOf, type DrawdownStat } from "./risk";
 import { sortCloses } from "./series";
@@ -195,8 +195,13 @@ export function alignReturns(
     symbols.length === 0
       ? []
       : [...(byDate.get(symbols[0] as string) as Map<string, Dec>).keys()]
-          .filter((date) =>
-            symbols.every((symbol) => byDate.get(symbol)?.has(date)),
+          // Solo días hábiles: la cripto cotiza también el fin de semana, y así un par de monedas
+          // mira las mismas ruedas que una acción (el lunes absorbe el fin de semana) y la
+          // volatilidad se anualiza igual, con 252.
+          .filter(
+            (date) =>
+              isWeekday(date) &&
+              symbols.every((symbol) => byDate.get(symbol)?.has(date)),
           )
           .sort();
 

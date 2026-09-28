@@ -19,7 +19,11 @@ import { Notice, PageHeader } from "@/components/app/stat";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Database } from "@/lib/db/database.types";
-import { kindOf, providerSymbolOf } from "@/lib/portfolio/company-data";
+import {
+  companyTitle,
+  kindOf,
+  providerSymbolOf,
+} from "@/lib/portfolio/company-data";
 import { formatDayMonth, formatPrice } from "@/lib/portfolio/format";
 import type { InstrumentRow } from "@/lib/portfolio/rows";
 import type { PortfolioSnapshot } from "@/lib/portfolio/snapshot";
@@ -122,13 +126,7 @@ export async function FollowedSymbolView({
         />
       </Suspense>
 
-      <Suspense
-        fallback={
-          <CompanySkeleton
-            title={kind === "etf" ? "Datos del fondo" : "Datos de la empresa"}
-          />
-        }
-      >
+      <Suspense fallback={<CompanySkeleton title={companyTitle(kind)} />}>
         <CompanyStatsCard
           providerSymbol={providerSymbolOf(instrument)}
           kind={kind}

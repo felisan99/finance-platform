@@ -10,6 +10,7 @@ import {
   formatQuantity,
 } from "@/lib/portfolio/format";
 import { Pnl } from "./pnl";
+import { typeLabelOf } from "@/lib/portfolio/instrument-type";
 
 const href = (symbol: string) => `/positions/${encodeURIComponent(symbol)}`;
 
@@ -33,7 +34,7 @@ export function PositionRow({
             {position.symbol}
             {instrument?.type && (
               <Badge variant="secondary" className="text-[0.65rem]">
-                {instrument.type === "ETF" ? "ETF" : "Acción"}
+                {typeLabelOf(instrument.type)}
               </Badge>
             )}
           </p>

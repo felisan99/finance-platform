@@ -252,7 +252,7 @@ export function TransactionForm({
               id="price"
               label="Precio (USD)"
               error={fieldErrors.price}
-              hint="Por acción, sin comisión"
+              hint="Por unidad (acción o moneda), sin comisión"
             >
               <Input
                 id="price"

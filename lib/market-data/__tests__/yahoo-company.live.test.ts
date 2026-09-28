@@ -68,6 +68,51 @@ describe("Yahoo real: datos de la empresa", () => {
     expect(data.epsTrailing).toBeNull();
   }, 60_000);
 
+  it("una cripto (BTC-USD) trae precios, volumen y capitalización, sin ganancias", async () => {
+    const data = await get("BTC-USD", "crypto");
+    expect(data.kind).toBe("crypto");
+    for (const field of [
+      "previousClose",
+      "dayLow",
+      "dayHigh",
+      "fiftyTwoWeekLow",
+      "fiftyTwoWeekHigh",
+    ] as const) {
+      expect(data[field], field).toMatch(/^\d+(\.\d+)?$/);
+    }
+    expect(Number(data.fiftyTwoWeekLow)).toBeLessThan(
+      Number(data.fiftyTwoWeekHigh),
+    );
+    expect(data.marketCap).toBeGreaterThan(100_000_000_000);
+    expect(data.earnings).toEqual([]);
+  });
+
+  it("cripto de punta a punta: búsqueda, perfil, cotización e historial diario en UTC", async () => {
+    const results = await provider.search("bitcoin");
+    expect(results.find((r) => r.symbol === "BTC-USD")).toMatchObject({
+      type: "CRYPTO",
+    });
+    // Ni futuros ni otras monedas.
+    expect(results.every((r) => !/=|-EUR$/.test(r.symbol))).toBe(true);
+    expect((await provider.getProfile!("BTC-USD")).type).toBe("CRYPTO");
+    const [quote] = await provider.getQuotes(["BTC-USD"]);
+    expect(quote?.currency).toBe("USD");
+    const now = new Date();
+    const history = await provider.getDailyHistory(
+      "BTC-USD",
+      new Date(now.getTime() - 10 * 86_400_000),
+      now,
+    );
+    const dates = history.bars.map((b) => b.date);
+    // Todos los días (fines de semana incluidos), sin el día UTC en curso.
+    expect(dates.length).toBeGreaterThanOrEqual(8);
+    expect(dates).not.toContain(now.toISOString().slice(0, 10));
+    const weekend = dates.filter((date) =>
+      [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay()),
+    );
+    expect(weekend.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("un símbolo que no existe es NOT_FOUND (no un corte)", async () => {
     await expect(get("ZZZZQQ", "stock")).rejects.toMatchObject({
       kind: "NOT_FOUND",

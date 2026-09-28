@@ -60,6 +60,12 @@ export function buildCompanyRows(data: CompanyData): StatRow[] {
   add("Volumen", compactText(data.volume));
   add("Volumen promedio (3 meses)", compactText(data.averageVolume));
 
+  // Una moneda no tiene P/E, dividendos ni acciones: su tamaño es la capitalización.
+  if (data.kind === "crypto") {
+    add("Capitalización", usdCompact(data.marketCap));
+    return rows;
+  }
+
   if (data.kind === "etf") {
     add("P/E (12 meses)", ratioText(data.trailingPE));
     add("Rentabilidad por dividendo", percentText(data.dividendYield));

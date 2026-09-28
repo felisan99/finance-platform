@@ -24,7 +24,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
 import { addDays, isoDate } from "@/lib/market-jobs/dates";
 import { buildPositionChart } from "@/lib/portfolio/chart-data";
-import { kindOf, providerSymbolOf } from "@/lib/portfolio/company-data";
+import {
+  companyTitle,
+  kindOf,
+  providerSymbolOf,
+} from "@/lib/portfolio/company-data";
 import {
   formatDayMonth,
   formatExact,
@@ -43,6 +47,7 @@ import {
 import { describeTransaction } from "@/lib/portfolio/tx-view";
 import { SYMBOL_PATTERN, normalizeSymbol } from "@/lib/validation/transaction";
 import { FollowedSymbolView } from "./followed-view";
+import { typeLabelOf } from "@/lib/portfolio/instrument-type";
 
 function symbolFromParam(raw: string): string | null {
   try {
@@ -151,7 +156,7 @@ export default async function PositionDetailPage({
                 variant="secondary"
                 className="ml-2 align-middle text-[0.65rem]"
               >
-                {instrument.type === "ETF" ? "ETF" : "Acción"}
+                {typeLabelOf(instrument.type)}
               </Badge>
             )}
           </>
@@ -251,15 +256,7 @@ export default async function PositionDetailPage({
       </div>
 
       <Suspense
-        fallback={
-          <CompanySkeleton
-            title={
-              kindOf(instrument) === "etf"
-                ? "Datos del fondo"
-                : "Datos de la empresa"
-            }
-          />
-        }
+        fallback={<CompanySkeleton title={companyTitle(kindOf(instrument))} />}
       >
         <CompanyStatsCard
           providerSymbol={providerSymbolOf(instrument)}

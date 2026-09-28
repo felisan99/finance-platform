@@ -624,3 +624,36 @@ describe("getIntradaySeries", () => {
     expect(calls.chart).toHaveLength(0);
   });
 });
+
+describe("parseCompanyData: cripto", () => {
+  it("los precios de una moneda van a centavos (Yahoo trae decimales de ruido); una barata conserva 6", () => {
+    const data = parseCompanyData(
+      "crypto",
+      {
+        summaryDetail: {
+          previousClose: 84458.0859375,
+          dayLow: 83100.12345,
+          dayHigh: 84900.5,
+          fiftyTwoWeekLow: 57747.766,
+          fiftyTwoWeekHigh: 126198.07,
+          marketCap: 1676000000000,
+        },
+      },
+      null,
+    );
+    expect(data).toMatchObject({
+      kind: "crypto",
+      previousClose: "84458.09",
+      dayLow: "83100.12",
+      fiftyTwoWeekLow: "57747.77",
+      fiftyTwoWeekHigh: "126198.07",
+      marketCap: 1676000000000,
+    });
+    const cheap = parseCompanyData(
+      "crypto",
+      { summaryDetail: { previousClose: 0.123456789 } },
+      null,
+    );
+    expect(cheap.previousClose).toBe("0.123457");
+  });
+});

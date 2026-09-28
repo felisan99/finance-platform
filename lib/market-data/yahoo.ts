@@ -7,12 +7,14 @@ import { cleanText } from "./sanitize";
 import { parseCompanyData } from "./yahoo-company";
 import type {
   CompanyData,
+  CompanyKind,
   CorporateAction,
   DailyBar,
   DailyHistory,
   InstrumentProfile,
   InstrumentSearchResult,
   IntradayPoint,
+  InstrumentType,
   IntradayRange,
   MarketDataProvider,
   Quote,
@@ -70,6 +72,17 @@ const PROVIDER_SYMBOL = /^[A-Z0-9][A-Z0-9.^=-]{0,14}$/;
 const CANONICAL_SYMBOL = /^[A-Z0-9]+(-[A-Z0-9]+)*$/;
 // NASDAQ (NMS, NGM, NCM), NYSE (NYQ), NYSE American (ASE), NYSE Arca (PCX) y BATS (BTS).
 const US_EXCHANGES = new Set(["NMS", "NGM", "NCM", "NYQ", "ASE", "PCX", "BTS"]);
+// Cripto: Yahoo las lista en la "bolsa" CCC como pares (`BTC-USD`, `BTC-EUR`). Solo en USD.
+const CRYPTO_EXCHANGE = "CCC";
+const CRYPTO_USD = /^[A-Z0-9]+-USD$/;
+
+/** El tipo de la app para un `quoteType` de Yahoo; `null` si no se admite (futuros, índices…). */
+function typeOf(quoteType: string | null | undefined): InstrumentType | null {
+  if (quoteType === "EQUITY") return "STOCK";
+  if (quoteType === "ETF") return "ETF";
+  if (quoteType === "CRYPTOCURRENCY") return "CRYPTO";
+  return null;
+}
 const QUOTE_CHUNK = 50;
 const SEARCH_MAX_LENGTH = 40;
 
@@ -388,14 +401,13 @@ export function createYahooProvider(
       const parsed = searchItemSchema.safeParse(item);
       if (!parsed.success || !parsed.data.isYahooFinance) continue;
       const q = parsed.data;
-      const type =
-        q.quoteType === "EQUITY"
-          ? "STOCK"
-          : q.quoteType === "ETF"
-            ? "ETF"
-            : null;
-      // Solo EE.UU. (la app maneja USD) y con un símbolo que la base acepte tal cual.
-      if (!type || !q.exchange || !US_EXCHANGES.has(q.exchange)) continue;
+      const type = typeOf(q.quoteType);
+      // Solo EE.UU. o cripto en USD (la app maneja USD) y con un símbolo que la base acepte tal cual.
+      if (!type || !q.exchange) continue;
+      if (type === "CRYPTO") {
+        if (q.exchange !== CRYPTO_EXCHANGE || !CRYPTO_USD.test(q.symbol))
+          continue;
+      } else if (!US_EXCHANGES.has(q.exchange)) continue;
       if (!CANONICAL_SYMBOL.test(q.symbol)) continue;
       results.push({
         symbol: q.symbol,
@@ -417,8 +429,7 @@ export function createYahooProvider(
     return {
       symbol,
       name: cleanText(summary.price?.longName ?? summary.price?.shortName),
-      type:
-        quoteType === "EQUITY" ? "STOCK" : quoteType === "ETF" ? "ETF" : null,
+      type: typeOf(quoteType),
       exchange: cleanText(summary.price?.exchangeName, 40),
       currency: cleanText(summary.price?.currency, 3),
       sector: cleanText(summary.assetProfile?.sector, 60),
@@ -434,7 +445,7 @@ export function createYahooProvider(
    */
   async function getCompanyData(
     symbol: string,
-    kind: "stock" | "etf",
+    kind: CompanyKind,
   ): Promise<CompanyData> {
     assertProviderSymbol(symbol);
     const base = await call(symbol, () =>

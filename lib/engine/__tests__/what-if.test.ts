@@ -238,6 +238,32 @@ describe("simulateAddition", () => {
 });
 
 describe("alignReturns", () => {
+  it("solo días hábiles: dos criptos con fin de semana miran las mismas ruedas que una acción", () => {
+    // Del viernes 25 al martes 29 de setiembre de 2026, todos los días (como la cripto).
+    const everyDay = (values: readonly string[]) =>
+      closes(
+        values.map((value, i): [string, string] => [
+          `2026-09-${String(25 + i).padStart(2, "0")}`,
+          value,
+        ]),
+      );
+    const aligned = alignReturns(
+      new Map([
+        ["BTC-USD", everyDay(["100", "110", "121", "100", "105"])],
+        ["ETH-USD", everyDay(["10", "10", "10", "12", "12"])],
+      ]),
+      "2026-09-25",
+      "2026-09-29",
+    );
+    // Viernes → lunes (el fin de semana entra en el lunes) → martes.
+    expect(aligned.dates).toEqual(["2026-09-28", "2026-09-29"]);
+    expect(aligned.bySymbol.get("BTC-USD")).toEqual([0, 0.05]);
+    expect(aligned.bySymbol.get("ETH-USD")).toEqual([
+      expect.closeTo(0.2, 12),
+      0,
+    ]);
+  });
+
   it("usa solo los días que tienen todos; si a uno le falta un día, el retorno abarca los dos", () => {
     const aligned = alignReturns(
       new Map([

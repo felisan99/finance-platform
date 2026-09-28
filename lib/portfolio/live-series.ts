@@ -1,4 +1,5 @@
 import {
+  isWeekday,
   marketDay,
   type DailyClose,
   type Dec,
@@ -88,7 +89,8 @@ export interface LiveSeries {
  * Suma a cada serie la cotización de hoy cuando es más nueva que su último cierre. Es todo o
  * nada, para que el portafolio y el benchmark siempre lleguen al mismo día: si el benchmark tiene
  * datos y no llega al mismo día en vivo que las posiciones (por ejemplo, no se pudo actualizar),
- * nadie suma punto y todo queda con cierres, como antes. Un símbolo cuya cotización no es más nueva
+ * nadie suma punto y todo queda con cierres, como antes. La excepción es el fin de semana (solo
+ * cotiza la cripto): el benchmark que no llega queda con su último cierre. Un símbolo cuya cotización no es más nueva
  * que su cierre sigue con el cierre, que es lo que hace `pickPrice` para el valor de arriba.
  */
 export function applyLiveQuotes(input: LiveSeriesInput): LiveSeries {
@@ -117,10 +119,18 @@ export function applyLiveQuotes(input: LiveSeriesInput): LiveSeries {
   let benchmark = [...input.benchmark];
   if (input.benchmark.length > 0) {
     const point = livePoint(input.benchmark, input.benchmarkQuote);
-    if (point === null || input.benchmarkQuote === null) return plain();
-    if (point.date !== heldDay) return plain();
-    benchmark = [...input.benchmark, point];
-    used.push(input.benchmarkQuote.asOf);
+    if (
+      point !== null &&
+      input.benchmarkQuote !== null &&
+      point.date === heldDay
+    ) {
+      benchmark = [...input.benchmark, point];
+      used.push(input.benchmarkQuote.asOf);
+    } else if (isWeekday(heldDay)) {
+      return plain();
+    }
+    // Un fin de semana solo se mueve la cripto: un benchmark de acciones no cotiza y su último
+    // cierre ES su valor de ese día, así que el portafolio suma su punto igual.
   }
 
   const oldest = used.reduce((min, at) => (at < min ? at : min));

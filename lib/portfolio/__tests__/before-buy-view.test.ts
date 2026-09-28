@@ -157,6 +157,7 @@ describe("sectorLabel", () => {
   it("traduce los sectores de Yahoo y deja tal cual uno desconocido", () => {
     expect(sectorLabel("Technology")).toBe("Tecnología");
     expect(sectorLabel("ETF")).toBe("ETFs");
+    expect(sectorLabel("CRYPTO")).toBe("Cripto");
     expect(sectorLabel("Quantum")).toBe("Quantum");
   });
 });

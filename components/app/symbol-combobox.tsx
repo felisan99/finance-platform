@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { searchInstruments } from "@/app/(app)/activity/actions";
 import type { InstrumentSearchResult } from "@/lib/market-data";
+import { typeLabelOf } from "@/lib/portfolio/instrument-type";
 
 const MIN_CHARS = 2;
 const DEBOUNCE_MS = 350;
@@ -123,7 +124,7 @@ export function SymbolCombobox({
         autoCapitalize="characters"
         autoCorrect="off"
         spellCheck={false}
-        placeholder="VOO, AAPL, BRK-B…"
+        placeholder="VOO, AAPL, BTC-USD…"
         maxLength={40}
       />
       {showList && (
@@ -156,7 +157,7 @@ export function SymbolCombobox({
                 </span>
               </span>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {result.type === "ETF" ? "ETF" : "Acción"}
+                {typeLabelOf(result.type)}
               </span>
             </li>
           ))}

@@ -309,3 +309,120 @@ describe("assemblePerformance con «Todo junto»", () => {
     );
   });
 });
+
+describe("assemblePerformance con cripto un fin de semana", () => {
+  const cryptoRows = [
+    row("DEPOSIT", "2026-09-21T15:00:00+00:00", null, { amount: "2000" }),
+    row("BUY", "2026-09-21T15:00:00+00:00", "VOO", {
+      quantity: "10",
+      price: "100",
+    }),
+    row("BUY", "2026-09-22T15:00:00+00:00", "BTC-USD", {
+      quantity: "0.01",
+      price: "80000",
+    }),
+  ];
+  const btcCloses = series([
+    ["2026-09-21", "79000"],
+    ["2026-09-22", "80000"],
+    ["2026-09-23", "81000"],
+    ["2026-09-24", "80500"],
+    ["2026-09-25", "82000"],
+    ["2026-09-26", "83000"], // sábado
+  ]);
+  const vooCloses = series([
+    ["2026-09-21", "100"],
+    ["2026-09-22", "102"],
+    ["2026-09-23", "105"],
+    ["2026-09-24", "104"],
+    ["2026-09-25", "106"],
+  ]);
+  const SUNDAY = "2026-09-27T15:00:00+00:00";
+
+  function sunday(btc: string) {
+    return buildSnapshot({
+      scope: { kind: "one", portfolio },
+      parts: [{ portfolio, transactionRows: cryptoRows }],
+      instruments: [instrument("VOO"), instrument("BTC-USD")],
+      quotes: [
+        // VOO: la cotización del viernes (la bolsa no abrió desde entonces).
+        {
+          instrument_id: "id-VOO",
+          price: "106",
+          change: null,
+          as_of: "2026-09-25T20:00:00+00:00",
+        },
+        {
+          instrument_id: "id-BTC-USD",
+          price: btc,
+          change: null,
+          as_of: SUNDAY,
+        },
+      ],
+      closes: [
+        {
+          instrument_id: "id-VOO",
+          last_date: "2026-09-25",
+          last_close: "106",
+          prev_date: "2026-09-24",
+          prev_close: "104",
+        },
+        {
+          instrument_id: "id-BTC-USD",
+          last_date: "2026-09-26",
+          last_close: "83000",
+          prev_date: "2026-09-25",
+          prev_close: "82000",
+        },
+      ],
+    });
+  }
+
+  const assembleSunday = (snapshot: ReturnType<typeof sunday>) => {
+    const built = assemblePerformance({
+      snapshot,
+      closes: new Map([
+        ["VOO", vooCloses],
+        ["BTC-USD", btcCloses],
+      ]),
+      // SPY: el último cierre y la cotización son del viernes.
+      benchmarkCloses: series([
+        ["2026-09-18", "500"],
+        ["2026-09-25", "506"],
+      ]),
+      benchmarkQuote: spyQuote("506", "2026-09-25T20:00:00+00:00"),
+      benchmarkSymbol: "SPY",
+    });
+    if (!built) throw new Error("sin rendimiento");
+    return built;
+  };
+
+  it("el domingo es el último punto y vale lo mismo que Inicio", () => {
+    const snapshot = sunday("84000");
+    const { result } = assembleSunday(snapshot);
+    const last = result.series.points.at(-1)!;
+    expect(last.date).toBe("2026-09-27");
+    // 10 VOO × 106 + 0,01 BTC × 84000 + efectivo (2000 − 1000 − 800 = 200).
+    expect(last.value.toFixed()).toBe("2100");
+    expect(last.value.eq(snapshot.valued.totalValue)).toBe(true);
+    // El sábado no es un punto: la grilla son días hábiles y solo el final puede ser fin de semana.
+    expect(result.series.points.some((p) => p.date === "2026-09-26")).toBe(
+      false,
+    );
+  });
+
+  it("propiedad: cualquier cotización de la cripto del domingo cierra con Inicio", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1_000_000, max: 20_000_000 }), (cents) => {
+        const snapshot = sunday((cents / 100).toFixed(2));
+        const { result } = assembleSunday(snapshot);
+        const max = result.periods.find((p) => p.id === "MAX")!;
+        return (
+          result.series.points.at(-1)!.value.eq(snapshot.valued.totalValue) &&
+          max.gain.eq(snapshot.valued.totalValue.minus(2000))
+        );
+      }),
+      { numRuns: 200 },
+    );
+  });
+});

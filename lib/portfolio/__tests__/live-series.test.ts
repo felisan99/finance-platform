@@ -209,6 +209,42 @@ describe("applyLiveQuotes", () => {
     }
   });
 
+  it("un fin de semana (solo se mueve la cripto) el benchmark de acciones queda con su cierre y la cripto suma su punto", () => {
+    const btc = closes([
+      ["2026-09-25", "80000"],
+      ["2026-09-26", "81000"],
+    ]);
+    const friday = closes([
+      ["2026-09-24", "500"],
+      ["2026-09-25", "505"],
+    ]);
+    const live = applyLiveQuotes({
+      closes: new Map([["BTC-USD", btc]]),
+      quotes: new Map([["BTC-USD", quote("82000", "2026-09-27T15:00:00Z")]]),
+      benchmark: friday,
+      // La última cotización de SPY es la del viernes: no es más nueva que su cierre.
+      benchmarkQuote: quote("505", "2026-09-25T20:00:00Z"),
+    });
+    expect(live.closes.get("BTC-USD")?.at(-1)).toEqual({
+      date: "2026-09-27",
+      close: d("82000"),
+    });
+    expect(live.benchmark).toEqual(friday);
+    expect(live.liveAsOf?.toISOString()).toBe("2026-09-27T15:00:00.000Z");
+  });
+
+  it("un fin de semana con benchmark cripto en vivo, el benchmark también suma su punto", () => {
+    const btc = closes([["2026-09-26", "81000"]]);
+    const live = applyLiveQuotes({
+      closes: new Map([["ETH-USD", closes([["2026-09-26", "2500"]])]]),
+      quotes: new Map([["ETH-USD", quote("2600", "2026-09-27T15:00:00Z")]]),
+      benchmark: btc,
+      benchmarkQuote: quote("82000", "2026-09-27T15:05:00Z"),
+    });
+    expect(live.benchmark.at(-1)?.date).toBe("2026-09-27");
+    expect(live.liveAsOf?.toISOString()).toBe("2026-09-27T15:00:00.000Z");
+  });
+
   it("si el benchmark está en vivo pero ninguna posición, tampoco suma punto", () => {
     const live = applyLiveQuotes({
       closes: held,

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MarketDataError } from "./errors";
 import { round } from "./numbers";
 import { cleanText } from "./sanitize";
-import type { CompanyData, EarningsQuarter } from "./types";
+import type { CompanyData, CompanyKind, EarningsQuarter } from "./types";
 
 // Datos de la empresa de `quoteSummary` (summaryDetail, defaultKeyStatistics, earningsHistory y
 // calendarEvents). Es entrada no confiable y Yahoo saca o cambia campos sin aviso: cada campo se
@@ -114,6 +114,19 @@ function positive(
   return finite(value) && value > 0 ? round(value, decimals) : null;
 }
 
+/**
+ * Un precio. Acciones y ETFs, con hasta 4 decimales (Yahoo puede traer medio centavo en el rango
+ * del día). La cripto viene con decimales de ruido («57747.766»): centavos desde 1 USD y hasta 6
+ * decimales por debajo (una moneda barata sigue siendo legible).
+ */
+function price(
+  value: number | null | undefined,
+  kind: CompanyKind,
+): string | null {
+  const decimals = kind !== "crypto" ? 4 : finite(value) && value >= 1 ? 2 : 6;
+  return positive(value, decimals);
+}
+
 /** Monto o razón con signo (BPA, diferencia, beta, retorno). */
 function signed(
   value: number | null | undefined,
@@ -167,7 +180,7 @@ function parseEarnings(
  * `calendarEvents` (solo acciones; `null` si no se pidió o no hubo).
  */
 export function parseCompanyData(
-  kind: "stock" | "etf",
+  kind: CompanyKind,
   base: unknown,
   extra: unknown,
   symbol?: string,
@@ -196,12 +209,12 @@ export function parseCompanyData(
   return {
     kind,
     currency: cleanText(detail?.currency, 3),
-    previousClose: positive(detail?.previousClose, 4),
-    open: positive(detail?.open, 4),
-    dayLow: positive(detail?.dayLow, 4),
-    dayHigh: positive(detail?.dayHigh, 4),
-    fiftyTwoWeekLow: positive(detail?.fiftyTwoWeekLow, 4),
-    fiftyTwoWeekHigh: positive(detail?.fiftyTwoWeekHigh, 4),
+    previousClose: price(detail?.previousClose, kind),
+    open: price(detail?.open, kind),
+    dayLow: price(detail?.dayLow, kind),
+    dayHigh: price(detail?.dayHigh, kind),
+    fiftyTwoWeekLow: price(detail?.fiftyTwoWeekLow, kind),
+    fiftyTwoWeekHigh: price(detail?.fiftyTwoWeekHigh, kind),
     volume: count(detail?.volume),
     averageVolume: count(detail?.averageVolume),
     marketCap: count(detail?.marketCap),
@@ -219,7 +232,7 @@ export function parseCompanyData(
     priceToSales: positive(detail?.priceToSalesTrailing12Months, 4),
     beta: signed(detail?.beta ?? stats?.beta, 4),
     totalAssets: count(detail?.totalAssets ?? stats?.totalAssets),
-    navPrice: positive(detail?.navPrice, 4),
+    navPrice: price(detail?.navPrice, kind),
     category: cleanText(stats?.category, 60),
     ytdReturn: signed(stats?.ytdReturn, 6),
     nextEarningsDate: nextEarnings ? newYork.format(nextEarnings) : null,

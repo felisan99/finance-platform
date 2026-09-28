@@ -198,6 +198,29 @@ describe("getDailyHistory: fechas y rueda abierta", () => {
     expect(bars).toHaveLength(2);
   });
 
+  it("cripto: días UTC, con fines de semana, y sin el día UTC en curso (su «rueda» es el día entero)", async () => {
+    // Como lo manda Yahoo para BTC-USD: barras a las 00:00Z y la sesión regular de 00:00 a 23:59 UTC.
+    const crypto = chartResponse({
+      timeZone: "UTC",
+      regular: {
+        start: "2026-09-27T00:00:00.000Z",
+        end: "2026-09-27T23:59:00.000Z",
+      },
+      quotes: [
+        bar("2026-09-25T00:00:00.000Z", 84034.921875),
+        bar("2026-09-26T00:00:00.000Z", 84406.453125),
+        bar("2026-09-27T00:00:00.000Z", 84458.0859375),
+      ],
+    });
+    const sunday = () => new Date("2026-09-27T22:00:00.000Z");
+    const { provider } = providerFor(crypto, sunday);
+    const { bars } = await provider.getDailyHistory("BTC-USD", FROM, TO);
+    expect(bars).toEqual([
+      { date: "2026-09-25", close: "84034.92", adjClose: "84034.92" },
+      { date: "2026-09-26", close: "84406.45", adjClose: "84406.45" },
+    ]);
+  });
+
   it("sin currentTradingPeriod no excluye nada", async () => {
     const { provider } = providerFor(
       chartResponse({
@@ -635,7 +658,7 @@ describe("search", () => {
     return { provider: createYahooProvider(client, fastOptions), calls };
   };
 
-  it("deja solo acciones y ETFs de bolsas de EE.UU. con símbolos que la base acepta", async () => {
+  it("deja solo acciones y ETFs de bolsas de EE.UU. (y cripto en USD) con símbolos que la base acepta", async () => {
     const { provider } = providerWith([
       item({ symbol: "VOO" }),
       item({
@@ -671,6 +694,7 @@ describe("search", () => {
       "SOXX",
       "BRK-B",
       "SPYI",
+      "BRKB-USD", // un par cripto en USD de la bolsa CCC
     ]);
     expect(results[1]).toEqual({
       symbol: "MELI",
@@ -679,6 +703,33 @@ describe("search", () => {
       exchange: "NMS",
     });
     expect(results[0]?.type).toBe("ETF");
+  });
+
+  it("cripto: solo pares en USD de la bolsa CCC; ni otras monedas, ni futuros, ni otras bolsas", async () => {
+    const { provider } = providerWith([
+      item({
+        symbol: "BTC-USD",
+        quoteType: "CRYPTOCURRENCY",
+        exchange: "CCC",
+        longname: null,
+        shortname: "Bitcoin USD",
+      }),
+      item({ symbol: "BTC-EUR", quoteType: "CRYPTOCURRENCY", exchange: "CCC" }),
+      item({ symbol: "BTC=F", quoteType: "FUTURE", exchange: "CME" }),
+      item({ symbol: "ETH-USD", quoteType: "CRYPTOCURRENCY", exchange: "XXX" }),
+      item({ symbol: "ETHUSD", quoteType: "CRYPTOCURRENCY", exchange: "CCC" }),
+      item({ symbol: "IBIT", quoteType: "ETF", exchange: "NGM" }),
+    ]);
+    const results = await provider.search("bitcoin");
+    expect(results).toEqual([
+      {
+        symbol: "BTC-USD",
+        name: "Bitcoin USD",
+        type: "CRYPTO",
+        exchange: "CCC",
+      },
+      expect.objectContaining({ symbol: "IBIT", type: "ETF" }),
+    ]);
   });
 
   it("pide 10 resultados y ninguna noticia", async () => {
@@ -759,6 +810,38 @@ describe("getProfile", () => {
     expect(calls.quoteSummary).toEqual([
       ["MELI", { modules: ["assetProfile", "price"] }],
     ]);
+  });
+
+  it("una cripto es CRYPTO, sin sector", async () => {
+    const { provider } = providerWith({
+      assetProfile: { name: "Bitcoin", description: "Bitcoin (BTC)…" },
+      price: {
+        longName: "Bitcoin USD",
+        quoteType: "CRYPTOCURRENCY",
+        exchangeName: "CCC",
+        currency: "USD",
+      },
+    });
+    expect(await provider.getProfile?.("BTC-USD")).toEqual({
+      symbol: "BTC-USD",
+      name: "Bitcoin USD",
+      type: "CRYPTO",
+      exchange: "CCC",
+      currency: "USD",
+      sector: null,
+      industry: null,
+    });
+  });
+
+  it("un futuro (u otro tipo) no tiene tipo: no se admite", async () => {
+    const { provider } = providerWith({
+      price: {
+        longName: "Bitcoin Futures",
+        quoteType: "FUTURE",
+        currency: "USD",
+      },
+    });
+    expect((await provider.getProfile?.("BTC=F"))?.type).toBeNull();
   });
 
   it("un ETF no trae sector: queda en null", async () => {

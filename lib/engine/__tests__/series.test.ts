@@ -431,13 +431,71 @@ describe("buildDailySeries: bordes de la entrada", () => {
     ).toEqual([]);
   });
 
-  it("un día final de fin de semana termina en el último día hábil", () => {
+  it("un día final de fin de semana es el último punto (cripto): después del viernes, el domingo", () => {
     const series = buildDailySeries({
       transactions: [deposit(at(24), "1000")],
       closes: closesOf({}),
       endDate: "2026-09-27",
     });
-    expect(series.points.at(-1)!.date).toBe("2026-09-25");
+    expect(series.points.map((p) => p.date)).toEqual([
+      "2026-09-24",
+      "2026-09-25",
+      "2026-09-27",
+    ]);
+  });
+
+  it("el fin de semana final: la cripto con su cierre del domingo, la acción con el del viernes", () => {
+    const series = buildDailySeries({
+      transactions: [
+        deposit(at(24), "1000"),
+        buy(at(24), "BTC-USD", "0.01", "50000"),
+        buy(at(24), "VOO", "1", "100"),
+        // Un depósito del sábado cuenta en el domingo final, no el lunes que todavía no existe.
+        deposit(at(26), "200"),
+      ],
+      closes: closesOf({
+        "BTC-USD": [
+          ["2026-09-24", "50000"],
+          ["2026-09-25", "51000"],
+          ["2026-09-26", "52000"],
+          ["2026-09-27", "53000"],
+        ],
+        VOO: [
+          ["2026-09-24", "100"],
+          ["2026-09-25", "101"],
+        ],
+      }),
+      endDate: "2026-09-27",
+    });
+    expect(
+      series.points.map((p) => [p.date, p.value.toFixed(), p.flow.toFixed()]),
+    ).toEqual([
+      ["2026-09-24", "1000", "1000"], // 400 + 500 + 100
+      ["2026-09-25", "1011", "0"], // 400 + 510 + 101
+      ["2026-09-27", "1231", "200"], // 600 + 530 + 101
+    ]);
+    // Si la serie sigue hasta el lunes, el domingo deja de ser un punto y el depósito vale el lunes.
+    const monday = buildDailySeries({
+      transactions: [deposit(at(24), "1000"), deposit(at(26), "200")],
+      closes: closesOf({}),
+      endDate: "2026-09-28",
+    });
+    expect(monday.points.map((p) => [p.date, p.flow.toFixed()])).toEqual([
+      ["2026-09-24", "1000"],
+      ["2026-09-25", "0"],
+      ["2026-09-28", "200"],
+    ]);
+  });
+
+  it("una serie que empieza y termina el mismo fin de semana tiene un solo punto", () => {
+    const series = buildDailySeries({
+      transactions: [deposit(at(26), "300")],
+      closes: closesOf({}),
+      endDate: "2026-09-27",
+    });
+    expect(series.points.map((p) => p.date)).toEqual(["2026-09-27"]);
+    expect(series.baseDate).toBe("2026-09-25");
+    expect(series.points[0]!.growth?.toFixed()).toBe("1");
   });
 
   it("no importa el orden de las operaciones ni el de los cierres", () => {

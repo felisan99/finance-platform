@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BENCHMARK_SYMBOLS } from "@/lib/portfolio/benchmarks";
 
 /** Mismos límites que la base (`portfolios_name_trimmed`, `portfolios_name_length`). */
 export const PORTFOLIO_NAME_MAX = 40;
@@ -27,6 +28,11 @@ export const portfolioNameSchema = z
       .min(1, "Escribí un nombre")
       .max(PORTFOLIO_NAME_MAX, `Máximo ${PORTFOLIO_NAME_MAX} caracteres`),
   );
+
+/** El benchmark elegido: uno de la lista corta (`BENCHMARKS`). */
+export const benchmarkSchema = z.enum(BENCHMARK_SYMBOLS, {
+  message: "Elegí contra qué comparar",
+});
 
 /** ¿Dos nombres chocan? La base los compara sin distinguir mayúsculas (`lower(name)`). */
 export const sameName = (a: string, b: string): boolean =>

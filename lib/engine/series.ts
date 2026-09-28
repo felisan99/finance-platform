@@ -1,4 +1,5 @@
 import {
+  isWeekday,
   marketDay,
   onOrAfterWeekday,
   previousWeekday,
@@ -13,6 +14,12 @@ import type { DailyClose } from "./valuation";
 // Serie histórica diaria del portafolio (spec §6.4): para cada día hábil desde la primera
 // transacción, las cantidades y el efectivo a ese día valuados con los cierres de `prices_daily`.
 // Pura: los cierres, la fecha final y las opciones entran por parámetro.
+//
+// La grilla son los días hábiles (así los retornos diarios son comparables con los de las acciones
+// y se anualizan con 252 ruedas). La cripto cotiza también el fin de semana: si la serie termina
+// un sábado o un domingo, ese día es el último punto (lo que se movió desde el viernes queda a la
+// vista, como el valor de Inicio); al llegar el lunes deja de ser el final y desaparece solo, y el
+// lunes absorbe el movimiento del fin de semana.
 
 export interface SeriesPoint {
   /** Día de mercado (YYYY-MM-DD, hora de Nueva York). */
@@ -78,7 +85,10 @@ export const sortCloses = (closes: readonly DailyClose[]): DailyClose[] =>
 
 interface Dated {
   tx: Transaction;
-  /** Día de la grilla en el que la operación empieza a valer: el de Nueva York, o el lunes si cayó en fin de semana. */
+  /**
+   * Día de la grilla en el que la operación empieza a valer: el de Nueva York, o el lunes si cayó en
+   * fin de semana (o el último día, si la serie termina en ese fin de semana).
+   */
   day: string;
 }
 
@@ -100,13 +110,21 @@ export function buildDailySeries(input: SeriesInput): DailySeries {
   };
 
   const dated: Dated[] = sortTransactions(input.transactions)
-    .map((tx) => ({ tx, day: onOrAfterWeekday(marketDay(tx.executedAt)) }))
+    .map((tx) => {
+      const own = marketDay(tx.executedAt);
+      const day = onOrAfterWeekday(own);
+      // Un fin de semana en el que termina la serie: la operación vale en ese último punto.
+      return {
+        tx,
+        day: day > input.endDate && own <= input.endDate ? input.endDate : day,
+      };
+    })
     .filter((item) => item.day <= input.endDate);
   const first = dated[0];
   if (!first) return empty;
 
   const days = weekdaysBetween(first.day, input.endDate);
-  if (days.length === 0) return empty;
+  if (!isWeekday(input.endDate)) days.push(input.endDate);
 
   const closes = new Map<string, DailyClose[]>();
   for (const [symbol, list] of input.closes)

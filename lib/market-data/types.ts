@@ -7,6 +7,15 @@
  * tratan con decimal.js.
  */
 
+/**
+ * Qué es un instrumento: acción, ETF o cripto (solo pares en USD, como `BTC-USD`). Mismo conjunto
+ * que el CHECK `instruments_type_valid`.
+ */
+export type InstrumentType = "STOCK" | "ETF" | "CRYPTO";
+
+/** Qué datos de la ficha se piden y se muestran: de una empresa, de un fondo o de una moneda. */
+export type CompanyKind = "stock" | "etf" | "crypto";
+
 export interface Quote {
   /** Símbolo tal como lo devuelve el proveedor. */
   symbol: string;
@@ -46,7 +55,7 @@ export interface DailyHistory {
 export interface InstrumentProfile {
   symbol: string;
   name: string | null;
-  type: "STOCK" | "ETF" | null;
+  type: InstrumentType | null;
   exchange: string | null;
   currency: string | null;
   sector: string | null;
@@ -57,7 +66,7 @@ export interface InstrumentSearchResult {
   /** Símbolo canónico: cumple el CHECK de `instruments.symbol`, listo para insertarlo. */
   symbol: string;
   name: string | null;
-  type: "STOCK" | "ETF";
+  type: InstrumentType;
   exchange: string | null;
 }
 
@@ -87,7 +96,7 @@ export interface EarningsQuarter {
  * son strings decimales, las cantidades (volumen, acciones, capitalización) enteros.
  */
 export interface CompanyData {
-  kind: "stock" | "etf";
+  kind: CompanyKind;
   currency: string | null;
   previousClose: string | null;
   open: string | null;
@@ -134,7 +143,7 @@ export interface MarketDataProvider {
   getDailyHistory(symbol: string, from: Date, to: Date): Promise<DailyHistory>;
   getProfile?(symbol: string): Promise<InstrumentProfile>;
   /** Datos de la empresa (`stock`) o del fondo (`etf`) para la ficha; no guarda nada. */
-  getCompanyData?(symbol: string, kind: "stock" | "etf"): Promise<CompanyData>;
+  getCompanyData?(symbol: string, kind: CompanyKind): Promise<CompanyData>;
   /** Barras del gráfico de la semana o del mes, de la más vieja a la más nueva. */
   getIntradaySeries?(
     symbol: string,

@@ -15,16 +15,16 @@ Si tenés más de un portafolio, elegí arriba **a cuál importar**: arranca en 
 
 ## Columnas
 
-| Columna    | Cuándo                      | Qué poner                                                               |
-| ---------- | --------------------------- | ----------------------------------------------------------------------- |
-| `fecha`    | Siempre                     | `2026-03-09` o `09/03/2026` (día/mes/año). Con hora: `2026-03-09 14:30` |
-| `tipo`     | Siempre                     | `compra`, `venta`, `depósito`, `retiro` o `dividendo`                   |
-| `simbolo`  | Compra, venta, dividendo    | El ticker de EE.UU.: `VOO`, `AAPL`, `BRK-B`                             |
-| `cantidad` | Compra, venta               | Cuántas acciones (admite fracciones: `0.5`)                             |
-| `precio`   | Compra, venta               | Precio **por acción** en USD (no el total de la operación)              |
-| `monto`    | Depósito, retiro, dividendo | El total en USD                                                         |
-| `comision` | Opcional                    | Comisión de la operación en USD                                         |
-| `notas`    | Opcional                    | Lo que quieras anotar                                                   |
+| Columna    | Cuándo                      | Qué poner                                                                   |
+| ---------- | --------------------------- | --------------------------------------------------------------------------- |
+| `fecha`    | Siempre                     | `2026-03-09` o `09/03/2026` (día/mes/año). Con hora: `2026-03-09 14:30`     |
+| `tipo`     | Siempre                     | `compra`, `venta`, `depósito`, `retiro` o `dividendo`                       |
+| `simbolo`  | Compra, venta, dividendo    | El ticker de EE.UU. (`VOO`, `AAPL`, `BRK-B`) o la cripto en USD (`BTC-USD`) |
+| `cantidad` | Compra, venta               | Cuántas acciones o monedas (admite fracciones: `0.5`)                       |
+| `precio`   | Compra, venta               | Precio **por unidad** en USD (no el total de la operación)                  |
+| `monto`    | Depósito, retiro, dividendo | El total en USD                                                             |
+| `comision` | Opcional                    | Comisión de la operación en USD                                             |
+| `notas`    | Opcional                    | Lo que quieras anotar                                                       |
 
 También se aceptan `split` (con la columna `razon_split`: `10` para un split 10:1), `comisión`, `impuesto` e `interés` (con `monto`) y los nombres en inglés (`date`, `type`, `symbol`, `quantity`, `price`, `amount`, `fee`, `notes`; los tipos `BUY`, `SELL`, `DEPOSIT`…). Las columnas que no conocemos se ignoran, así que un archivo exportado desde acá entra tal cual.
 

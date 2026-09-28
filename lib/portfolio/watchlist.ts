@@ -1,5 +1,6 @@
 import { d, pickPrice, type Dec, type PriceSource } from "@/lib/engine";
 import { liveDay, liveQuoteOf, type LivePrice } from "./live-series";
+import { typeLabelOf, type TypeLabel } from "./instrument-type";
 import type { InstrumentRow, QuoteRow, WatchlistMarketRow } from "./rows";
 
 // Vista de la watchlist (spec §10.4): precio, cambio del día, rango de 52 semanas y minigráfico de
@@ -29,7 +30,7 @@ export interface WatchlistRowView {
   instrumentId: string;
   symbol: string;
   name: string | null;
-  typeLabel: "ETF" | "Acción" | null;
+  typeLabel: TypeLabel | null;
   price: Dec | null;
   priceSource: PriceSource | null;
   priceAsOf: Date | null;
@@ -43,11 +44,7 @@ export interface WatchlistRowView {
   spark: number[];
 }
 
-/** El tipo como lo muestra la app: lo que no es ETF se llama "Acción". */
-export function typeLabelOf(type: string | null): "ETF" | "Acción" | null {
-  if (type === null) return null;
-  return type === "ETF" ? "ETF" : "Acción";
-}
+export { typeLabelOf } from "./instrument-type";
 
 /**
  * Rango de los cierres de 52 semanas con el precio actual adentro. El precio se suma al rango:

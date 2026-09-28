@@ -46,6 +46,7 @@ export const MAX_NAMED_SLICES = PALETTE_SIZE;
 const TYPE_LABELS: Record<string, string> = {
   STOCK: "Acciones",
   ETF: "ETF",
+  CRYPTO: "Cripto",
 };
 
 const CASH_COLOR = "var(--alloc-cash)";

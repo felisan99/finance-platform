@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  axisWidthFor,
   formatChartMoney,
   formatChartMoneySigned,
   formatChartPercent,
@@ -41,5 +42,15 @@ describe("formatos de gráficos", () => {
     expect(formatChartThousandsTick(2500, 1)).toBe("2,5 mil");
     expect(formatChartThousandsTick(1500000, 0)).toBe("1500 mil");
     expect(formatChartThousandsTick(0, 0)).toBe("0");
+  });
+});
+
+describe("axisWidthFor", () => {
+  it("el ancho sale de la marca más larga, con un mínimo", () => {
+    expect(axisWidthFor(["0", "500", "1000"], 48)).toBe(48);
+    // «125000» (Bitcoin): 6 caracteres × 8 + 14.
+    expect(axisWidthFor(["50000", "125000"], 48)).toBe(62);
+    expect(axisWidthFor(["-12,5"])).toBe(54);
+    expect(axisWidthFor([])).toBe(44);
   });
 });

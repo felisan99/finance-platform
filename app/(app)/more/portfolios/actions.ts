@@ -6,11 +6,14 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/db/auth";
 import { createClient } from "@/lib/db/server";
 import { describeError } from "@/lib/market-data";
+import { backfillPendingInBackground } from "@/lib/portfolio/background";
 import { rememberPortfolio } from "@/lib/portfolio/current-portfolio";
+import { resolveInstrumentId } from "@/lib/portfolio/instruments";
 import { ALL_PORTFOLIOS } from "@/lib/portfolio/portfolio-scope";
 import { listPortfolios } from "@/lib/portfolio/queries";
 import {
   MAX_PORTFOLIOS,
+  benchmarkSchema,
   portfolioNameSchema,
   sameName,
 } from "@/lib/validation/portfolio";
@@ -87,6 +90,16 @@ export async function createPortfolio(
     };
   }
   const name = parsed.data;
+  const benchmark = benchmarkSchema.safeParse(
+    formData.get("benchmark") ?? "SPY",
+  );
+  if (!benchmark.success) {
+    return {
+      status: "error",
+      message: "Elegí contra qué comparar.",
+      value: raw,
+    };
+  }
 
   let id: string;
   try {
@@ -99,8 +112,15 @@ export async function createPortfolio(
       return { status: "error", message: takenMessage(name), value: raw };
     }
 
+    // El benchmark tiene que existir como instrumento para tener precios.
+    const instrument = await resolveInstrumentId(supabase, benchmark.data);
+    if (!instrument.ok) {
+      return { status: "error", message: instrument.message, value: raw };
+    }
+
     const { data, error } = await supabase.rpc("create_portfolio", {
       p_name: name,
+      p_benchmark: benchmark.data,
     });
     if (error) {
       const known = knownDbError(error.code, name);
@@ -115,8 +135,53 @@ export async function createPortfolio(
   }
 
   await rememberPortfolio(id);
+  // Si el benchmark es nuevo en la base, su historial se descarga sin hacer esperar.
+  backfillPendingInBackground("benchmark-backfill");
   revalidatePath("/", "layout");
   redirect("/");
+}
+
+/** Cambia contra qué se compara el rendimiento de un portafolio propio. */
+export async function setPortfolioBenchmark(
+  _previous: PortfolioFormState,
+  formData: FormData,
+): Promise<PortfolioFormState> {
+  const supabase = await createClient();
+  if (!(await getSessionUser(supabase))) redirect("/login");
+
+  const id = uuid.safeParse(formData.get("id"));
+  const benchmark = benchmarkSchema.safeParse(formData.get("benchmark"));
+  if (!id.success) {
+    return { status: "error", message: "El portafolio no es válido." };
+  }
+  if (!benchmark.success) {
+    return { status: "error", message: "Elegí contra qué comparar." };
+  }
+
+  try {
+    const portfolios = await listPortfolios(supabase);
+    if (!portfolios.some((portfolio) => portfolio.id === id.data)) {
+      return { status: "error", message: "No encontramos ese portafolio." };
+    }
+    const instrument = await resolveInstrumentId(supabase, benchmark.data);
+    if (!instrument.ok) return { status: "error", message: instrument.message };
+
+    const { error } = await supabase
+      .from("portfolios")
+      .update({ benchmark_symbol: benchmark.data })
+      .eq("id", id.data);
+    if (error) {
+      console.error("[portfolio-benchmark]", error.code, error.message);
+      return { status: "error", message: GENERIC };
+    }
+  } catch (error) {
+    console.error("[portfolio-benchmark]", describeError(error));
+    return { status: "error", message: GENERIC };
+  }
+
+  backfillPendingInBackground("benchmark-backfill");
+  revalidatePath("/", "layout");
+  redirect("/more/portfolios");
 }
 
 /** Cambia el nombre de un portafolio propio. */

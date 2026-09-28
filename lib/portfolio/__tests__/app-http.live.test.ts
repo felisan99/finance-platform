@@ -1150,6 +1150,70 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(csv.trimEnd().split("\r\n")).toHaveLength(1); // solo el encabezado
   });
 
+  it("cripto: un portafolio contra Bitcoin, con BTC-USD rotulado Cripto y la ficha de la moneda", async () => {
+    // BTC-USD ya está en finance-dev con su historial (lo dio de alta la app). Si faltara, la
+    // prueba lo dice en vez de crearlo a medias.
+    const btcId = (await getInstrumentIdsBySymbol(admin, ["BTC-USD"])).get(
+      "BTC-USD",
+    );
+    if (!btcId)
+      throw new Error(
+        "Falta BTC-USD en finance-dev: cargalo una vez desde la app",
+      );
+    const c = await newSession("crypto");
+    const { data: portfolioId, error } = await c.client.rpc(
+      "create_portfolio",
+      { p_name: "Cripto", p_benchmark: "BTC-USD" },
+    );
+    expect(error).toBeNull();
+    const crypto = (await listPortfolios(c.client)).find(
+      (p) => p.id === portfolioId,
+    )!;
+    const base = {
+      user_id: c.userId,
+      account_id: crypto.account.id,
+      currency: "USD",
+    };
+    const inserted = await c.client.from("transactions").insert([
+      {
+        ...base,
+        type: "DEPOSIT",
+        executed_at: "2026-06-01T15:00:00Z",
+        amount: 2000,
+        // Un insert de varias filas completa con NULL las columnas que faltan en alguna.
+        fee: 0,
+      },
+      {
+        ...base,
+        type: "BUY",
+        instrument_id: btcId,
+        executed_at: "2026-06-02T15:00:00Z",
+        quantity: 0.0125,
+        price: 70000,
+        fee: 0,
+      },
+    ]);
+    expect(inserted.error).toBeNull();
+    c.jar.setAll([{ name: "pt-portfolio", value: crypto.id }]);
+
+    const home = await page("/", c);
+    expect(home.html).toContain("vs Bitcoin");
+    expect(home.html).not.toContain("digest");
+    const positions = await page("/positions", c);
+    expect(positions.html).toContain('href="/positions/BTC-USD"');
+    expect(positions.html).toContain(">Cripto</span>");
+    expect(positions.html).toContain("0,0125");
+    const detail = await page("/positions/BTC-USD", c);
+    expect(detail.html).toContain("Datos de la moneda");
+    expect(detail.html).not.toContain("Datos de la empresa");
+    expect(detail.html).not.toContain("P/E");
+    expect(detail.html).not.toContain("digest");
+    // Comparar contra Bitcoin se ve también en la lista de portafolios.
+    expect((await page("/more/portfolios", c)).html).toContain(
+      "Contra Bitcoin",
+    );
+  });
+
   it("varios portafolios: el selector, cada pantalla mira el elegido y una cookie ajena no sirve", async () => {
     const [principal] = await listPortfolios(a.client);
     const [bPortfolio] = await listPortfolios(b.client);

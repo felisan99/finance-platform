@@ -28,7 +28,8 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
   SYNC_BASE_HOLDINGS_LEG:
     "Patas de efectivo automáticas de Delta (se ignoran a propósito: el efectivo se calcula solo)",
   UNSUPPORTED_WAY: "Tipo de operación que todavía no se importa",
-  UNSUPPORTED_ASSET_TYPE: "Tipo de activo no soportado (solo acciones y ETFs)",
+  UNSUPPORTED_ASSET_TYPE:
+    "Tipo de activo no soportado (de Delta se importan acciones y ETFs; la cripto se carga a mano o con la plantilla)",
   UNSUPPORTED_CURRENCY: "Moneda no soportada (solo USD)",
 };
 

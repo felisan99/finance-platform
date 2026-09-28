@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import type { CompanyKind } from "@/lib/market-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buildEarningsView, type Verdict } from "@/lib/portfolio/earnings-view";
 import { loadCompanyData } from "@/lib/portfolio/company-data";
@@ -20,7 +21,7 @@ export async function EarningsCard({
   kind,
 }: {
   providerSymbol: string;
-  kind: "stock" | "etf";
+  kind: CompanyKind;
 }) {
   if (kind !== "stock") return null;
   const data = await loadCompanyData(providerSymbol, kind);

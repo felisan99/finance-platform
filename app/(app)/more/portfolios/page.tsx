@@ -5,6 +5,7 @@ import { Notice, PageHeader } from "@/components/app/stat";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
+import { benchmarkLabel } from "@/lib/portfolio/benchmarks";
 import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
 import { MAX_PORTFOLIOS } from "@/lib/validation/portfolio";
 
@@ -30,8 +31,13 @@ export default async function PortfoliosPage() {
                   href={`/more/portfolios/${portfolio.id}`}
                   className="flex min-h-11 items-center justify-between gap-3 px-3 py-2"
                 >
-                  <span className="min-w-0 truncate font-medium">
-                    {portfolio.name}
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">
+                      {portfolio.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Contra {benchmarkLabel(portfolio.benchmarkSymbol)}
+                    </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
                     {portfolio.id === current?.id && portfolios.length > 1 && (

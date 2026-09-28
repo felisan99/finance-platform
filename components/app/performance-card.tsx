@@ -24,6 +24,7 @@ import {
   formatChartIndex,
   formatChartMoney,
   formatChartMoneySigned,
+  axisWidthFor,
   formatChartTick,
   formatDateKey,
   formatDayMonthKey,
@@ -265,7 +266,12 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
                   domain={scale.domain}
                   ticks={scale.ticks}
                   interval={0}
-                  width={48}
+                  width={axisWidthFor(
+                    scale.ticks.map((tick) =>
+                      formatChartTick(tick, scale.decimals),
+                    ),
+                    48,
+                  )}
                   tickFormatter={(value: number) =>
                     formatChartTick(value, scale.decimals)
                   }
@@ -308,7 +314,12 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
                   domain={scale.domain}
                   ticks={scale.ticks}
                   interval={0}
-                  width={mode === "value" ? 48 : 44}
+                  width={axisWidthFor(
+                    scale.ticks.map((tick) =>
+                      formatChartTick(tick, scale.decimals),
+                    ),
+                    mode === "value" ? 48 : 44,
+                  )}
                   tickFormatter={(value: number) =>
                     formatChartTick(value, scale.decimals)
                   }
