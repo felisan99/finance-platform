@@ -7,12 +7,17 @@ import {
   localRangeToUtc,
   type ActivityFilters,
 } from "./activity";
-import type { PortfolioRef } from "./portfolio-scope";
+import {
+  portfoliosOfScope,
+  type PortfolioRef,
+  type PortfolioScope,
+} from "./portfolio-scope";
 import { buildSnapshot, type PortfolioSnapshot } from "./snapshot";
 import {
   INSTRUMENT_COLUMNS,
   QUOTE_COLUMNS,
   TRANSACTION_COLUMNS,
+  accountTransactionRowSchema,
   portfolioRowSchema,
   closesRowSchema,
   dailyCloseRowSchema,
@@ -28,6 +33,7 @@ import {
   type InstrumentRow,
   type QuoteRow,
   type RecentImportRow,
+  type AccountTransactionRow,
   type TransactionRow,
   type WatchlistItemRow,
   type WatchlistMarketRow,
@@ -151,11 +157,7 @@ export async function getTransactionRow(
     .eq("id", id)
     .limit(1);
   if (error) throw new Error(`db transactions: ${error.message}`);
-  const found = parseRows(
-    transactionRowSchema.extend({ account_id: z.string() }),
-    data,
-    "transactions",
-  )[0];
+  const found = parseRows(accountTransactionRowSchema, data, "transactions")[0];
   if (!found) return null;
   const { account_id: accountId, ...row } = found;
   return { row, accountId };
@@ -406,23 +408,25 @@ export async function getCloseSeries(
 }
 
 /**
- * Carga todo lo que necesitan Inicio y Posiciones de un portafolio: sus transacciones, los
- * instrumentos, las cotizaciones y los últimos cierres. Las lecturas son independientes entre sí y
- * van en paralelo.
+ * Carga todo lo que necesitan Inicio y Posiciones de un alcance (un portafolio, o todos con «Todo
+ * junto»): las transacciones de cada cuenta, los instrumentos, las cotizaciones y los últimos
+ * cierres. Las lecturas son independientes entre sí y van en paralelo.
  */
-export async function loadPortfolioSnapshot(
+export async function loadScopeSnapshot(
   client: Client,
-  portfolio: PortfolioRef,
+  scope: PortfolioScope,
 ): Promise<PortfolioSnapshot> {
-  const transactionRows = await getTransactionRows(
-    client,
-    portfolio.account.id,
+  const portfolios = portfoliosOfScope(scope);
+  const rowsByPortfolio = await Promise.all(
+    portfolios.map((portfolio) =>
+      getTransactionRows(client, portfolio.account.id),
+    ),
   );
   const ids = [
     ...new Set(
-      transactionRows.flatMap((r) =>
-        r.instrument_id ? [r.instrument_id] : [],
-      ),
+      rowsByPortfolio
+        .flat()
+        .flatMap((r) => (r.instrument_id ? [r.instrument_id] : [])),
     ),
   ];
 
@@ -433,13 +437,23 @@ export async function loadPortfolioSnapshot(
   ]);
 
   return buildSnapshot({
-    portfolio,
-    transactionRows,
+    scope,
+    parts: portfolios.map((portfolio, i) => ({
+      portfolio,
+      transactionRows: rowsByPortfolio[i]!,
+    })),
     instruments,
     quotes,
     closes,
   });
 }
+
+/** El snapshot de un solo portafolio. */
+export const loadPortfolioSnapshot = (
+  client: Client,
+  portfolio: PortfolioRef,
+): Promise<PortfolioSnapshot> =>
+  loadScopeSnapshot(client, { kind: "one", portfolio });
 
 /**
  * Una página de Actividad: de la más reciente a la más antigua, con filtros. Pide una fila de más
@@ -448,9 +462,10 @@ export async function loadPortfolioSnapshot(
  */
 export async function getActivityPage(
   client: Client,
-  accountId: string,
+  accountIds: readonly string[],
   filters: ActivityFilters,
-): Promise<{ rows: TransactionRow[]; hasNext: boolean }> {
+): Promise<{ rows: AccountTransactionRow[]; hasNext: boolean }> {
+  if (accountIds.length === 0) return { rows: [], hasNext: false };
   let instrumentId: string | null = null;
   if (filters.symbol) {
     instrumentId =
@@ -462,8 +477,8 @@ export async function getActivityPage(
 
   let query = loose(client)
     .from("transactions")
-    .select(TRANSACTION_COLUMNS)
-    .eq("account_id", accountId);
+    .select(`${TRANSACTION_COLUMNS}, account_id`)
+    .in("account_id", [...accountIds]);
   if (filters.type) query = query.eq("type", filters.type);
   if (instrumentId) query = query.eq("instrument_id", instrumentId);
   const range = localRangeToUtc(filters.from, filters.to);
@@ -478,7 +493,7 @@ export async function getActivityPage(
     .range(start, start + ACTIVITY_PAGE_SIZE);
   if (error) throw new Error(`db transactions: ${error.message}`);
 
-  const rows = parseRows(transactionRowSchema, data, "transactions");
+  const rows = parseRows(accountTransactionRowSchema, data, "transactions");
   return {
     rows: rows.slice(0, ACTIVITY_PAGE_SIZE),
     hasNext: rows.length > ACTIVITY_PAGE_SIZE,

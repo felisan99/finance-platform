@@ -18,8 +18,9 @@ import {
   getBenchmarkInstrument,
   getWatchlistItems,
   listPortfolios,
-  loadPortfolioSnapshot,
+  loadScopeSnapshot,
 } from "@/lib/portfolio/queries";
+import { benchmarkOfScope } from "@/lib/portfolio/portfolio-scope";
 import {
   collectRefreshTargets,
   refreshMessage,
@@ -61,12 +62,19 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
       listPortfolios(supabase),
       getWatchlistItems(supabase),
     ]);
-    const snapshots = await Promise.all(
-      portfolios.map((portfolio) => loadPortfolioSnapshot(supabase, portfolio)),
-    );
-    // Sin benchmark el resto se actualiza igual: el gráfico solo se queda con los cierres.
+    // Todos los portafolios juntos: sus posiciones abiertas, sin repetir símbolos.
+    const snapshot =
+      portfolios.length > 0
+        ? await loadScopeSnapshot(supabase, { kind: "all", portfolios })
+        : null;
+    // Los benchmarks de cada portafolio y el de «Todo junto». Sin benchmark el resto se actualiza
+    // igual: el gráfico solo se queda con los cierres.
+    const benchmarkSymbols = new Set(portfolios.map((p) => p.benchmarkSymbol));
+    if (portfolios.length > 1) {
+      benchmarkSymbols.add(benchmarkOfScope({ kind: "all", portfolios }));
+    }
     const benchmarks = await Promise.all(
-      [...new Set(portfolios.map((p) => p.benchmarkSymbol))].map((symbol) =>
+      [...benchmarkSymbols].map((symbol) =>
         getBenchmarkInstrument(supabase, symbol).catch((error: unknown) => {
           console.error("[refresh-quotes] benchmark", describeError(error));
           return null;
@@ -75,12 +83,11 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
     );
 
     const targets = collectRefreshTargets({
-      openSymbols: snapshots.flatMap((snapshot) =>
-        snapshot.engine.positions.filter((p) => p.isOpen).map((p) => p.symbol),
-      ),
-      instrumentBySymbol: new Map(
-        snapshots.flatMap((snapshot) => [...snapshot.instrumentBySymbol]),
-      ),
+      openSymbols:
+        snapshot?.engine.positions
+          .filter((p) => p.isOpen)
+          .map((p) => p.symbol) ?? [],
+      instrumentBySymbol: snapshot?.instrumentBySymbol ?? new Map(),
       followed: followed.map((item) => item.instruments),
       benchmarks: benchmarks.filter((b) => b !== null),
     });

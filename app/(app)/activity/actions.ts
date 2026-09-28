@@ -85,7 +85,7 @@ async function targetPortfolio(
   args: { editId: string | null; chosen: FormDataEntryValue | null },
 ): Promise<
   | { ok: true; portfolio: PortfolioRef; current: TransactionRow | null }
-  | { ok: false; message: string }
+  | { ok: false; message: string; field?: "portfolio" }
 > {
   if (args.editId !== null) {
     const [found, { portfolios }] = await Promise.all([
@@ -102,7 +102,11 @@ async function targetPortfolio(
   const portfolio = await resolveChosenPortfolio(supabase, args.chosen);
   return portfolio
     ? { ok: true, portfolio, current: null }
-    : { ok: false, message: "Elegí un portafolio de la lista." };
+    : {
+        ok: false,
+        message: "Elegí en qué portafolio guardarla.",
+        field: "portfolio",
+      };
 }
 
 /** Las operaciones de una cuenta, como filas y como transacciones del motor. */
@@ -147,7 +151,14 @@ export async function saveTransaction(
       editId,
       chosen: formData.get("portfolio"),
     });
-    if (!target.ok) return { status: "error", message: target.message, values };
+    if (!target.ok)
+      return target.field
+        ? {
+            status: "error",
+            fieldErrors: { [target.field]: target.message },
+            values,
+          }
+        : { status: "error", message: target.message, values };
     const { account } = target.portfolio;
     const { current } = target;
     const { existing } = await loadLedger(supabase, account.id);

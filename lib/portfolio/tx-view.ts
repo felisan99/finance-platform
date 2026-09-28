@@ -16,6 +16,8 @@ export interface TxView {
   cash: Dec;
   executedAt: Date;
   source: string;
+  /** De qué portafolio es (solo al mirar varios juntos). */
+  portfolioName?: string | null;
 }
 
 const trim = (value: Dec) => formatQuantity(value);

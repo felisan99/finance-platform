@@ -42,11 +42,22 @@ function csvNumber(value: string | null): string {
   return value === null ? "" : d(value).toFixed();
 }
 
+/**
+ * Columna extra de la exportación de «Todo junto»: de qué portafolio es cada operación. Va al final
+ * y el formato simple la ignora al importar (las columnas de más no se leen), así que el archivo se
+ * vuelve a importar igual, en el portafolio que se elija.
+ */
+export const PORTFOLIO_COLUMN = "portafolio";
+
 export function buildTransactionsCsv(
   rows: readonly TransactionRow[],
   symbolById: ReadonlyMap<string, string>,
+  /** Con varios portafolios, el nombre del de cada fila (agrega la columna `portafolio`). */
+  portfolioOf?: (row: TransactionRow) => string,
 ): string {
-  const lines = [CSV_COLUMNS.join(",")];
+  const lines = [
+    [...CSV_COLUMNS, ...(portfolioOf ? [PORTFOLIO_COLUMN] : [])].join(","),
+  ];
   for (const row of rows) {
     const at = new Date(row.executed_at);
     lines.push(
@@ -66,6 +77,7 @@ export function buildTransactionsCsv(
         csvText(row.notes),
         csvText(row.source),
         csvText(row.external_id),
+        ...(portfolioOf ? [csvText(portfolioOf(row))] : []),
       ].join(","),
     );
   }

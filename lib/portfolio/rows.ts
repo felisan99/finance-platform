@@ -38,6 +38,12 @@ export const transactionRowSchema = z.object({
 });
 export type TransactionRow = z.infer<typeof transactionRowSchema>;
 
+/** Una transacción con la cuenta a la que pertenece (para ubicarla en su portafolio). */
+export const accountTransactionRowSchema = transactionRowSchema.extend({
+  account_id: z.string(),
+});
+export type AccountTransactionRow = z.infer<typeof accountTransactionRowSchema>;
+
 export const INSTRUMENT_COLUMNS =
   "id, symbol, name, type, exchange, sector, provider_symbol";
 

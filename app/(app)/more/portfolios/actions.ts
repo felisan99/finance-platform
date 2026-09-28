@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/db/auth";
 import { createClient } from "@/lib/db/server";
 import { describeError } from "@/lib/market-data";
 import { rememberPortfolio } from "@/lib/portfolio/current-portfolio";
+import { ALL_PORTFOLIOS } from "@/lib/portfolio/portfolio-scope";
 import { listPortfolios } from "@/lib/portfolio/queries";
 import {
   MAX_PORTFOLIOS,
@@ -43,18 +44,24 @@ function knownDbError(code: string | undefined, name: string): string | null {
   return null;
 }
 
-/** Cambia el portafolio que se está mirando (el selector de Inicio, Posiciones y Actividad). */
+/**
+ * Cambia lo que se está mirando (el selector de Inicio, Posiciones y Actividad): un portafolio o
+ * «Todo junto».
+ */
 export async function selectPortfolio(formData: FormData): Promise<void> {
   const supabase = await createClient();
   if (!(await getSessionUser(supabase))) redirect("/login");
 
-  const id = uuid.safeParse(formData.get("portfolio"));
-  if (!id.success) return;
+  const chosen = formData.get("portfolio");
+  const all = chosen === ALL_PORTFOLIOS;
+  const id = uuid.safeParse(chosen);
+  if (!all && !id.success) return;
   try {
-    // Solo se recuerda uno propio: RLS no deja ver los ajenos.
+    // Solo se recuerda uno propio (RLS no deja ver los ajenos), o «Todo junto» si hay más de uno.
     const portfolios = await listPortfolios(supabase);
-    if (!portfolios.some((portfolio) => portfolio.id === id.data)) return;
-    await rememberPortfolio(id.data);
+    if (all ? portfolios.length < 2 : !portfolios.some((p) => p.id === id.data))
+      return;
+    await rememberPortfolio(all ? ALL_PORTFOLIOS : id.data!);
   } catch (error) {
     console.error("[portfolio-select]", describeError(error));
     return;

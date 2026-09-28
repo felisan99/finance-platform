@@ -343,6 +343,39 @@ Felipe pidió poder tener dos portafolios, por ejemplo uno de acciones y otro de
   - Suite en vivo por HTTP 24/24 (un caso nuevo). Prueba el selector, que cada pantalla mire el elegido, la exportación con el nombre, el alta y la importación que preguntan el portafolio, la edición en el portafolio de la operación y que una cookie ajena o inventada caiga al propio.
   - Chrome headless por CDP a 390 px contra `next start` (CSP real), en claro y oscuro: 31 comprobaciones. Recorre crear, elegir con el selector (Server Action y cookie HttpOnly), guardar una operación desde el formulario en el portafolio elegido, nombre repetido, renombrar, borrar escribiendo el nombre (mal escrito no borra) y el último sin opción de borrar. No hubo scroll horizontal ni errores de JS o de CSP.
 
+## Varios portafolios, etapa 2: «Todo junto» (2026-09-28)
+
+Felipe pidió la vista «Todo junto» desde el inicio, y aprobó la etapa 2 junto con el commit de la etapa 1 (`d9024df`).
+
+- **El motor no mezcla cuentas.** Juntar las transacciones de varias cuentas en un solo libro da resultados incorrectos:
+  - Un `SPLIT` cargado en cada cuenta se aplicaría dos veces a la cantidad total, y también al factor que des-ajusta los cierres.
+  - La venta de una cuenta se costearía con el promedio de todas.
+  - Hay tests que muestran las dos cosas.
+- **Cómo se suma** (`lib/engine/combine.ts`, puro): cada cuenta se calcula por separado y después se suman los resultados.
+  - `combineEngineResults` suma por símbolo las cantidades, el costo base, lo realizado y los dividendos, y saca el costo promedio de la suma. El efectivo negativo se evalúa sobre el total.
+  - `combineSeries` suma día por día el valor, el efectivo, el valor de mercado y los flujos. Una cuenta suma 0 antes de su primer día. El crecimiento diario se recalcula con la misma convención que `buildDailySeries`, así que el TWR es el de la cartera entera y no un promedio de los TWR.
+  - `performanceOfSeries` separa las métricas del armado de la serie; `computePerformance` sigue igual por fuera.
+  - Propiedades probadas: el valor y los flujos son la suma día por día; dos cuentas idénticas rinden lo mismo que una; combinar una sola serie no la cambia.
+  - Con Inicio: el último punto de la serie sumada es el valor total, y la ganancia de «Todo» es valor − depósitos + retiros.
+- **Snapshot:** tiene un alcance (`scope`: un portafolio o todos), sus partes (`parts`, una por portafolio con su libro y su motor) y la suma arriba (`engine`, `valued`, `transactions` en orden cronológico). Con un portafolio, `engine` es el de su cuenta tal cual, sin pasar por la suma. Se cargan todas las cuentas y después los instrumentos, las cotizaciones y los cierres una sola vez.
+- **Cookie `all`:** vale solo con más de un portafolio. Con uno, cae a ese y no hay nada que juntar.
+- **Benchmark de «Todo junto»:** el que comparten los portafolios, o SPY si no comparten uno (`benchmarkOfScope`). Hoy todos usan SPY. «Actualizar precios» agrega también ese benchmark.
+- **Qué cambia en cada pantalla:**
+  - Actividad lista las operaciones de todos (`in("account_id", …)`), cada una con una etiqueta de su portafolio.
+  - La ficha de un activo muestra las operaciones del símbolo en todos los portafolios.
+  - «Antes de comprar» mira la cartera entera. Una transferencia entre portafolios cuenta como depósito para el aporte típico; queda así.
+  - Si un portafolio tiene efectivo negativo, Inicio lo nombra aunque la suma dé positiva.
+  - El alta y la importación arrancan sin portafolio, con «Elegí un portafolio», y el servidor lo pide en el campo.
+  - «Exportar CSV» baja todo con una columna `portafolio` al final. El formato simple ignora las columnas de más, así que el archivo vuelve a entrar igual y con las mismas claves de deduplicación (probado).
+- **Un bug viejo del formulario de operaciones**, encontrado al probar «Todo junto» en Chrome:
+  - Qué pasaba: después de un error del servidor, «Tipo de operación» volvía a mostrar «Compra» aunque los campos fueran los de un depósito, y un segundo envío mandaba «Compra».
+  - Causa: con `action={formAction}`, React 19 reinicia el formulario al terminar la acción, y el tipo y el precio son controlados.
+  - Arreglo: se envía desde `onSubmit` dentro de una transición. El formulario no se reinicia y cada campo conserva lo escrito. Existía desde que el formulario usa acciones.
+- **Verificación:**
+  - 1630 unitarias (eran 1601). 22 mutaciones sobre la suma, el alcance, el snapshot, el rendimiento y la exportación, todas detectadas después de agregar el test de los dividendos.
+  - Suite en vivo por HTTP 24/24. El caso de varios portafolios ahora cubre «Todo junto»: Inicio con el valor total igual al del cálculo, el TWR sin `digest`, Actividad con las dos etiquetas, la exportación con la columna y el nombre, el alta y la importación que piden elegir, y la ficha rotulada. También cubre a una persona con un solo portafolio y la cookie `all`.
+  - Chrome headless a 390 px contra `next start`: 42 comprobaciones. Incluyen «Todo junto» con el aportado de los dos, el gráfico, Actividad con etiquetas, el alta sin portafolio que avisa en el campo y conserva lo escrito, y el guardado en el portafolio elegido.
+
 ## Observaciones del spec para fases posteriores
 
 1. **Splits y precios.** Resuelto en la Fase 3 del lado de los datos (ver "Desvíos y decisiones de la Fase 3"); el des-ajuste al valuar es de la Fase 5. El motor aplica solo transacciones `SPLIT`; `corporate_actions` informa o propone splits, pero no se aplican dos veces.

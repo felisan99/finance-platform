@@ -15,6 +15,11 @@ export function TxRow({ view }: { view: TxView }) {
           {view.symbol && (
             <span className="text-muted-foreground"> · {view.symbol}</span>
           )}
+          {view.portfolioName && (
+            <span className="ml-1.5 inline-block max-w-32 truncate rounded bg-muted px-1.5 align-middle text-[0.65rem] font-normal text-muted-foreground">
+              {view.portfolioName}
+            </span>
+          )}
         </p>
         <p className="truncate text-xs text-muted-foreground tabular-nums">
           {view.detail || formatDateTime(view.executedAt)}

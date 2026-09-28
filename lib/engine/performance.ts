@@ -165,16 +165,26 @@ function periodGain(
 }
 
 export function computePerformance(input: PerformanceInput): PerformanceResult {
-  const series = buildDailySeries(input);
+  return performanceOfSeries(buildDailySeries(input), input.benchmark);
+}
+
+/**
+ * Las métricas de cada período a partir de una serie ya armada: la de una cuenta
+ * (`buildDailySeries`) o la suma de varias (`combineSeries`, «Todo junto»).
+ */
+export function performanceOfSeries(
+  series: DailySeries,
+  benchmarkCloses: readonly DailyClose[] | null,
+): PerformanceResult {
   const last = series.points[series.points.length - 1];
   if (series.baseDate === null || last === undefined) {
     return { series, periods: [], warnings: [] };
   }
   const endDate = last.date;
   const benchmark =
-    input.benchmark === null || input.benchmark.length === 0
+    benchmarkCloses === null || benchmarkCloses.length === 0
       ? null
-      : sortCloses(input.benchmark);
+      : sortCloses(benchmarkCloses);
   const valueByDate = new Map(series.points.map((p) => [p.date, p.value]));
 
   const periods = PERIOD_IDS.map((id): PeriodResult => {

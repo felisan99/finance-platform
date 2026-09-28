@@ -25,7 +25,9 @@ import {
   getTransactionIdsByImport,
   listPortfolios,
   getTransactionRows,
+  loadScopeSnapshot,
 } from "../queries";
+import { formatMoney } from "../format";
 import { parseTransactionForm } from "@/lib/validation/transaction";
 import { FIXTURE_CSV } from "./fixture";
 
@@ -1240,6 +1242,73 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
         "Todavía no hay operaciones",
       );
       b.jar.setAll([{ name: "pt-portfolio", value: "" }]);
+      // Y B, con «Todo junto» pero un solo portafolio, ve el suyo (no hay nada que juntar).
+      b.jar.setAll([{ name: "pt-portfolio", value: "all" }]);
+      expect((await page("/positions", b)).html).toContain(
+        "Todavía no cargaste operaciones",
+      );
+      b.jar.setAll([{ name: "pt-portfolio", value: "" }]);
+
+      // «Todo junto»: la suma de los dos, con el mismo cálculo que usa la app.
+      choose("all");
+      const allSnapshot = await loadScopeSnapshot(a.client, {
+        kind: "all",
+        portfolios: await listPortfolios(a.client),
+      });
+      const principalSnapshot = await loadScopeSnapshot(a.client, {
+        kind: "one",
+        portfolio: principal!,
+      });
+      expect(
+        allSnapshot.valued.totalValue
+          .minus(principalSnapshot.valued.totalValue)
+          .toFixed(),
+      ).toBe("100");
+      const allHome = await page("/", a);
+      expect(allHome.html).toContain('value="all" selected=""');
+      expect(allHome.html).toContain(">Todos los portafolios</option>");
+      expect(allHome.html).toContain(
+        text(formatMoney(allSnapshot.valued.totalValue)),
+      );
+      expect(allHome.html).toContain("Rendimiento (TWR)");
+      expect(allHome.html).not.toContain("digest");
+      expect((await page("/positions", a)).html).toContain("VOO");
+
+      // Actividad: las de los dos, cada una con su portafolio.
+      const allActivity = await page("/activity", a);
+      expect(allActivity.html).toContain("VOO");
+      expect(allActivity.html).toContain("Depósito");
+      expect(allActivity.html).toMatch(/>Cripto Prueba<\/span>/);
+      expect(allActivity.html).toMatch(/>Portafolio principal<\/span>/);
+
+      // Exportar: un archivo con todo y la columna portafolio.
+      const allExport = await get("/activity/export", a);
+      expect(allExport.headers.get("content-disposition")).toMatch(
+        /^attachment; filename="transacciones-todos-los-portafolios-\d{4}-\d{2}-\d{2}\.csv"$/,
+      );
+      const allCsv = (await allExport.text()).trimEnd().split("\r\n");
+      expect(allCsv[0]!.endsWith(",portafolio")).toBe(true);
+      const principalRows = await getTransactionRows(
+        a.client,
+        principal!.account.id,
+      );
+      expect(allCsv).toHaveLength(principalRows.length + 2);
+      expect(
+        allCsv.filter((line) => line.endsWith(",Cripto Prueba")),
+      ).toHaveLength(1);
+
+      // Alta e importación: hay que elegir el portafolio (no arranca en ninguno).
+      const allNew = await page("/activity/new", a);
+      expect(allNew.html).toContain("Elegí un portafolio");
+      expect(allNew.html).toContain('value="" disabled="" selected=""');
+      expect((await page("/activity/import", a)).html).toContain(
+        "Elegí un portafolio",
+      );
+
+      // La ficha: la posición sumada, rotulada con «Todos los portafolios».
+      const allVoo = await page("/positions/VOO", a);
+      expect(allVoo.html).toContain("Todos los portafolios");
+      expect(allVoo.html).not.toContain("digest");
     } finally {
       choose(null);
       await a.client.from("portfolios").delete().eq("id", second.id);

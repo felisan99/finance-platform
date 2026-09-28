@@ -43,6 +43,7 @@ export {
   MIN_XIRR_DAYS,
   PERIOD_IDS,
   computePerformance,
+  performanceOfSeries,
   periodBase,
   periodCurve,
 } from "./performance";
@@ -66,6 +67,7 @@ export type {
   RiskResult,
 } from "./risk";
 export { computeMonthlyReturns } from "./monthly";
+export { combineEngineResults, combineSeries } from "./combine";
 export type { MonthlyReturn } from "./monthly";
 export {
   MIN_SHARED_DAYS,

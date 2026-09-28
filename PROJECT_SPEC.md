@@ -439,7 +439,20 @@ Casi ningún usuario usa Delta, así que el formato principal es uno propio, sim
 
 Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con: **Inicio, Posiciones, Watchlist, Actividad y Más**.
 
-**Varios portafolios** (2026-09-28): con más de uno, Inicio, Posiciones y Actividad muestran arriba del título un selector (un `<select>` nativo) con el portafolio que se está mirando. La elección se guarda en la cookie `pt-portfolio` (HttpOnly), que el servidor cruza siempre con los portafolios de la persona: si ya no existe o es ajena, se mira el primero. La ficha de un activo muestra el nombre del portafolio sin selector, e Inicio, Posiciones, Actividad, la exportación y «Antes de comprar» son del portafolio elegido. La Watchlist es una sola para todos. «Actualizar precios» actualiza las posiciones de todos los portafolios. Con un solo portafolio la app se ve como antes. Todavía no hay vista «Todo junto»: es la etapa 2.
+**Varios portafolios** (2026-09-28): con más de uno, Inicio, Posiciones y Actividad muestran arriba del título un selector (un `<select>` nativo) con el portafolio que se está mirando. La elección se guarda en la cookie `pt-portfolio` (HttpOnly), que el servidor cruza siempre con los portafolios de la persona: si ya no existe o es ajena, se mira el primero. La ficha de un activo muestra el nombre del portafolio sin selector, e Inicio, Posiciones, Actividad, la exportación y «Antes de comprar» son del portafolio elegido. La Watchlist es una sola para todos. «Actualizar precios» actualiza las posiciones de todos los portafolios. Con un solo portafolio la app se ve como antes.
+
+**«Todo junto»** (etapa 2, 2026-09-28): con más de un portafolio, la primera opción del selector es «Todos los portafolios» (valor `all` en la cookie).
+- **Cálculo:** el libro sigue siendo por cuenta. El motor corre para cada portafolio y después se suman los resultados:
+  - `combineEngineResults` suma por símbolo las cantidades, el costo base, lo realizado y los dividendos; el costo promedio sale de la suma.
+  - `combineSeries` suma día por día el valor, el efectivo y los flujos, y recalcula el crecimiento diario sobre los totales. El TWR y el XIRR son los de la cartera entera, no un promedio.
+  - Mezclar las operaciones de las cuentas estaría mal: aplicaría dos veces un `SPLIT` cargado en cada una y costearía las ventas con el promedio de todas.
+- **Benchmark:** el que comparten los portafolios, o SPY si no comparten uno.
+- **Pantallas:**
+  - Inicio, Posiciones, la ficha y «Antes de comprar» miran la suma.
+  - Actividad lista las operaciones de todos, cada una con su portafolio.
+  - «Exportar CSV» baja todo en un archivo con una columna `portafolio` al final; el formato simple la ignora al importar.
+  - El alta y la importación no arrancan en ningún portafolio: hay que elegirlo.
+  - Si un portafolio tiene efectivo negativo, Inicio lo nombra aunque la suma dé positiva.
 
 ### 10.1 Inicio (dashboard)
 - Valor total, cambio del día ($ y %), **ganancia total y aportado neto** (valor − depósitos + retiros, con su % sobre lo aportado), ganancia no realizada y realizada.

@@ -38,7 +38,7 @@ import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
 import {
   getPriceSeries,
   getWatchlistItems,
-  loadPortfolioSnapshot,
+  loadScopeSnapshot,
 } from "@/lib/portfolio/queries";
 import { describeTransaction } from "@/lib/portfolio/tx-view";
 import { SYMBOL_PATTERN, normalizeSymbol } from "@/lib/validation/transaction";
@@ -66,8 +66,8 @@ export default async function PositionDetailPage({
     getPortfolioContext(supabase),
     getWatchlistItems(supabase),
   ]);
-  const snapshot = context.current
-    ? await loadPortfolioSnapshot(supabase, context.current)
+  const snapshot = context.scope
+    ? await loadScopeSnapshot(supabase, context.scope)
     : null;
   const followedItem = followedItems.find(
     (item) => item.instruments.symbol === symbol,
@@ -118,10 +118,23 @@ export default async function PositionDetailPage({
   const symbolById = new Map(
     snapshot.instrumentById.entries().map(([id, i]) => [id, i.symbol]),
   );
-  const history = snapshot.rows
-    .filter((row) => row.instrument_id === instrument.id)
-    .map((row) => describeTransaction(row, snapshot.account.id, symbolById))
-    .reverse(); // de la más reciente a la más antigua
+  // Con «Todo junto», las operaciones de todos los portafolios, cada una con el suyo.
+  const multi = snapshot.scope.kind === "all";
+  const history = snapshot.parts
+    .flatMap((part) =>
+      part.rows
+        .filter((row) => row.instrument_id === instrument.id)
+        .map((row) => ({
+          ...describeTransaction(row, part.portfolio.account.id, symbolById),
+          portfolioName: multi ? part.portfolio.name : null,
+          seq: row.seq,
+        })),
+    )
+    // De la más reciente a la más antigua (el mismo orden que Actividad).
+    .sort(
+      (a, b) =>
+        b.executedAt.getTime() - a.executedAt.getTime() || b.seq - a.seq,
+    );
 
   const priced = position.price !== null;
 

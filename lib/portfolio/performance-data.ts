@@ -35,10 +35,7 @@ export async function loadPerformance(
   const fromDate = addDays(firstTx.toISOString().slice(0, 10), -MARGIN_DAYS);
 
   const heldIds = [...snapshot.instrumentById.keys()];
-  const benchmark = await getBenchmark(
-    client,
-    snapshot.portfolio.benchmarkSymbol,
-  );
+  const benchmark = await getBenchmark(client, snapshot.benchmarkSymbol);
   const [held, benchmarkRows, benchmarkQuotes] = await Promise.all([
     getCloseSeries(client, heldIds, fromDate, "close"),
     benchmark.instrumentId

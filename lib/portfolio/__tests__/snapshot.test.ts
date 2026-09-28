@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Dec } from "@/lib/engine";
 import { buildSnapshot, type SnapshotInput } from "../snapshot";
-import type { AccountRow, ClosesRow, QuoteRow } from "../rows";
+import type { PortfolioRef } from "../portfolio-scope";
+import type { AccountRow, ClosesRow, QuoteRow, TransactionRow } from "../rows";
 import { fixtureInstruments, fixtureRows } from "./fixture";
 
 const account: AccountRow = {
@@ -40,22 +41,37 @@ const closes = (
   prev_date: prev?.[0] ?? null,
 });
 
-const input = (over: Partial<SnapshotInput> = {}): SnapshotInput => ({
-  portfolio,
-  transactionRows: fixtureRows(),
-  instruments: fixtureInstruments(),
-  quotes: [],
-  closes: [],
-  ...over,
-});
+/** Un solo portafolio (el alcance de siempre), con lo que se quiera cambiar. */
+const input = (
+  over: Partial<Omit<SnapshotInput, "scope" | "parts">> & {
+    portfolio?: PortfolioRef;
+    transactionRows?: TransactionRow[];
+  } = {},
+): SnapshotInput => {
+  const {
+    portfolio: chosen = portfolio,
+    transactionRows = fixtureRows(),
+    ...rest
+  } = over;
+  return {
+    scope: { kind: "one", portfolio: chosen },
+    parts: [{ portfolio: chosen, transactionRows }],
+    instruments: fixtureInstruments(),
+    quotes: [],
+    closes: [],
+    ...rest,
+  };
+};
 
 const num = (value: Dec | null) => (value === null ? null : value.toFixed());
 
 describe("buildSnapshot con el CSV de Delta", () => {
   it("es del portafolio que se pidió: su cuenta en cada transacción", () => {
     const snap = buildSnapshot(input());
-    expect(snap.portfolio).toBe(portfolio);
-    expect(snap.account).toBe(account);
+    expect(snap.scope).toEqual({ kind: "one", portfolio });
+    expect(snap.parts).toHaveLength(1);
+    expect(snap.parts[0]!.portfolio).toBe(portfolio);
+    expect(snap.benchmarkSymbol).toBe("SPY");
     expect(snap.transactions.length).toBeGreaterThan(0);
     expect(snap.transactions.every((tx) => tx.accountId === account.id)).toBe(
       true,
@@ -151,7 +167,9 @@ describe("buildSnapshot con el CSV de Delta", () => {
 
   it("guarda las filas, las transacciones del motor y los índices de instrumentos", () => {
     const snap = buildSnapshot(input());
-    expect(snap.rows).toHaveLength(snap.transactions.length);
+    expect(snap.parts[0]!.rows).toHaveLength(snap.transactions.length);
+    // Con un portafolio, el motor es el de su cuenta (no una suma).
+    expect(snap.engine).toBe(snap.parts[0]!.engine);
     expect(snap.instrumentBySymbol.get("VOO")?.id).toBe("id-VOO");
     expect(snap.instrumentById.get("id-MELI")?.symbol).toBe("MELI");
   });
@@ -189,5 +207,90 @@ describe("buildSnapshot con el CSV de Delta", () => {
     const rows = fixtureRows().filter((r) => r.type !== "DEPOSIT"); // sin depósitos: el efectivo queda negativo
     const snap = buildSnapshot(input({ transactionRows: rows }));
     expect(snap.engine.issues.map((i) => i.code)).toContain("NEGATIVE_CASH");
+  });
+});
+
+describe("buildSnapshot con «Todo junto»", () => {
+  const cripto: PortfolioRef = {
+    id: "p-2",
+    name: "Cripto",
+    benchmarkSymbol: "SPY",
+    account: { ...account, id: "acc-2" },
+  };
+  // El segundo portafolio: deposita 2000 y compra 2 VOO a 500 (con 1 de comisión).
+  const secondRows = (): TransactionRow[] => [
+    {
+      ...fixtureRows()[0]!,
+      id: "c-1",
+      type: "DEPOSIT",
+      instrument_id: null,
+      executed_at: "2026-04-01T15:00:00+00:00",
+      quantity: null,
+      price: null,
+      amount: "2000.0000",
+      fee: "0.0000",
+      split_ratio: null,
+      external_id: null,
+      seq: 9001,
+    },
+    {
+      ...fixtureRows()[0]!,
+      id: "c-2",
+      type: "BUY",
+      instrument_id: "id-VOO",
+      executed_at: "2026-04-02T15:00:00+00:00",
+      quantity: "2.00000000",
+      price: "500.00000000",
+      amount: null,
+      fee: "1.0000",
+      split_ratio: null,
+      external_id: null,
+      seq: 9002,
+    },
+  ];
+  const all = (): SnapshotInput => ({
+    scope: { kind: "all", portfolios: [portfolio, cripto] },
+    parts: [
+      { portfolio, transactionRows: fixtureRows() },
+      { portfolio: cripto, transactionRows: secondRows() },
+    ],
+    instruments: fixtureInstruments(),
+    quotes: [quote("VOO", "600")],
+    closes: [],
+  });
+
+  it("cada portafolio con su cuenta y su motor; la suma arriba", () => {
+    const one = buildSnapshot(input({ quotes: [quote("VOO", "600")] }));
+    const snap = buildSnapshot(all());
+    expect(snap.parts.map((p) => p.portfolio.id)).toEqual(["p-1", "p-2"]);
+    expect(
+      snap.parts[1]!.transactions.every((tx) => tx.accountId === "acc-2"),
+    ).toBe(true);
+    // Efectivo: 882,745 del primero + 999 del segundo (2000 − 1000 − 1).
+    expect(snap.engine.cash.toFixed()).toBe("1881.745");
+    expect(snap.engine.totals.openCostBasis.toFixed()).toBe(
+      one.engine.totals.openCostBasis.plus(1001).toFixed(),
+    );
+    const voo = (s: typeof snap) =>
+      s.valued.positions.find((p) => p.symbol === "VOO")!;
+    expect(voo(snap).quantity.minus(voo(one).quantity).toFixed()).toBe("2");
+    // El valor de mercado de VOO es el de la cantidad sumada, al mismo precio.
+    expect(voo(snap).marketValue?.toFixed()).toBe(
+      voo(snap).quantity.mul(600).toFixed(),
+    );
+    expect(snap.valued.totalValue.toFixed()).toBe(
+      one.valued.totalValue.plus(999).plus(1200).toFixed(),
+    );
+  });
+
+  it("las transacciones de todos, en orden cronológico", () => {
+    const snap = buildSnapshot(all());
+    expect(snap.transactions).toHaveLength(fixtureRows().length + 2);
+    const times = snap.transactions.map((tx) => tx.executedAt.getTime());
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+  });
+
+  it("el benchmark: el que comparten todos", () => {
+    expect(buildSnapshot(all()).benchmarkSymbol).toBe("SPY");
   });
 });

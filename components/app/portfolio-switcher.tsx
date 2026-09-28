@@ -6,17 +6,19 @@ import { selectPortfolio } from "@/app/(app)/more/portfolios/actions";
 import { cn } from "@/lib/utils";
 
 /**
- * Selector del portafolio que se está mirando (Inicio, Posiciones y Actividad). Es un `<select>`
- * nativo: en el iPhone abre el selector del sistema. Al elegir, el servidor recuerda la elección en
- * una cookie y vuelve a dibujar la pantalla. Quien lo usa le pone `key={currentId}`, así el valor
- * se reinicia si el servidor cambia el portafolio (por ejemplo, porque se borró).
+ * Selector de lo que se está mirando (Inicio, Posiciones y Actividad): «Todos los portafolios» o
+ * uno. Es un `<select>` nativo: en el iPhone abre el selector del sistema. Al elegir, el servidor
+ * recuerda la elección en una cookie y vuelve a dibujar la pantalla. Quien lo usa le pone
+ * `key={current}`, así el valor se reinicia si el servidor cambia lo elegido (por ejemplo, porque
+ * se borró el portafolio).
  */
 export function PortfolioSwitcher({
-  portfolios,
-  currentId,
+  options,
+  current,
 }: {
-  portfolios: ReadonlyArray<{ id: string; name: string }>;
-  currentId: string;
+  /** `value`: el id del portafolio, o `all` para «Todo junto». */
+  options: ReadonlyArray<{ value: string; label: string }>;
+  current: string;
 }) {
   const id = useId();
   const [pending, startTransition] = useTransition();
@@ -28,7 +30,7 @@ export function PortfolioSwitcher({
       </label>
       <NativeSelect
         id={id}
-        defaultValue={currentId}
+        defaultValue={current}
         disabled={pending}
         aria-busy={pending || undefined}
         onChange={(event) => {
@@ -41,9 +43,9 @@ export function PortfolioSwitcher({
           pending && "opacity-60",
         )}
       >
-        {portfolios.map((portfolio) => (
-          <option key={portfolio.id} value={portfolio.id}>
-            {portfolio.name}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </NativeSelect>

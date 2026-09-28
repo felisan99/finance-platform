@@ -15,6 +15,10 @@ import {
 } from "@/lib/portfolio/activity";
 import { formatDayHeader } from "@/lib/portfolio/format";
 import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
+import {
+  portfolioOfAccount,
+  portfoliosOfScope,
+} from "@/lib/portfolio/portfolio-scope";
 import { getActivityPage, getInstruments } from "@/lib/portfolio/queries";
 import { TX_TYPES } from "@/lib/portfolio/rows";
 import { describeTransaction } from "@/lib/portfolio/tx-view";
@@ -31,10 +35,14 @@ export default async function ActivityPage({
   const filters = parseActivityFilters(await searchParams);
   const supabase = await createClient();
   const context = await getPortfolioContext(supabase);
-  const account = context.current?.account ?? null;
-  const { rows, hasNext } = account
-    ? await getActivityPage(supabase, account.id, filters)
-    : { rows: [], hasNext: false };
+  // Con «Todo junto», las operaciones de todos, cada una marcada con su portafolio.
+  const scoped = context.scope ? portfoliosOfScope(context.scope) : [];
+  const multi = context.scope?.kind === "all";
+  const { rows, hasNext } = await getActivityPage(
+    supabase,
+    scoped.map((p) => p.account.id),
+    filters,
+  );
 
   const instruments = await getInstruments(supabase, [
     ...new Set(rows.flatMap((r) => (r.instrument_id ? [r.instrument_id] : []))),
@@ -42,9 +50,13 @@ export default async function ActivityPage({
   const symbolById = new Map(instruments.map((i) => [i.id, i.symbol]));
   const groups = groupByDay(rows).map((group) => ({
     dayKey: group.dayKey,
-    views: group.rows.map((row) =>
-      describeTransaction(row, account?.id ?? "", symbolById),
-    ),
+    views: group.rows.map((row) => {
+      const portfolio = portfolioOfAccount(scoped, row.account_id);
+      return {
+        ...describeTransaction(row, row.account_id, symbolById),
+        portfolioName: multi ? (portfolio?.name ?? null) : null,
+      };
+    }),
   }));
   const filtered = Boolean(
     filters.type || filters.symbol || filters.from || filters.to,

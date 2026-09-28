@@ -8,12 +8,12 @@ import {
   type DailyClose,
 } from "@/lib/engine";
 import { buildBeforeBuyView, type BeforeBuyView } from "./before-buy-view";
+// Sin portafolio, el mismo benchmark que se crea por defecto.
+import { DEFAULT_BENCHMARK } from "./portfolio-scope";
 import { getBenchmark, getCloseSeries } from "./queries";
 import type { DailyCloseRow, InstrumentRow } from "./rows";
 import type { PortfolioSnapshot } from "./snapshot";
 
-/** El benchmark de quien todavía no tiene portafolio (el mismo que se crea por defecto). */
-const DEFAULT_BENCHMARK = "SPY";
 /** Años de la simulación de aportes más larga. */
 const PLAN_YEARS = 5;
 /** Cierres de antes del inicio: feriados y el día base. */
@@ -44,7 +44,7 @@ export async function loadBeforeBuy(
   const { snapshot, instrument } = args;
   const today = marketDay(args.now);
 
-  const symbol = snapshot?.portfolio.benchmarkSymbol ?? DEFAULT_BENCHMARK;
+  const symbol = snapshot?.benchmarkSymbol ?? DEFAULT_BENCHMARK;
   const benchmark = await getBenchmark(client, symbol);
 
   const held = (snapshot?.valued.positions ?? []).flatMap((position) => {

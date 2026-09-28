@@ -387,6 +387,12 @@ export function ImportForm({
             disabled={busy}
             onChange={(event) => setPortfolio(event.target.value)}
           >
+            {/* Mirando «Todo junto» no hay uno por defecto: hay que elegirlo. */}
+            {initialPortfolio === "" && (
+              <option value="" disabled>
+                Elegí un portafolio
+              </option>
+            )}
             {portfolios.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}

@@ -1,5 +1,7 @@
 import {
-  computePerformance,
+  buildDailySeries,
+  combineSeries,
+  performanceOfSeries,
   type DailyClose,
   type PerformanceResult,
 } from "@/lib/engine";
@@ -53,13 +55,18 @@ export function assemblePerformance(input: {
   if (endDate === null) return null;
 
   const benchmark = live.benchmark.length > 0 ? live.benchmark : null;
-  const result = computePerformance({
-    transactions: snapshot.transactions,
-    closes: live.closes,
-    benchmark,
-    endDate,
-    options: { currency: snapshot.account.currency },
-  });
+  // Una serie por cuenta (el libro es por cuenta) y, con «Todo junto», su suma día por día.
+  const series = combineSeries(
+    snapshot.parts.map((part) =>
+      buildDailySeries({
+        transactions: part.transactions,
+        closes: live.closes,
+        endDate,
+        options: { currency: part.portfolio.account.currency },
+      }),
+    ),
+  );
+  const result = performanceOfSeries(series, benchmark);
   const view = buildPerformanceView({
     result,
     benchmark,

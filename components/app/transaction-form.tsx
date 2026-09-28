@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Field } from "@/components/app/field";
 import { SymbolCombobox } from "@/components/app/symbol-combobox";
 import { Notice } from "@/components/app/stat";
@@ -145,7 +151,19 @@ export function TransactionForm({
       : null;
 
   return (
-    <form action={formAction} className="flex flex-col gap-4" noValidate>
+    <form
+      // Con `action={formAction}`, React 19 reinicia el formulario al terminar la acción: el tipo y
+      // el precio (controlados) quedaban mostrando otra cosa que su estado después de un error (se
+      // veía «Compra» con los campos de un depósito, y un segundo envío mandaba «Compra»). Enviado
+      // así no se reinicia y cada campo conserva lo que escribió la persona.
+      onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        startTransition(() => formAction(data));
+      }}
+      className="flex flex-col gap-4"
+      noValidate
+    >
       {id && <input type="hidden" name="id" value={id} />}
 
       {state.status === "error" && state.message && (
@@ -170,7 +188,15 @@ export function TransactionForm({
             id="portfolio"
             name="portfolio"
             defaultValue={value("portfolio")}
+            aria-invalid={fieldErrors.portfolio ? true : undefined}
+            aria-describedby={describe("portfolio")}
           >
+            {/* Mirando «Todo junto» no hay uno por defecto: hay que elegirlo. */}
+            {initial.portfolio === "" && (
+              <option value="" disabled>
+                Elegí un portafolio
+              </option>
+            )}
             {portfolios.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}

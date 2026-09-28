@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { d } from "@/lib/engine";
 import { parseSimpleCsv } from "@/lib/importers";
-import { buildTransactionsCsv } from "../csv-export";
+import { PORTFOLIO_COLUMN, buildTransactionsCsv } from "../csv-export";
 import type { TransactionRow } from "../rows";
 import { fixtureInstruments, fixtureRows } from "./fixture";
 
@@ -70,6 +70,35 @@ describe("ida y vuelta con el historial del fixture de Delta", () => {
       parseSimpleCsv(text, NOW).transactions.map((t) => t.externalId);
     expect(ids(csv)).toEqual(ids(csv));
     expect(new Set(ids(csv)).size).toBe(rows.length);
+  });
+});
+
+describe("ida y vuelta de «Todo junto» (con la columna portafolio)", () => {
+  it("la columna extra va al final, se ignora al importar y el resto es igual", () => {
+    const rows = fixtureRows();
+    const symbols = new Map(fixtureInstruments().map((i) => [i.id, i.symbol]));
+    const plainCsv = buildTransactionsCsv(rows, symbols);
+    const csv = buildTransactionsCsv(rows, symbols, (row) =>
+      row.type === "DEPOSIT" ? "Cripto, largo plazo" : "=Acciones",
+    );
+    const [header, first] = csv.split("\r\n");
+    expect(header!.endsWith(`,${PORTFOLIO_COLUMN}`)).toBe(true);
+    // El nombre es texto de la persona: entrecomillado y sin fórmulas.
+    expect(first!.endsWith(',"Cripto, largo plazo"')).toBe(true);
+    expect(csv).toContain(",'=Acciones\r\n");
+
+    const parsed = parseSimpleCsv(csv, NOW);
+    expect(parsed.fatal).toBeNull();
+    expect(parsed.errors).toEqual([]);
+    expect(summarizeParsed(parsed)).toEqual(
+      summarizeParsed(parseSimpleCsv(plainCsv, NOW)),
+    );
+    // Misma clave de deduplicación: reimportar uno u otro no duplica.
+    expect(
+      parseSimpleCsv(csv, NOW).transactions.map((t) => t.externalId),
+    ).toEqual(
+      parseSimpleCsv(plainCsv, NOW).transactions.map((t) => t.externalId),
+    );
   });
 });
 

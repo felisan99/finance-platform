@@ -64,7 +64,7 @@ const signatureOf = (formData: FormData) => {
     : "";
 };
 
-const NO_PORTFOLIO = "Elegí un portafolio de la lista.";
+const NO_PORTFOLIO = "Elegí a qué portafolio importar.";
 
 /** Paso 1: lee el archivo, lo cruza con la cuenta y devuelve la vista previa. No escribe nada. */
 export async function previewImport(

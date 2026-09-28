@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { d, type DailyClose } from "@/lib/engine";
 import type { LiveQuote } from "../live-series";
 import { assemblePerformance } from "../performance-build";
+import type { PortfolioRef } from "../portfolio-scope";
 import type { AccountRow, InstrumentRow, TransactionRow } from "../rows";
 import { buildSnapshot } from "../snapshot";
 
@@ -111,10 +112,23 @@ const closeRows = [
   { s: "AAPL", last: ["2026-09-24", "203"], prev: ["2026-09-23", "205"] },
 ] as const;
 
-function snapshotWith(vooPrice: string, aaplPrice: string, asOf: string) {
+function snapshotWith(
+  vooPrice: string,
+  aaplPrice: string,
+  asOf: string,
+  /** Con otro portafolio además, visto con «Todo junto». */
+  second?: { portfolio: PortfolioRef; rows: TransactionRow[] },
+) {
   return buildSnapshot({
-    portfolio,
-    transactionRows: rows,
+    scope: second
+      ? { kind: "all", portfolios: [portfolio, second.portfolio] }
+      : { kind: "one", portfolio },
+    parts: [
+      { portfolio, transactionRows: rows },
+      ...(second
+        ? [{ portfolio: second.portfolio, transactionRows: second.rows }]
+        : []),
+    ],
     instruments: [instrument("VOO"), instrument("AAPL")],
     quotes: [
       { instrument_id: "id-VOO", price: vooPrice, change: null, as_of: asOf },
@@ -238,6 +252,57 @@ describe("assemblePerformance con la cotización de hoy", () => {
           last.date === "2026-09-25" &&
           last.value.eq(snapshot.valued.totalValue) &&
           max.gain.eq(snapshot.valued.totalValue.minus(NET_DEPOSITS))
+        );
+      }),
+      { numRuns: 200 },
+    );
+  });
+});
+
+describe("assemblePerformance con «Todo junto»", () => {
+  const cripto: PortfolioRef = {
+    id: "p-2",
+    name: "Cripto",
+    benchmarkSymbol: "SPY",
+    account: { ...account, id: "acc-2" },
+  };
+  // Arranca después que el primero, con AAPL también: el mismo símbolo en los dos.
+  const criptoRows = [
+    row("DEPOSIT", "2026-09-22T15:00:00+00:00", null, { amount: "1000" }),
+    row("BUY", "2026-09-23T15:00:00+00:00", "AAPL", {
+      quantity: "2",
+      price: "205",
+    }),
+    row("WITHDRAWAL", "2026-09-24T15:00:00+00:00", null, { amount: "100" }),
+  ];
+  const both = (voo: string, aapl: string) =>
+    snapshotWith(voo, aapl, LIVE, { portfolio: cripto, rows: criptoRows });
+
+  it("la serie es la suma de los dos y su último valor es el valor total de Inicio", () => {
+    const snapshot = both("110", "210");
+    const { result } = assemble(snapshot, spyQuote("512", LIVE));
+    const last = result.series.points.at(-1)!;
+    expect(last.date).toBe("2026-09-25");
+    // Primero 2640 (como arriba) + segundo: 2 AAPL × 210 + efectivo (1000 − 410 − 100 = 490).
+    expect(last.value.toFixed()).toBe("3550");
+    expect(last.value.eq(snapshot.valued.totalValue)).toBe(true);
+    const max = result.periods.find((p) => p.id === "MAX")!;
+    expect(
+      max.gain.eq(snapshot.valued.totalValue.minus(NET_DEPOSITS).minus(900)),
+    ).toBe(true);
+  });
+
+  it("propiedad: con cualquier cotización, la serie sumada cierra con Inicio", () => {
+    const cents = fc.integer({ min: 1_000, max: 100_000 });
+    fc.assert(
+      fc.property(cents, cents, (voo, aapl) => {
+        const snapshot = both((voo / 100).toFixed(2), (aapl / 100).toFixed(2));
+        const { result } = assemble(snapshot, spyQuote("512", LIVE));
+        const last = result.series.points.at(-1)!;
+        const max = result.periods.find((p) => p.id === "MAX")!;
+        return (
+          last.value.eq(snapshot.valued.totalValue) &&
+          max.gain.eq(snapshot.valued.totalValue.minus(NET_DEPOSITS).minus(900))
         );
       }),
       { numRuns: 200 },

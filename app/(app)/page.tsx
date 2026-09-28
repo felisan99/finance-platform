@@ -28,15 +28,16 @@ import {
 } from "@/lib/portfolio/format";
 import { loadPerformanceOutcome } from "@/lib/portfolio/performance-data";
 import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
-import { loadPortfolioSnapshot } from "@/lib/portfolio/queries";
+import { scopeName } from "@/lib/portfolio/portfolio-scope";
+import { loadScopeSnapshot } from "@/lib/portfolio/queries";
 import { buildCachedSnapshot } from "@/lib/portfolio/snapshot-cache";
 import { localYear } from "@/lib/portfolio/time";
 
 export default async function HomePage() {
   const supabase = await createClient();
   const context = await getPortfolioContext(supabase);
-  const snapshot = context.current
-    ? await loadPortfolioSnapshot(supabase, context.current)
+  const snapshot = context.scope
+    ? await loadScopeSnapshot(supabase, context.scope)
     : null;
   const now = new Date();
   const switcher = portfolioContextLine(context);
@@ -61,6 +62,14 @@ export default async function HomePage() {
   // secciones que lo usan (gráfico, por mes y riesgo) esperan la misma promesa, cada una en su
   // `<Suspense>`. Así Inicio aparece sin esperarlos y se lee una sola vez.
   const performance = loadPerformanceOutcome(supabase, snapshot);
+  // Con «Todo junto», un portafolio con efectivo negativo sigue siendo un dato que falta cargar,
+  // aunque la suma dé positiva: se nombra cuál.
+  const negativeCashIn =
+    snapshot.scope.kind === "all"
+      ? snapshot.parts
+          .filter((part) => part.engine.cash.lt(0))
+          .map((part) => part.portfolio.name)
+      : [];
 
   return (
     <div className="flex flex-col gap-3">
@@ -69,14 +78,14 @@ export default async function HomePage() {
           buildCachedSnapshot(
             valued,
             now,
-            switcher ? snapshot.portfolio.name : null,
+            switcher ? scopeName(snapshot.scope) : null,
           ),
         )}
       />
       <PageHeader
         title="Inicio"
         context={switcher}
-        subtitle={switcher ? undefined : snapshot.portfolio.name}
+        subtitle={switcher ? undefined : scopeName(snapshot.scope)}
       />
 
       <Card>
@@ -137,9 +146,12 @@ export default async function HomePage() {
           segundos: actualizá la página o tocá Actualizar precios.
         </Notice>
       )}
-      {view.negativeCash && (
+      {(view.negativeCash || negativeCashIn.length > 0) && (
         <Notice tone="warning">
-          El efectivo da negativo: probablemente falta cargar un depósito.{" "}
+          {negativeCashIn.length > 0
+            ? `El efectivo de ${negativeCashIn.join(" y de ")} da negativo`
+            : "El efectivo da negativo"}
+          : probablemente falta cargar un depósito.{" "}
           <Link href="/activity/new" className="underline">
             Agregar operación
           </Link>
