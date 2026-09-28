@@ -704,10 +704,10 @@ describe("SupabaseMarketStore (integración, finance-dev)", () => {
         if (result.runId) runIds.push(result.runId);
         return result;
       };
-      const expected = () =>
-        market.snapshot(inst.symbol).filter((r) => r.date >= "2026-03-02");
+      // Se guardan al menos 5 años (`desiredStart`): la serie falsa entera, que arranca en enero.
+      const expected = () => market.snapshot(inst.symbol);
 
-      // 1) Backfill inicial desde la primera transacción menos 7 días.
+      // 1) Backfill inicial: 5 años antes de hoy (la transacción es más nueva).
       const first = await run();
       expect(first.status).toBe("ok");
       expect(first.summary).toMatchObject({ backfilled: 1, quotesUpdated: 1 });
@@ -720,7 +720,7 @@ describe("SupabaseMarketStore (integración, finance-dev)", () => {
           .single(),
         "instrumento",
       );
-      expect(meta.history_from).toBe("2026-03-02");
+      expect(meta.history_from).toBe("2021-09-24");
       expect(meta.history_backfilled_at).not.toBeNull();
       expect(meta.name).toBe("Instrumento de prueba"); // el perfil no pisa lo que ya había
       expect(meta.sector).toBe("Tech"); // y completa lo vacío

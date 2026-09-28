@@ -3,7 +3,7 @@
 //  * Solo guarda la pantalla "sin conexión" y sus archivos, para mostrarla cuando una navegación
 //    falla por falta de red. Las acciones del servidor y las lecturas de datos no pasan por acá.
 // Al cambiar cualquiera de los archivos precacheados, subir VERSION.
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE = `pt-shell-${VERSION}`;
 const OFFLINE_URL = "/pwa/offline.html";
 const PRECACHE = [

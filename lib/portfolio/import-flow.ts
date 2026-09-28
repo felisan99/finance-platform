@@ -18,7 +18,6 @@ import { rowToTransaction } from "./mappers";
 import {
   getInstrumentIdsBySymbol,
   getInstruments,
-  getPrimaryAccount,
   getTransactionRows,
 } from "./queries";
 import type { AccountRow } from "./rows";
@@ -47,20 +46,19 @@ const resolveWithProvider = async (symbol: string): Promise<ResolveResult> =>
   resolveNewInstrument(await getMarketDataProvider(), symbol);
 
 /**
- * Parsea el archivo (reconociendo el formato) y lo cruza con lo que ya hay en la cuenta. La vista
- * previa y la confirmación usan exactamente esta función: la confirmación NO reutiliza nada
- * calculado antes ni recibido del cliente, lo vuelve a derivar del archivo (así una vista previa
- * vieja no puede colar datos). Devuelve `null` si el usuario todavía no tiene cuenta.
+ * Parsea el archivo (reconociendo el formato) y lo cruza con lo que ya hay en la cuenta del
+ * portafolio de destino. La vista previa y la confirmación usan exactamente esta función: la
+ * confirmación NO reutiliza nada calculado antes ni recibido del cliente, lo vuelve a derivar del
+ * archivo (así una vista previa vieja no puede colar datos). La cuenta la resuelve el servidor entre
+ * las de la persona.
  */
 export async function prepareImport(
   client: SupabaseClient<Database>,
+  account: AccountRow,
   text: string,
   now: Date,
   options: PrepareOptions = {},
-): Promise<PreparedImport | null> {
-  const account = await getPrimaryAccount(client);
-  if (!account) return null;
-
+): Promise<PreparedImport> {
   const { format, result: parsed } = parseImport(text, now);
   const source = format === null ? null : FORMAT_SOURCE[format];
   const rows = await getTransactionRows(client, account.id);

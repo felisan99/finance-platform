@@ -11,6 +11,8 @@ Cómo cargar tu historial en Portfolio Tracker desde un CSV o desde una planilla
 
 Si usás Delta, subí su export tal cual. Si exportaste tus operaciones desde acá con **Exportar CSV**, también se pueden volver a subir.
 
+Si tenés más de un portafolio, elegí arriba **a cuál importar**: arranca en el que estás mirando. **Exportar CSV** baja solo el portafolio que estás mirando, y su nombre va en el nombre del archivo.
+
 ## Columnas
 
 | Columna    | Cuándo                      | Qué poner                                                               |

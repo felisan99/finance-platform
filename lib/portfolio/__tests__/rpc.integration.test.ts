@@ -13,7 +13,7 @@ import type { Json } from "@/lib/db/database.types";
 import { ensureInstruments } from "@/lib/market-jobs/instruments";
 import { parseDeltaCsv } from "@/lib/importers";
 import { draftsToRpcRows } from "../mappers";
-import { loadPortfolioSnapshot } from "../queries";
+import { listPortfolios, loadPortfolioSnapshot } from "../queries";
 import { FIXTURE_CSV } from "./fixture";
 
 // Las funciones SQL de la Fase 4 contra finance-dev (`pnpm test:integration`): importación atómica,
@@ -487,8 +487,9 @@ describe("RPCs de la Fase 4 (integración, finance-dev)", () => {
         expect(error).toBeNull();
         expect(data?.[0]?.inserted).toBe(parsed.transactions.length);
 
-        const snapshot = await loadPortfolioSnapshot(fresh.client);
-        expect(snapshot).not.toBeNull();
+        const [portfolio] = await listPortfolios(fresh.client);
+        const snapshot = await loadPortfolioSnapshot(fresh.client, portfolio!);
+        expect(snapshot.account.id).toBe(account);
         expect(snapshot!.engine.cash.toFixed()).toBe("882.745");
         expect(snapshot!.engine.totals.openCostBasis.toFixed()).toBe(
           "8664.27",

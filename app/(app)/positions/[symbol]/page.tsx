@@ -11,6 +11,7 @@ import {
 import { EarningsCard } from "@/components/app/earnings-card";
 import { FollowButton } from "@/components/app/follow-button";
 import { Pnl } from "@/components/app/pnl";
+import { portfolioNameLine } from "@/components/app/portfolio-context";
 import { PriceChart } from "@/components/app/price-chart";
 import {
   PriceRangeSection,
@@ -33,6 +34,7 @@ import {
   formatQuantity,
 } from "@/lib/portfolio/format";
 import { withLiveBar } from "@/lib/portfolio/live-series";
+import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
 import {
   getPriceSeries,
   getWatchlistItems,
@@ -60,10 +62,13 @@ export default async function PositionDetailPage({
   if (!symbol) notFound();
 
   const supabase = await createClient();
-  const [snapshot, followedItems] = await Promise.all([
-    loadPortfolioSnapshot(supabase),
+  const [context, followedItems] = await Promise.all([
+    getPortfolioContext(supabase),
     getWatchlistItems(supabase),
   ]);
+  const snapshot = context.current
+    ? await loadPortfolioSnapshot(supabase, context.current)
+    : null;
   const followedItem = followedItems.find(
     (item) => item.instruments.symbol === symbol,
   );
@@ -76,6 +81,7 @@ export default async function PositionDetailPage({
       <FollowedSymbolView
         supabase={supabase}
         snapshot={snapshot}
+        context={portfolioNameLine(context)}
         instrument={followedItem.instruments}
       />
     );
@@ -123,6 +129,7 @@ export default async function PositionDetailPage({
     <div className="flex flex-col gap-3">
       <PageHeader
         title={symbol}
+        context={portfolioNameLine(context)}
         subtitle={
           <>
             {instrument.name}

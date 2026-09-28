@@ -29,6 +29,8 @@ export interface TransactionFormValues {
   /** `YYYY-MM-DDTHH:mm` en hora de Montevideo. */
   executedAt: string;
   notes: string;
+  /** Id del portafolio donde se guarda. */
+  portfolio: string;
 }
 
 const NEEDS_SYMBOL = new Set(["BUY", "SELL", "DIVIDEND", "SPLIT"]);
@@ -53,10 +55,16 @@ const decimal = {
 export function TransactionForm({
   initial,
   id,
+  portfolios,
 }: {
   initial: TransactionFormValues;
   /** Con `id`, edita esa operación; sin `id`, crea una. */
   id?: string;
+  /**
+   * Los portafolios de la persona. Con más de uno, el alta pregunta en cuál guardar; la edición solo
+   * lo muestra (una operación no se mueve de portafolio).
+   */
+  portfolios: ReadonlyArray<{ id: string; name: string }>;
 }) {
   const [state, formAction, pending] = useActionState(
     saveTransaction,
@@ -142,6 +150,34 @@ export function TransactionForm({
 
       {state.status === "error" && state.message && (
         <Notice tone="error">{state.message}</Notice>
+      )}
+
+      {id || portfolios.length < 2 ? (
+        <>
+          {!id && (
+            <input type="hidden" name="portfolio" value={initial.portfolio} />
+          )}
+          {portfolios.length > 1 && (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Portafolio: </span>
+              {portfolios.find((p) => p.id === initial.portfolio)?.name}
+            </p>
+          )}
+        </>
+      ) : (
+        <Field id="portfolio" label="Portafolio" error={fieldErrors.portfolio}>
+          <NativeSelect
+            id="portfolio"
+            name="portfolio"
+            defaultValue={value("portfolio")}
+          >
+            {portfolios.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
       )}
 
       <Field id="type" label="Tipo de operación" error={fieldErrors.type}>

@@ -31,6 +31,24 @@ export default async function MorePage() {
 
       <Card size="sm">
         <CardHeader>
+          <CardTitle className="text-sm">Portafolios</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">
+            Separá tus inversiones, por ejemplo acciones por un lado y cripto
+            por otro.
+          </p>
+          <Link
+            href="/more/portfolios"
+            className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+          >
+            Administrar portafolios
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader>
           <CardTitle className="text-sm">Tus datos</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
@@ -45,7 +63,7 @@ export default async function MorePage() {
             href="/activity/export"
             className={cn(buttonVariants({ variant: "outline" }), "w-full")}
           >
-            Exportar todas las operaciones (CSV)
+            Exportar las operaciones (CSV)
           </a>
           <Link
             href="/activity/new"

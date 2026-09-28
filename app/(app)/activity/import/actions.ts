@@ -12,14 +12,19 @@ import { createClient } from "@/lib/db/server";
 import { describeError } from "@/lib/market-data";
 import { ensureInstruments } from "@/lib/market-jobs/instruments";
 import { backfillPendingInBackground } from "@/lib/portfolio/background";
+import {
+  getPortfolioContext,
+  resolveChosenPortfolio,
+} from "@/lib/portfolio/current-portfolio";
 import { prepareImport } from "@/lib/portfolio/import-flow";
 import type { ImportPreviewView } from "@/lib/portfolio/import-preview";
 import { inputSignature } from "@/lib/portfolio/import-signature";
 import { describeIssue } from "@/lib/portfolio/issues";
 import { draftsToRpcRows, rowToTransaction } from "@/lib/portfolio/mappers";
+import { portfolioOfAccount } from "@/lib/portfolio/portfolio-scope";
 import {
+  getImportAccountId,
   getInstruments,
-  getPrimaryAccount,
   getTransactionIdsByImport,
   getTransactionRows,
 } from "@/lib/portfolio/queries";
@@ -43,18 +48,23 @@ const includeSuspectedOf = (formData: FormData) =>
  */
 const signatureOf = (formData: FormData) => {
   const include = includeSuspectedOf(formData);
+  const portfolio = formData.get("portfolio");
+  const target = typeof portfolio === "string" ? portfolio : "";
   const text = formData.get("text");
   if (typeof text === "string") {
-    return inputSignature({ kind: "text", text }, include);
+    return inputSignature({ kind: "text", text }, include, target);
   }
   const file = formData.get("file");
   return file instanceof File
     ? inputSignature(
         { kind: "file", name: file.name, size: file.size },
         include,
+        target,
       )
     : "";
 };
+
+const NO_PORTFOLIO = "Elegí un portafolio de la lista.";
 
 /** Paso 1: lee el archivo, lo cruza con la cuenta y devuelve la vista previa. No escribe nada. */
 export async function previewImport(
@@ -76,11 +86,18 @@ export async function previewImport(
     const file = await readImportInput(formData);
     if (!file.ok) return { status: "error", message: file.message };
 
-    const prepared = await prepareImport(supabase, file.text, new Date(), {
-      includeSuspected: includeSuspectedOf(formData),
-    });
-    if (!prepared)
-      return { status: "error", message: "No encontramos tu cuenta." };
+    const portfolio = await resolveChosenPortfolio(
+      supabase,
+      formData.get("portfolio"),
+    );
+    if (!portfolio) return { status: "error", message: NO_PORTFOLIO };
+    const prepared = await prepareImport(
+      supabase,
+      portfolio.account,
+      file.text,
+      new Date(),
+      { includeSuspected: includeSuspectedOf(formData) },
+    );
     return {
       status: "preview",
       view: prepared.preview.view,
@@ -117,11 +134,18 @@ export async function confirmImport(
     const file = await readImportInput(formData);
     if (!file.ok) return { status: "error", message: file.message };
 
-    const prepared = await prepareImport(supabase, file.text, new Date(), {
-      includeSuspected: includeSuspectedOf(formData),
-    });
-    if (!prepared)
-      return { status: "error", message: "No encontramos tu cuenta." };
+    const portfolio = await resolveChosenPortfolio(
+      supabase,
+      formData.get("portfolio"),
+    );
+    if (!portfolio) return { status: "error", message: NO_PORTFOLIO };
+    const prepared = await prepareImport(
+      supabase,
+      portfolio.account,
+      file.text,
+      new Date(),
+      { includeSuspected: includeSuspectedOf(formData) },
+    );
     const { view } = prepared.preview;
     if (!view.canConfirm || prepared.source === null) {
       return {
@@ -201,12 +225,20 @@ export async function undoImport(
 
   let deleted = 0;
   try {
-    const account = await getPrimaryAccount(supabase);
-    if (!account)
-      return { status: "error", message: "No encontramos tu cuenta." };
-
     const ids = await getTransactionIdsByImport(supabase, importId.data);
     if (ids.length === 0) {
+      return {
+        status: "error",
+        message: "Esta importación ya no tiene operaciones para deshacer.",
+      };
+    }
+    // El libro que se valida es el del portafolio de la importación, no el que se está mirando.
+    const [accountId, { portfolios }] = await Promise.all([
+      getImportAccountId(supabase, importId.data),
+      getPortfolioContext(supabase),
+    ]);
+    const account = portfolioOfAccount(portfolios, accountId)?.account;
+    if (!account) {
       return {
         status: "error",
         message: "Esta importación ya no tiene operaciones para deshacer.",

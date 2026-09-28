@@ -41,6 +41,11 @@
   if (found) {
     var data = found.data;
     document.getElementById("total").textContent = text(data.totalValue);
+    // Con varios portafolios, de cuál es el estado guardado (el último que se miró en Inicio).
+    if (text(data.portfolioName)) {
+      document.getElementById("total-label").textContent =
+        "Valor total · " + text(data.portfolioName);
+    }
 
     var day = document.getElementById("day");
     var change = text(data.dayChange);

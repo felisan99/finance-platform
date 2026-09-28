@@ -15,6 +15,12 @@ const account: AccountRow = {
   currency: "USD",
   cost_method: "AVERAGE",
 };
+const portfolio = {
+  id: "p-1",
+  name: "Principal",
+  benchmarkSymbol: "SPY",
+  account,
+};
 const instrument = (symbol: string): InstrumentRow => ({
   id: `id-${symbol}`,
   symbol,
@@ -107,7 +113,7 @@ const closeRows = [
 
 function snapshotWith(vooPrice: string, aaplPrice: string, asOf: string) {
   return buildSnapshot({
-    account,
+    portfolio,
     transactionRows: rows,
     instruments: [instrument("VOO"), instrument("AAPL")],
     quotes: [

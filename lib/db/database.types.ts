@@ -558,6 +558,7 @@ export type Database = {
         }[]
       }
       clear_login_attempts: { Args: { p_key: string }; Returns: undefined }
+      create_portfolio: { Args: { p_name: string }; Returns: string }
       hook_before_user_created: { Args: { event: Json }; Returns: Json }
       import_transactions: {
         Args: {
@@ -590,6 +591,7 @@ export type Database = {
           filename: string
           import_id: string
           live_count: number
+          portfolio_id: string
           rows_imported: number
           source: string
           undone_at: string

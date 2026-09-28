@@ -307,6 +307,42 @@ Felipe pidió algo que ayude a entender si conviene comprar lo que sigue en la W
 - **Eje en miles:** «400000» no entraba en el ancho del eje y Recharts partía la marca en dos renglones; pasados los 10.000 el eje va en miles («400 mil») y su ancho sale de la marca más larga.
 - **Verificación:** 1581 unitarias (eran 1502; 30 mutaciones sobre el motor, la vista y el formato, todas detectadas tras cubrir 6 huecos); suite en vivo por HTTP 23/23 (ficha de VOO con su cartera, NVDA sin cartera y con cartera, CRCL con «Todo», el símbolo sin `adj_close` sin tarjeta), tres corridas completas seguidas; Chrome headless por CDP a 390 px contra `next start` (CSP real), claro y oscuro, con un usuario de prueba con cartera parecida a la real: 35 comprobaciones (filas, parecido, montos y períodos que cambian textos y gráfico, 12 y 60 aportes, aviso de historia corta, ejes sin marcas partidas, sin scroll horizontal, sin errores de JS ni de CSP). En la primera corrida de la suite en vivo, Inicio de una cuenta nueva devolvió una vez un error del servidor (`digest`) sin log; no se repitió en tres corridas completas con el log del servidor activado ni aislado (Inicio no usa nada de esta tarjeta). `finance-dev` quedó sin usuarios de prueba.
 
+## Varios portafolios, etapa 1: portafolios separados con selector (2026-09-28)
+
+Felipe pidió poder tener dos portafolios, por ejemplo uno de acciones y otro de cripto. Se planificaron tres etapas y aprobó la primera. Las decisiones que tomó: la vista «Todo junto» desde la etapa 2, la cripto cargada a mano y solo monedas grandes cotizadas en USD, en la etapa 3.
+
+- **Modelo:** el esquema ya tenía `portfolios → accounts → transactions`. Se quedó en **1 portafolio = 1 cuenta** y las cuentas siguen sin mostrarse. El libro, el costo promedio y `validateLedgerChange` siguen siendo por cuenta: un mismo símbolo en dos portafolios no se mezcla. No se agregó una restricción de una cuenta por portafolio. La app toma la más vieja y, si alguien crea otra por la API, solo afecta a sus propios datos.
+- **Base de datos** (migración `multiple_portfolios`):
+  - Nombres de hasta 40 caracteres, sin espacios en los bordes y únicos por persona sin distinguir mayúsculas.
+  - Tope de 5 con el trigger `portfolios_check_limit`. Tiene un lock por persona para que dos altas simultáneas no pasen las dos.
+  - El trigger `portfolios_keep_one` impide borrar el último portafolio. Al borrar a la persona la cascada llega cuando su fila de `auth.users` ya no existe, así que ahí no bloquea; por eso es `security definer`.
+  - `create_portfolio` (security invoker) crea el portafolio con su cuenta.
+  - `recent_imports` devuelve también el `portfolio_id`.
+  - Códigos propios `MP001` y `MP002`, para dar mensajes claros. Se evitó el prefijo `PT`, que PostgREST usa para el código HTTP.
+- **El portafolio elegido** vive en la cookie `pt-portfolio` (HttpOnly, SameSite=Lax, 400 días).
+  - No es una credencial: el servidor la cruza siempre con los portafolios que RLS deja leer y, si no coincide, se mira el primero.
+  - Se borra al cerrar sesión.
+  - Se eligió una cookie y no un parámetro en la URL para que la elección siga al navegar y al abrir la app instalada.
+- **Qué mira el portafolio elegido:**
+  - Inicio, Posiciones, Actividad, la exportación y «Antes de comprar».
+  - La ficha de un activo muestra el nombre del portafolio sin selector. Un selector ahí podía dejar la página en «no encontrado» al cambiar a un portafolio sin ese símbolo.
+  - Una operación se edita o se borra en su portafolio, aunque se esté mirando otro. No se mueve de portafolio.
+  - Un alta o una importación van al portafolio que se eligió en el formulario, validado contra los de la persona. La firma de la vista previa de la importación incluye el portafolio.
+  - «Deshacer importación» valida el libro de la cuenta de esa importación.
+  - «Actualizar precios» actualiza las posiciones de **todos** los portafolios y los benchmarks de todos: con el límite de 5 minutos no se podría actualizar uno por uno.
+- **Qué no cambia:**
+  - Con un solo portafolio no hay selector y todo se ve como antes, con el nombre del portafolio donde antes estaba el de la cuenta.
+  - El formato del CSV no cambia. Con varios portafolios, el nombre del archivo exportado lleva el del portafolio.
+  - La Watchlist es una sola.
+  - El benchmark sigue siendo SPY para todos y no hay pantalla para cambiarlo. Llega en la etapa 3, cuando haya otro (BTC-USD). Por eso tampoco se tocó `active_instruments()`.
+- **Pantalla sin conexión:** con varios portafolios, el estado guardado dice de cuál es. Se subió `VERSION` del service worker.
+- **Un test de integración viejo:** `store.integration.test.ts` seguía esperando que el backfill arrancara 7 días antes de la primera operación. Lo había dejado desactualizado el commit de «Antes de comprar» (`desiredStart`, 5 años), y en ese momento no se corrió `pnpm test:integration`. Se corrigió la expectativa.
+- **Verificación:**
+  - 1601 unitarias (eran 1581). 18 mutaciones sobre las piezas puras, todas detectadas después de cubrir un hueco: nada comprobaba que las transacciones del snapshot llevaran la cuenta del portafolio.
+  - Integración contra `finance-dev`: 7 casos nuevos. Cubren `create_portfolio`, los nombres, el tope también con 6 altas en paralelo (entran exactamente 4), el último que no se borra ni de a uno ni todos juntos, RLS entre personas y `recent_imports` con su portafolio.
+  - Suite en vivo por HTTP 24/24 (un caso nuevo). Prueba el selector, que cada pantalla mire el elegido, la exportación con el nombre, el alta y la importación que preguntan el portafolio, la edición en el portafolio de la operación y que una cookie ajena o inventada caiga al propio.
+  - Chrome headless por CDP a 390 px contra `next start` (CSP real), en claro y oscuro: 31 comprobaciones. Recorre crear, elegir con el selector (Server Action y cookie HttpOnly), guardar una operación desde el formulario en el portafolio elegido, nombre repetido, renombrar, borrar escribiendo el nombre (mal escrito no borra) y el último sin opción de borrar. No hubo scroll horizontal ni errores de JS o de CSP.
+
 ## Observaciones del spec para fases posteriores
 
 1. **Splits y precios.** Resuelto en la Fase 3 del lado de los datos (ver "Desvíos y decisiones de la Fase 3"); el des-ajuste al valuar es de la Fase 5. El motor aplica solo transacciones `SPLIT`; `corporate_actions` informa o propone splits, pero no se aplican dos veces.

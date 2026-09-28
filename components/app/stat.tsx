@@ -31,14 +31,18 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  context,
 }: {
   title: string;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  /** Arriba del título: el portafolio que se está mirando (selector o texto). */
+  context?: ReactNode;
 }) {
   return (
     <header className="flex items-start justify-between gap-3 pb-4">
       <div className="min-w-0">
+        {context && <div className="pb-1">{context}</div>}
         <h1 className="truncate text-xl font-semibold">{title}</h1>
         {subtitle && (
           <p className="text-sm text-muted-foreground">{subtitle}</p>

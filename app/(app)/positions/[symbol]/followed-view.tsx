@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import {
   BeforeBuySection,
   BeforeBuySkeleton,
@@ -33,11 +33,14 @@ import { loadSymbolView } from "@/lib/portfolio/watchlist-data";
 export async function FollowedSymbolView({
   supabase,
   snapshot,
+  context,
   instrument,
 }: {
   supabase: SupabaseClient<Database>;
-  // La cartera de la persona, para «Antes de comprar»; `null` si todavía no tiene cuenta.
+  // El portafolio que se está mirando, para «Antes de comprar»; `null` si la persona no tiene ninguno.
   snapshot: PortfolioSnapshot | null;
+  /** El nombre del portafolio sobre el título (solo con más de uno). */
+  context?: ReactNode;
   instrument: InstrumentRow;
 }) {
   const view = await loadSymbolView(supabase, instrument, new Date());
@@ -47,6 +50,7 @@ export async function FollowedSymbolView({
     <div className="flex flex-col gap-3">
       <PageHeader
         title={instrument.symbol}
+        context={context}
         subtitle={
           <>
             {instrument.name}

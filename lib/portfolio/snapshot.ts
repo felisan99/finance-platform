@@ -9,6 +9,7 @@ import {
   type ValuedPortfolio,
 } from "@/lib/engine";
 import { rowToTransaction } from "./mappers";
+import type { PortfolioRef } from "./portfolio-scope";
 import type {
   AccountRow,
   ClosesRow,
@@ -18,7 +19,7 @@ import type {
 } from "./rows";
 
 export interface SnapshotInput {
-  account: AccountRow;
+  portfolio: PortfolioRef;
   transactionRows: readonly TransactionRow[];
   instruments: readonly InstrumentRow[];
   quotes: readonly QuoteRow[];
@@ -27,6 +28,8 @@ export interface SnapshotInput {
 
 /** Todo lo que necesitan las pantallas, calculado a partir de filas de la base (sin I/O). */
 export interface PortfolioSnapshot {
+  portfolio: PortfolioRef;
+  /** La cuenta del portafolio (`portfolio.account`). */
   account: AccountRow;
   rows: readonly TransactionRow[];
   /** Las transacciones ya convertidas para el motor, en el orden de las filas. */
@@ -52,10 +55,10 @@ export function buildSnapshot(input: SnapshotInput): PortfolioSnapshot {
   const symbolById = new Map(input.instruments.map((i) => [i.id, i.symbol]));
 
   const transactions = input.transactionRows.map((row) =>
-    rowToTransaction(row, input.account.id, symbolById),
+    rowToTransaction(row, input.portfolio.account.id, symbolById),
   );
   const engine = computeEngine(transactions, {
-    currency: input.account.currency,
+    currency: input.portfolio.account.currency,
   });
 
   const quoteById = new Map(input.quotes.map((q) => [q.instrument_id, q]));
@@ -89,7 +92,8 @@ export function buildSnapshot(input: SnapshotInput): PortfolioSnapshot {
   }
 
   return {
-    account: input.account,
+    portfolio: input.portfolio,
+    account: input.portfolio.account,
     rows: input.transactionRows,
     transactions,
     instrumentById,

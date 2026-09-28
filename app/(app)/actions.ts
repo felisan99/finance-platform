@@ -13,9 +13,11 @@ import {
   type ActiveInstrument,
 } from "@/lib/market-jobs";
 import { backfillPendingInBackground } from "@/lib/portfolio/background";
+import { forgetPortfolio } from "@/lib/portfolio/current-portfolio";
 import {
   getBenchmarkInstrument,
   getWatchlistItems,
+  listPortfolios,
   loadPortfolioSnapshot,
 } from "@/lib/portfolio/queries";
 import {
@@ -26,6 +28,7 @@ import {
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
+  await forgetPortfolio();
   redirect("/login");
 }
 
@@ -36,9 +39,10 @@ export type RefreshState =
 
 /**
  * "Actualizar precios" (spec §7.2): refresca `quotes_latest` solo de las posiciones abiertas del
- * usuario, de los símbolos de su watchlist y del benchmark (el gráfico de rendimiento compara
- * contra él), a lo sumo una vez cada 5 minutos por usuario (el límite lo aplica la base). Escribir
- * en `quotes_latest` requiere la clave secreta: por eso el usuario no la toca directamente.
+ * usuario (de todos sus portafolios: el límite de 5 minutos no deja actualizar uno por uno), de los
+ * símbolos de su watchlist y de los benchmarks (el gráfico de rendimiento compara contra ellos), a lo
+ * sumo una vez cada 5 minutos por usuario (el límite lo aplica la base). Escribir en `quotes_latest`
+ * requiere la clave secreta: por eso el usuario no la toca directamente.
  */
 export async function refreshQuotesAction(): Promise<RefreshState> {
   const supabase = await createClient();
@@ -53,28 +57,32 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
       };
     }
 
-    const [snapshot, followed] = await Promise.all([
-      loadPortfolioSnapshot(supabase),
+    const [portfolios, followed] = await Promise.all([
+      listPortfolios(supabase),
       getWatchlistItems(supabase),
     ]);
+    const snapshots = await Promise.all(
+      portfolios.map((portfolio) => loadPortfolioSnapshot(supabase, portfolio)),
+    );
     // Sin benchmark el resto se actualiza igual: el gráfico solo se queda con los cierres.
-    const benchmark = snapshot
-      ? await getBenchmarkInstrument(supabase, snapshot.account.id).catch(
-          (error: unknown) => {
-            console.error("[refresh-quotes] benchmark", describeError(error));
-            return null;
-          },
-        )
-      : null;
+    const benchmarks = await Promise.all(
+      [...new Set(portfolios.map((p) => p.benchmarkSymbol))].map((symbol) =>
+        getBenchmarkInstrument(supabase, symbol).catch((error: unknown) => {
+          console.error("[refresh-quotes] benchmark", describeError(error));
+          return null;
+        }),
+      ),
+    );
 
     const targets = collectRefreshTargets({
-      openSymbols:
-        snapshot?.engine.positions
-          .filter((p) => p.isOpen)
-          .map((p) => p.symbol) ?? [],
-      instrumentBySymbol: snapshot?.instrumentBySymbol ?? new Map(),
+      openSymbols: snapshots.flatMap((snapshot) =>
+        snapshot.engine.positions.filter((p) => p.isOpen).map((p) => p.symbol),
+      ),
+      instrumentBySymbol: new Map(
+        snapshots.flatMap((snapshot) => [...snapshot.instrumentBySymbol]),
+      ),
       followed: followed.map((item) => item.instruments),
-      benchmark,
+      benchmarks: benchmarks.filter((b) => b !== null),
     });
     if (targets.instruments.length === 0) {
       return {
@@ -108,7 +116,7 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
 
     return {
       status: "ok",
-      message: refreshMessage(result, targets.extraBenchmark),
+      message: refreshMessage(result, targets.extraBenchmarks),
     };
   } catch (error) {
     console.error("[refresh-quotes]", describeError(error));

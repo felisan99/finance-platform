@@ -22,6 +22,8 @@ export interface CachedSnapshot {
   cash: string;
   /** Las posiciones abiertas de mayor valor, con su valor de mercado. */
   positions: Array<{ symbol: string; value: string }>;
+  /** De qué portafolio es; `null` si la persona tiene uno solo (no hace falta decirlo). */
+  portfolioName: string | null;
 }
 
 // Sin `localeCompare`: el orden no puede depender del idioma del servidor.
@@ -30,6 +32,7 @@ const compareText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export function buildCachedSnapshot(
   valued: ValuedPortfolio,
   now: Date,
+  portfolioName: string | null = null,
 ): CachedSnapshot {
   const positions = valued.positions
     .flatMap((position) =>
@@ -59,5 +62,6 @@ export function buildCachedSnapshot(
     tone: toneOf(valued.dayChange, 2),
     cash: formatMoney(valued.cash),
     positions,
+    portfolioName,
   };
 }

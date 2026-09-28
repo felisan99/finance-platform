@@ -22,8 +22,8 @@ import {
 import {
   getInstrumentIdsBySymbol,
   getInstruments,
-  getPrimaryAccount,
   getTransactionIdsByImport,
+  listPortfolios,
   getTransactionRows,
 } from "../queries";
 import { parseTransactionForm } from "@/lib/validation/transaction";
@@ -67,6 +67,13 @@ interface Session {
   jar: CookieJar;
   client: ReturnType<typeof createServerClient<Database>>;
 }
+
+/** La cuenta del primer portafolio (el que crea el alta de usuario). */
+const primaryAccount = async (client: Session["client"]) => {
+  const [portfolio] = await listPortfolios(client);
+  if (!portfolio) throw new Error("el usuario no tiene portafolio");
+  return portfolio.account;
+};
 
 /** El mensaje de la pantalla "no encontrado". El código HTTP puede ser 200: `loading.tsx` empieza a transmitir antes de resolver los datos. */
 const NOT_FOUND = "No encontramos esa página";
@@ -173,6 +180,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
       "/activity/new",
       "/activity/import",
       "/more",
+      "/more/portfolios",
       "/watchlist",
       "/activity/export",
     ]) {
@@ -275,7 +283,12 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
   });
 
   it("importa el CSV del fixture con las mismas funciones que la interfaz: vista previa, alta de instrumentos y RPC atómico", async () => {
-    const prepared = await prepareImport(a.client, FIXTURE_CSV, new Date());
+    const prepared = await prepareImport(
+      a.client,
+      await primaryAccount(a.client),
+      FIXTURE_CSV,
+      new Date(),
+    );
     expect(prepared).not.toBeNull();
     const { view, toInsert, newInstruments } = prepared!.preview;
     expect(view.canConfirm).toBe(true);
@@ -303,7 +316,12 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     });
 
     // Reimportar el mismo archivo: no queda nada nuevo (dedupe por external_id).
-    const again = await prepareImport(a.client, FIXTURE_CSV, new Date());
+    const again = await prepareImport(
+      a.client,
+      await primaryAccount(a.client),
+      FIXTURE_CSV,
+      new Date(),
+    );
     expect(again!.preview.view.newCount).toBe(0);
     expect(again!.preview.view.duplicateCount).toBe(toInsert.length);
     expect(again!.preview.view.canConfirm).toBe(false);
@@ -451,7 +469,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
       html.match(/href="\/activity\/[0-9a-f-]{36}"/g)?.length ?? 0;
     const rows = await getTransactionRows(
       a.client,
-      (await getPrimaryAccount(a.client))!.id,
+      (await primaryAccount(a.client)).id,
     );
     expect(links(all.html)).toBe(Math.min(rows.length, 50));
     expect(all.html).toContain("Exportar CSV");
@@ -491,7 +509,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(csv.startsWith("fecha_utc,")).toBe(true);
     const rows = await getTransactionRows(
       a.client,
-      (await getPrimaryAccount(a.client))!.id,
+      (await primaryAccount(a.client)).id,
     );
     expect(csv.trimEnd().split("\r\n")).toHaveLength(rows.length + 1);
   });
@@ -522,7 +540,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
 
-    const account = (await getPrimaryAccount(a.client))!;
+    const account = await primaryAccount(a.client);
     const rows = await getTransactionRows(a.client, account.id);
     const instruments = await getInstruments(a.client, [
       ...new Set(
@@ -570,7 +588,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
   }, 60_000);
 
   it("editar una operación: la pantalla carga los valores actuales", async () => {
-    const account = (await getPrimaryAccount(a.client))!;
+    const account = await primaryAccount(a.client);
     const { data } = await a.client
       .from("transactions")
       .select("id")
@@ -621,7 +639,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     // `Response.text()` descarta la BOM del principio.
     expect(await template.text()).toBe(buildImportTemplate().slice(1));
 
-    const account = (await getPrimaryAccount(b.client))!;
+    const account = await primaryAccount(b.client);
     const now = new Date();
     const csv = [
       "fecha;tipo;simbolo;cantidad;precio;monto;comision;notas",
@@ -631,7 +649,12 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     ].join("\n");
 
     // Vista previa: formato reconocido, coma decimal y fechas día/mes/año bien leídas.
-    const prepared = (await prepareImport(b.client, csv, now))!;
+    const prepared = (await prepareImport(
+      b.client,
+      await primaryAccount(b.client),
+      csv,
+      now,
+    ))!;
     expect(prepared.format).toBe("simple");
     expect(prepared.source).toBe("csv");
     const { view } = prepared.preview;
@@ -652,6 +675,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     // Un símbolo mal escrito se marca (esto sí sale a Yahoo) y no se puede confirmar.
     const typo = (await prepareImport(
       b.client,
+      await primaryAccount(b.client),
       csv.replace("VOO", "APPL"),
       now,
     ))!;
@@ -678,7 +702,12 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(history.html).toContain("Deshacer importación");
 
     // Lo mismo otra vez: todo ya importado.
-    const again = (await prepareImport(b.client, csv, now))!;
+    const again = (await prepareImport(
+      b.client,
+      await primaryAccount(b.client),
+      csv,
+      now,
+    ))!;
     expect(again.preview.view.newCount).toBe(0);
     expect(again.preview.view.duplicateCount).toBe(3);
     expect(again.preview.view.canConfirm).toBe(false);
@@ -686,17 +715,33 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     // Una compra que solo difiere en el precio parece repetir una ya cargada: se excluye por defecto.
     const similarCsv =
       "fecha;tipo;simbolo;cantidad;precio\n09/03/2026;compra;VOO;3;613,00";
-    const similar = (await prepareImport(b.client, similarCsv, now))!;
+    const similar = (await prepareImport(
+      b.client,
+      await primaryAccount(b.client),
+      similarCsv,
+      now,
+    ))!;
     expect(similar.preview.view.suspectedCount).toBe(1);
     expect(similar.preview.view.newCount).toBe(0);
-    const included = (await prepareImport(b.client, similarCsv, now, {
-      includeSuspected: true,
-    }))!;
+    const included = (await prepareImport(
+      b.client,
+      await primaryAccount(b.client),
+      similarCsv,
+      now,
+      {
+        includeSuspected: true,
+      },
+    ))!;
     expect(included.preview.view.newCount).toBe(1);
 
     // Ida y vuelta: lo que baja «Exportar CSV» se vuelve a leer y todo figura como ya importado.
     const exported = await (await get("/activity/export", b)).text();
-    const roundTrip = (await prepareImport(b.client, exported, now))!;
+    const roundTrip = (await prepareImport(
+      b.client,
+      await primaryAccount(b.client),
+      exported,
+      now,
+    ))!;
     expect(roundTrip.format).toBe("simple");
     expect(roundTrip.preview.view.errorCount).toBe(0);
     expect(roundTrip.preview.view.duplicateCount).toBe(3);
@@ -963,7 +1008,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
           .eq("user_id", c.userId)
       ).error,
     ).toBeNull();
-    const account = (await getPrimaryAccount(c.client))!;
+    const account = await primaryAccount(c.client);
     const base = { user_id: c.userId, account_id: account.id, currency: "USD" };
     expect(
       (
@@ -1047,7 +1092,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     expect(before.html).toContain("Seguir");
     expect(before.html).not.toContain("Dejar de seguir");
 
-    const account = (await getPrimaryAccount(a.client))!;
+    const account = await primaryAccount(a.client);
     expect(account).toBeTruthy();
     const { data: voo } = await admin
       .from("instruments")
@@ -1089,7 +1134,7 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     const otherPosition = await page("/positions/VOO", b);
     expect(otherPosition.html).toContain(NOT_FOUND);
     expect(otherPosition.html).not.toContain("Operaciones (");
-    const account = (await getPrimaryAccount(a.client))!;
+    const account = await primaryAccount(a.client);
     const { data } = await a.client
       .from("transactions")
       .select("id")
@@ -1101,5 +1146,108 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     // Ni siquiera la exportación: solo sale lo del propio usuario.
     const csv = await (await get("/activity/export", b)).text();
     expect(csv.trimEnd().split("\r\n")).toHaveLength(1); // solo el encabezado
+  });
+
+  it("varios portafolios: el selector, cada pantalla mira el elegido y una cookie ajena no sirve", async () => {
+    const [principal] = await listPortfolios(a.client);
+    const [bPortfolio] = await listPortfolios(b.client);
+    const { data: secondId, error } = await a.client.rpc("create_portfolio", {
+      p_name: "Cripto Prueba",
+    });
+    expect(error).toBeNull();
+    const second = (await listPortfolios(a.client)).find(
+      (p) => p.id === secondId,
+    )!;
+    const deposit = await a.client.from("transactions").insert({
+      user_id: a.userId,
+      account_id: second.account.id,
+      type: "DEPOSIT",
+      executed_at: "2026-03-06T15:00:00Z",
+      amount: 100,
+    });
+    expect(deposit.error).toBeNull();
+    const choose = (id: string | null) =>
+      a.jar.setAll([{ name: "pt-portfolio", value: id ?? "" }]);
+
+    try {
+      // Sin elección: el primero, y ahora con el selector de los dos.
+      choose(null);
+      const home = await page("/", a);
+      expect(home.html).toContain("VOO");
+      expect(home.html).toContain(">Portafolio principal</option>");
+      expect(home.html).toContain(">Cripto Prueba</option>");
+      expect(home.html).toContain(`value="${principal!.id}" selected=""`);
+
+      // Eligiendo el segundo: sus números y nada del primero.
+      choose(second.id);
+      const secondHome = await page("/", a);
+      expect(secondHome.html).toContain(`value="${second.id}" selected=""`);
+      expect(secondHome.html).toContain("US$ 100,00");
+      expect(secondHome.html).not.toContain("VOO");
+      expect((await page("/positions", a)).html).toContain(
+        "Todavía no cargaste operaciones",
+      );
+      const activity = await page("/activity", a);
+      expect(activity.html).toContain("Depósito");
+      expect(activity.html).not.toContain("VOO");
+      const exported = await get("/activity/export", a);
+      expect(exported.headers.get("content-disposition")).toMatch(
+        /^attachment; filename="transacciones-cripto-prueba-\d{4}-\d{2}-\d{2}\.csv"$/,
+      );
+      expect((await exported.text()).trimEnd().split("\r\n")).toHaveLength(2);
+
+      // El alta arranca en el elegido y deja cambiarlo; la importación pregunta a cuál.
+      const newTx = await page("/activity/new", a);
+      expect(newTx.html).toContain('name="portfolio"');
+      expect(newTx.html).toContain(`value="${second.id}" selected=""`);
+      expect((await page("/activity/import", a)).html).toContain(
+        "Importar al portafolio",
+      );
+
+      // Una operación del otro portafolio se edita igual, en el suyo.
+      const { data: principalTx } = await a.client
+        .from("transactions")
+        .select("id")
+        .eq("account_id", principal!.account.id)
+        .limit(1);
+      const edit = await page(`/activity/${principalTx![0]!.id}`, a);
+      expect(edit.html).toContain("Guardar cambios");
+      expect(edit.html).toMatch(/Portafolio: <\/span>Portafolio principal/);
+      expect(edit.html).not.toContain('name="portfolio"'); // no se mueve de portafolio
+
+      // Administrar: los dos, cuál se mira, y uno ajeno no existe.
+      const list = await page("/more/portfolios", a);
+      expect(list.html).toContain("Portafolio principal");
+      expect(list.html).toContain("Cripto Prueba");
+      expect(list.html).toContain("Mirando ahora");
+      const settings = await page(`/more/portfolios/${second.id}`, a);
+      expect(settings.html).toContain("Guardar nombre");
+      expect(settings.html).toContain("Borrar portafolio");
+      expect(
+        (await page(`/more/portfolios/${bPortfolio!.id}`, a)).html,
+      ).toContain(NOT_FOUND);
+
+      // La cookie con un portafolio ajeno (o inventado) no sirve: se mira el primero propio.
+      choose(bPortfolio!.id);
+      const foreign = await page("/", a);
+      expect(foreign.html).toContain("VOO");
+      expect(foreign.html).toContain(`value="${principal!.id}" selected=""`);
+      choose("no-es-un-id");
+      expect((await page("/positions", a)).html).toContain("VOO");
+      // Y B, con la cookie del portafolio de A, sigue viendo solo lo suyo.
+      b.jar.setAll([{ name: "pt-portfolio", value: second.id }]);
+      expect((await page("/activity", b)).html).toContain(
+        "Todavía no hay operaciones",
+      );
+      b.jar.setAll([{ name: "pt-portfolio", value: "" }]);
+    } finally {
+      choose(null);
+      await a.client.from("portfolios").delete().eq("id", second.id);
+    }
+
+    // Con uno solo, sin selector (como antes).
+    const single = await page("/", a);
+    expect(single.html).not.toContain(">Cripto Prueba</option>");
+    expect(single.html).toContain("Portafolio principal");
   });
 });

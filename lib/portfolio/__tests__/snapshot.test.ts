@@ -10,6 +10,12 @@ const account: AccountRow = {
   currency: "USD",
   cost_method: "AVERAGE",
 };
+const portfolio = {
+  id: "p-1",
+  name: "Principal",
+  benchmarkSymbol: "SPY",
+  account,
+};
 
 const quote = (
   symbol: string,
@@ -35,7 +41,7 @@ const closes = (
 });
 
 const input = (over: Partial<SnapshotInput> = {}): SnapshotInput => ({
-  account,
+  portfolio,
   transactionRows: fixtureRows(),
   instruments: fixtureInstruments(),
   quotes: [],
@@ -46,6 +52,16 @@ const input = (over: Partial<SnapshotInput> = {}): SnapshotInput => ({
 const num = (value: Dec | null) => (value === null ? null : value.toFixed());
 
 describe("buildSnapshot con el CSV de Delta", () => {
+  it("es del portafolio que se pidió: su cuenta en cada transacción", () => {
+    const snap = buildSnapshot(input());
+    expect(snap.portfolio).toBe(portfolio);
+    expect(snap.account).toBe(account);
+    expect(snap.transactions.length).toBeGreaterThan(0);
+    expect(snap.transactions.every((tx) => tx.accountId === account.id)).toBe(
+      true,
+    );
+  });
+
   it("sin precios: el costo, el realizado y el efectivo de la sección 8.3, y todo lo abierto sin precio", () => {
     const snap = buildSnapshot(input());
     expect(snap.engine.cash.toFixed()).toBe("882.745");
@@ -142,7 +158,9 @@ describe("buildSnapshot con el CSV de Delta", () => {
 
   it("respeta la moneda de la cuenta: en una cuenta que no es USD, las operaciones en USD son un error", () => {
     const snap = buildSnapshot(
-      input({ account: { ...account, currency: "EUR" } }),
+      input({
+        portfolio: { ...portfolio, account: { ...account, currency: "EUR" } },
+      }),
     );
     expect(
       snap.engine.issues.some((i) => i.code === "UNSUPPORTED_CURRENCY"),

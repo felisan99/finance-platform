@@ -7,13 +7,13 @@ import {
   localRangeToUtc,
   type ActivityFilters,
 } from "./activity";
+import type { PortfolioRef } from "./portfolio-scope";
 import { buildSnapshot, type PortfolioSnapshot } from "./snapshot";
 import {
   INSTRUMENT_COLUMNS,
   QUOTE_COLUMNS,
   TRANSACTION_COLUMNS,
-  accountRowSchema,
-  benchmarkRowSchema,
+  portfolioRowSchema,
   closesRowSchema,
   dailyCloseRowSchema,
   instrumentRowSchema,
@@ -23,7 +23,6 @@ import {
   transactionRowSchema,
   watchlistItemRowSchema,
   watchlistMarketRowSchema,
-  type AccountRow,
   type ClosesRow,
   type DailyCloseRow,
   type InstrumentRow,
@@ -45,16 +44,39 @@ const loose = (client: Client) => client as unknown as SupabaseClient;
 /** Los `.in(...)` se parten: una lista larga de UUID pasa el límite de la URL. */
 const IN_CHUNK = 100;
 
-export async function getPrimaryAccount(
-  client: Client,
-): Promise<AccountRow | null> {
+/**
+ * Los portafolios de la persona (RLS), del más viejo al más nuevo, cada uno con su cuenta (la más
+ * vieja, si por algún motivo tuviera más de una). Un portafolio sin cuenta no se muestra.
+ */
+export async function listPortfolios(client: Client): Promise<PortfolioRef[]> {
   const { data, error } = await loose(client)
-    .from("accounts")
-    .select("id, name, currency, cost_method")
+    .from("portfolios")
+    .select(
+      "id, name, benchmark_symbol, accounts(id, name, currency, cost_method, created_at)",
+    )
     .order("created_at")
-    .limit(1);
-  if (error) throw new Error(`db accounts: ${error.message}`);
-  return parseRows(accountRowSchema, data, "accounts")[0] ?? null;
+    .order("id")
+    .order("created_at", { referencedTable: "accounts" })
+    .order("id", { referencedTable: "accounts" });
+  if (error) throw new Error(`db portfolios: ${error.message}`);
+  return parseRows(portfolioRowSchema, data, "portfolios").flatMap((row) => {
+    const account = row.accounts[0];
+    return account
+      ? [
+          {
+            id: row.id,
+            name: row.name,
+            benchmarkSymbol: row.benchmark_symbol,
+            account: {
+              id: account.id,
+              name: account.name,
+              currency: account.currency,
+              cost_method: account.cost_method,
+            },
+          },
+        ]
+      : [];
+  });
 }
 
 /** Todas las transacciones de la cuenta, en el orden que espera el motor: `(executed_at, created_at, seq)`. */
@@ -73,6 +95,19 @@ export async function getTransactionRows(
       .range(from, to),
   );
   return parseRows(transactionRowSchema, rows, "transactions");
+}
+
+/** Cuántas transacciones tiene una cuenta (RLS: solo si es del usuario). */
+export async function countTransactions(
+  client: Client,
+  accountId: string,
+): Promise<number> {
+  const { count, error } = await loose(client)
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", accountId);
+  if (error) throw new Error(`db transactions: ${error.message}`);
+  return count ?? 0;
 }
 
 /** Las últimas importaciones del usuario (RLS), con cuántas transacciones les quedan ligadas hoy. */
@@ -105,18 +140,44 @@ export async function getTransactionIdsByImport(
   );
 }
 
-/** Una transacción por id (RLS: solo si es del usuario), o `null`. */
+/** Una transacción por id (RLS: solo si es del usuario) con la cuenta a la que pertenece, o `null`. */
 export async function getTransactionRow(
   client: Client,
   id: string,
-): Promise<TransactionRow | null> {
+): Promise<{ row: TransactionRow; accountId: string } | null> {
   const { data, error } = await loose(client)
     .from("transactions")
-    .select(TRANSACTION_COLUMNS)
+    .select(`${TRANSACTION_COLUMNS}, account_id`)
     .eq("id", id)
     .limit(1);
   if (error) throw new Error(`db transactions: ${error.message}`);
-  return parseRows(transactionRowSchema, data, "transactions")[0] ?? null;
+  const found = parseRows(
+    transactionRowSchema.extend({ account_id: z.string() }),
+    data,
+    "transactions",
+  )[0];
+  if (!found) return null;
+  const { account_id: accountId, ...row } = found;
+  return { row, accountId };
+}
+
+/** La cuenta de una importación (RLS: solo si es del usuario); `null` si no existe o ya no tiene cuenta. */
+export async function getImportAccountId(
+  client: Client,
+  importId: string,
+): Promise<string | null> {
+  const { data, error } = await loose(client)
+    .from("imports")
+    .select("account_id")
+    .eq("id", importId)
+    .limit(1);
+  if (error) throw new Error(`db imports: ${error.message}`);
+  const row = parseRows(
+    z.object({ account_id: z.string().nullable() }),
+    data,
+    "imports",
+  )[0];
+  return row?.account_id ?? null;
 }
 
 export async function getInstruments(
@@ -289,32 +350,21 @@ export async function getPriceSeries(
   });
 }
 
-/** El benchmark del portafolio de la cuenta (`SPY` por defecto) y su instrumento, si existe. */
+/** El benchmark de un portafolio (`SPY` por defecto) y su instrumento, si ya existe. */
 export async function getBenchmark(
   client: Client,
-  accountId: string,
-): Promise<{ symbol: string; instrumentId: string | null } | null> {
-  const { data, error } = await loose(client)
-    .from("accounts")
-    .select("portfolios(benchmark_symbol)")
-    .eq("id", accountId)
-    .limit(1);
-  if (error) throw new Error(`db accounts: ${error.message}`);
-  const row = parseRows(benchmarkRowSchema, data, "accounts")[0];
-  const symbol = row?.portfolios?.benchmark_symbol;
-  if (!symbol) return null;
+  symbol: string,
+): Promise<{ symbol: string; instrumentId: string | null }> {
   const ids = await getInstrumentIdsBySymbol(client, [symbol]);
   return { symbol, instrumentId: ids.get(symbol) ?? null };
 }
 
-/** La fila del instrumento del benchmark (con su símbolo del proveedor), o `null` si no existe. */
+/** La fila del instrumento de un benchmark (con su símbolo del proveedor), o `null` si no existe. */
 export async function getBenchmarkInstrument(
   client: Client,
-  accountId: string,
+  symbol: string,
 ): Promise<InstrumentRow | null> {
-  const benchmark = await getBenchmark(client, accountId);
-  if (!benchmark?.instrumentId) return null;
-  return (await getInstruments(client, [benchmark.instrumentId]))[0] ?? null;
+  return getInstrumentBySymbol(client, symbol);
 }
 
 /** Cuántos instrumentos se leen a la vez: una consulta paginada por cada uno. */
@@ -356,17 +406,18 @@ export async function getCloseSeries(
 }
 
 /**
- * Carga todo lo que necesitan Inicio y Posiciones: la cuenta, sus transacciones, los instrumentos,
- * las cotizaciones y los últimos cierres. Devuelve `null` si el usuario todavía no tiene cuenta.
- * Las lecturas son independientes entre sí y van en paralelo.
+ * Carga todo lo que necesitan Inicio y Posiciones de un portafolio: sus transacciones, los
+ * instrumentos, las cotizaciones y los últimos cierres. Las lecturas son independientes entre sí y
+ * van en paralelo.
  */
 export async function loadPortfolioSnapshot(
   client: Client,
-): Promise<PortfolioSnapshot | null> {
-  const account = await getPrimaryAccount(client);
-  if (!account) return null;
-
-  const transactionRows = await getTransactionRows(client, account.id);
+  portfolio: PortfolioRef,
+): Promise<PortfolioSnapshot> {
+  const transactionRows = await getTransactionRows(
+    client,
+    portfolio.account.id,
+  );
   const ids = [
     ...new Set(
       transactionRows.flatMap((r) =>
@@ -382,7 +433,7 @@ export async function loadPortfolioSnapshot(
   ]);
 
   return buildSnapshot({
-    account,
+    portfolio,
     transactionRows,
     instruments,
     quotes,

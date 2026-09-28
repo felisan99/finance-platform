@@ -107,11 +107,17 @@ export const recentImportRowSchema = z.object({
   rows_imported: z.number().nullable(),
   undone_at: z.string().nullable(),
   live_count: z.number(),
+  /** `null` si la cuenta se borró (con su portafolio). */
+  portfolio_id: z.string().nullable(),
 });
 export type RecentImportRow = z.infer<typeof recentImportRowSchema>;
 
-export const benchmarkRowSchema = z.object({
-  portfolios: z.object({ benchmark_symbol: z.string() }).nullable(),
+/** Un portafolio con sus cuentas embebidas (`portfolios` → `accounts`). */
+export const portfolioRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  benchmark_symbol: z.string(),
+  accounts: z.array(accountRowSchema),
 });
 
 /** Un símbolo seguido, con su instrumento embebido (`watchlist_items` → `instruments`). */

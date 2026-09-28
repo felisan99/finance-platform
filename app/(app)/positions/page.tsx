@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EmptyPortfolio } from "@/components/app/empty-state";
+import { portfolioContextLine } from "@/components/app/portfolio-context";
 import { ClosedPositionRow, PositionRow } from "@/components/app/position-row";
 import { Pnl } from "@/components/app/pnl";
 import { Notice, PageHeader, Stat } from "@/components/app/stat";
@@ -13,6 +14,7 @@ import {
   sortPositions,
   splitPositions,
 } from "@/lib/portfolio/positions-list";
+import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
 import { loadPortfolioSnapshot } from "@/lib/portfolio/queries";
 import { cn } from "@/lib/utils";
 
@@ -31,11 +33,15 @@ export default async function PositionsPage({
   const imported = Number(first(params.importadas) ?? "0");
 
   const supabase = await createClient();
-  const snapshot = await loadPortfolioSnapshot(supabase);
+  const context = await getPortfolioContext(supabase);
+  const snapshot = context.current
+    ? await loadPortfolioSnapshot(supabase, context.current)
+    : null;
+  const switcher = portfolioContextLine(context);
   if (!snapshot || snapshot.engine.positions.length === 0) {
     return (
       <>
-        <PageHeader title="Posiciones" />
+        <PageHeader title="Posiciones" context={switcher} />
         <EmptyPortfolio />
       </>
     );
@@ -57,6 +63,7 @@ export default async function PositionsPage({
     <div className="flex flex-col gap-3">
       <PageHeader
         title="Posiciones"
+        context={switcher}
         subtitle={`${open.length} abierta${open.length === 1 ? "" : "s"} · ${closed.length} cerrada${closed.length === 1 ? "" : "s"}`}
       />
 

@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { AllocationCard } from "@/components/app/allocation-card";
 import { ContributionCard } from "@/components/app/contribution-card";
 import { EmptyPortfolio } from "@/components/app/empty-state";
+import { portfolioContextLine } from "@/components/app/portfolio-context";
 import {
   MonthlyReturnsSection,
   PerformanceSection,
@@ -26,19 +27,24 @@ import {
   formatMoney,
 } from "@/lib/portfolio/format";
 import { loadPerformanceOutcome } from "@/lib/portfolio/performance-data";
+import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
 import { loadPortfolioSnapshot } from "@/lib/portfolio/queries";
 import { buildCachedSnapshot } from "@/lib/portfolio/snapshot-cache";
 import { localYear } from "@/lib/portfolio/time";
 
 export default async function HomePage() {
   const supabase = await createClient();
-  const snapshot = await loadPortfolioSnapshot(supabase);
+  const context = await getPortfolioContext(supabase);
+  const snapshot = context.current
+    ? await loadPortfolioSnapshot(supabase, context.current)
+    : null;
   const now = new Date();
+  const switcher = portfolioContextLine(context);
 
   if (!snapshot || snapshot.transactions.length === 0) {
     return (
       <>
-        <PageHeader title="Inicio" />
+        <PageHeader title="Inicio" context={switcher} />
         <EmptyPortfolio />
       </>
     );
@@ -58,8 +64,20 @@ export default async function HomePage() {
 
   return (
     <div className="flex flex-col gap-3">
-      <SnapshotSaver json={JSON.stringify(buildCachedSnapshot(valued, now))} />
-      <PageHeader title="Inicio" subtitle={snapshot.account.name} />
+      <SnapshotSaver
+        json={JSON.stringify(
+          buildCachedSnapshot(
+            valued,
+            now,
+            switcher ? snapshot.portfolio.name : null,
+          ),
+        )}
+      />
+      <PageHeader
+        title="Inicio"
+        context={switcher}
+        subtitle={switcher ? undefined : snapshot.portfolio.name}
+      />
 
       <Card>
         <CardContent className="flex flex-col gap-3">

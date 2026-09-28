@@ -185,6 +185,8 @@ create table imports (
 );
 ```
 
+*(**Varios portafolios**, 2026-09-28: cada persona tiene de 1 a 5 portafolios, por ejemplo uno de acciones y otro de cripto, y cada portafolio tiene exactamente una cuenta, que la app no muestra: el libro y el costo promedio siguen siendo por cuenta, así que un mismo símbolo en dos portafolios no se mezcla. Los nombres no tienen espacios en los bordes, son de hasta 40 caracteres y son únicos por persona sin distinguir mayúsculas. `create_portfolio` crea el portafolio con su cuenta; los triggers `portfolios_check_limit` y `portfolios_keep_one` ponen el tope y que no se pueda borrar el último (salvo al borrar a la persona). Migración `multiple_portfolios`.)*
+
 ### 5.2 Tablas de mercado (compartidas; lectura para usuarios autenticados, escritura solo con service role)
 
 ```sql
@@ -437,6 +439,8 @@ Casi ningún usuario usa Delta, así que el formato principal es uno propio, sim
 
 Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con: **Inicio, Posiciones, Watchlist, Actividad y Más**.
 
+**Varios portafolios** (2026-09-28): con más de uno, Inicio, Posiciones y Actividad muestran arriba del título un selector (un `<select>` nativo) con el portafolio que se está mirando. La elección se guarda en la cookie `pt-portfolio` (HttpOnly), que el servidor cruza siempre con los portafolios de la persona: si ya no existe o es ajena, se mira el primero. La ficha de un activo muestra el nombre del portafolio sin selector, e Inicio, Posiciones, Actividad, la exportación y «Antes de comprar» son del portafolio elegido. La Watchlist es una sola para todos. «Actualizar precios» actualiza las posiciones de todos los portafolios. Con un solo portafolio la app se ve como antes. Todavía no hay vista «Todo junto»: es la etapa 2.
+
 ### 10.1 Inicio (dashboard)
 - Valor total, cambio del día ($ y %), **ganancia total y aportado neto** (valor − depósitos + retiros, con su % sobre lo aportado), ganancia no realizada y realizada.
 - Gráfico con selector de período y tres modos: **ganancia acumulada en US$** (por defecto: valor − aportes netos, sin saltos por depósitos), valor, y comparación contra el benchmark (TWR del portafolio vs. SPY, normalizados a 100).
@@ -463,6 +467,7 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 - Formulario con autocompletado de símbolo (`search` del proveedor), cantidad, precio, comisión y fecha.
 - En el alta de una compra o venta, al elegir el símbolo se trae la **cotización actual** (`getReferencePrice`, una consulta al proveedor que no guarda nada) y se deja escrita en el precio, como la fecha y la hora que arrancan en «ahora». Debajo del precio dice de cuándo es (si es del cierre, se ve la hora del cierre). Es editable: si la persona ya escribió un precio no se le pisa y queda el botón «Usar este precio». No aplica a la edición de una operación ni a los tipos sin precio por acción.
 - Importar CSV (Delta y, más adelante, un formato genérico) y exportar todo a CSV como backup.
+- Con varios portafolios: el alta pregunta en cuál guardar y arranca en el que se está mirando. La edición y el borrado se hacen en el portafolio de la operación, porque una operación no se mueve de portafolio. La importación pregunta a cuál importar, y «Deshacer» valida el libro del portafolio de esa importación. «Exportar CSV» baja el portafolio elegido, con su nombre en el nombre del archivo; el formato del CSV no cambia.
 
 ### 10.4 Watchlist
 - Agregar y quitar símbolos (hasta 50, en orden alfabético); ver precio, cambio del día, rango de 52 semanas y un minigráfico. El rango son los **cierres diarios** de las últimas 52 semanas (`prices_daily` no guarda máximos y mínimos intradiarios) y el precio actual se suma al rango.
@@ -470,6 +475,7 @@ Mobile-first, pensado para un ancho de 390px. Navegación inferior tipo app con:
 
 ### 10.5 Más
 - Cuentas y portafolios (crear, renombrar, método de costo), benchmark, moneda, exportar datos, cerrar sesión.
+*(Hecho, 2026-09-28: «Portafolios» (`/more/portfolios`) permite crear uno nuevo, y al crearlo pasa a ser el que se mira. Cada portafolio se puede renombrar o borrar; para borrar hay que escribir su nombre, avisa cuántas operaciones se van con él y no se puede borrar el último. Las cuentas no se muestran. El benchmark se elige en la etapa 3 (cripto), cuando haya otro además de SPY.)*
 
 ### 10.6 PWA
 - `manifest.webmanifest` con `display: standalone`, íconos (incluido `apple-touch-icon` de 180×180), `theme_color` y soporte para modo claro y oscuro.

@@ -8,15 +8,11 @@ import {
   type DailyClose,
 } from "@/lib/engine";
 import { buildBeforeBuyView, type BeforeBuyView } from "./before-buy-view";
-import {
-  getBenchmark,
-  getCloseSeries,
-  getInstrumentIdsBySymbol,
-} from "./queries";
+import { getBenchmark, getCloseSeries } from "./queries";
 import type { DailyCloseRow, InstrumentRow } from "./rows";
 import type { PortfolioSnapshot } from "./snapshot";
 
-/** El benchmark de quien todavía no tiene cuenta (el mismo que se crea por defecto). */
+/** El benchmark de quien todavía no tiene portafolio (el mismo que se crea por defecto). */
 const DEFAULT_BENCHMARK = "SPY";
 /** Años de la simulación de aportes más larga. */
 const PLAN_YEARS = 5;
@@ -48,15 +44,8 @@ export async function loadBeforeBuy(
   const { snapshot, instrument } = args;
   const today = marketDay(args.now);
 
-  const benchmark = snapshot
-    ? await getBenchmark(client, snapshot.account.id)
-    : {
-        symbol: DEFAULT_BENCHMARK,
-        instrumentId:
-          (await getInstrumentIdsBySymbol(client, [DEFAULT_BENCHMARK])).get(
-            DEFAULT_BENCHMARK,
-          ) ?? null,
-      };
+  const symbol = snapshot?.portfolio.benchmarkSymbol ?? DEFAULT_BENCHMARK;
+  const benchmark = await getBenchmark(client, symbol);
 
   const held = (snapshot?.valued.positions ?? []).flatMap((position) => {
     if (!position.isOpen || position.marketValue === null) return [];
@@ -66,7 +55,7 @@ export async function loadBeforeBuy(
 
   const longIds = [
     instrument.id,
-    ...(benchmark?.instrumentId ? [benchmark.instrumentId] : []),
+    ...(benchmark.instrumentId ? [benchmark.instrumentId] : []),
   ];
   const shortIds = held
     .map((row) => row.id)
@@ -107,7 +96,7 @@ export async function loadBeforeBuy(
     candidateCloses: closesOf(instrument.id),
     holdingCloses,
     benchmark:
-      benchmark?.instrumentId != null
+      benchmark.instrumentId != null
         ? { symbol: benchmark.symbol, closes: closesOf(benchmark.instrumentId) }
         : null,
     today,

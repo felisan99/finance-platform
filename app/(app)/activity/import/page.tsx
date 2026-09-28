@@ -9,6 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
 import { describeError } from "@/lib/market-data";
 import { formatDateTime } from "@/lib/portfolio/format";
+import {
+  getPortfolioContext,
+  type PortfolioContext,
+} from "@/lib/portfolio/current-portfolio";
 import { getRecentImports } from "@/lib/portfolio/queries";
 import { cleanText } from "@/lib/market-data/sanitize";
 
@@ -22,12 +26,23 @@ const SOURCE_LABELS: Record<string, string> = {
  * historial. El cliente se crea afuera del `try`: leer las cookies es lo que le avisa a Next que la
  * página es dinámica, y un `catch` no debe tragarse ese aviso.
  */
-async function loadHistory(): Promise<ImportHistoryItem[]> {
+async function loadHistory(
+  context: PortfolioContext,
+): Promise<ImportHistoryItem[]> {
   const supabase = await createClient();
+  // Con varios portafolios, cada importación dice a cuál fue.
+  const names =
+    context.portfolios.length > 1
+      ? new Map(context.portfolios.map((p) => [p.id, p.name]))
+      : null;
   try {
     const rows = await getRecentImports(supabase);
     return rows.map((row) => ({
       id: row.import_id,
+      portfolioName:
+        names && row.portfolio_id !== null
+          ? (names.get(row.portfolio_id) ?? null)
+          : null,
       filename: cleanText(row.filename, 80) ?? "Sin nombre",
       formatLabel: SOURCE_LABELS[row.source] ?? row.source,
       when: formatDateTime(new Date(row.created_at)),
@@ -48,7 +63,8 @@ async function loadHistory(): Promise<ImportHistoryItem[]> {
 }
 
 export default async function ImportPage() {
-  const history = await loadHistory();
+  const context = await getPortfolioContext(await createClient());
+  const history = await loadHistory(context);
 
   return (
     <div className="flex flex-col gap-4">
@@ -57,7 +73,10 @@ export default async function ImportPage() {
         subtitle="Desde un CSV o una planilla"
       />
       <ImportGuide />
-      <ImportForm />
+      <ImportForm
+        portfolios={context.portfolios.map(({ id, name }) => ({ id, name }))}
+        initialPortfolio={context.current?.id ?? ""}
+      />
       {history.length > 0 && (
         <Card size="sm">
           <CardHeader>

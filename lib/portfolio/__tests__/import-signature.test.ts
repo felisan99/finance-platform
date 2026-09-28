@@ -58,6 +58,21 @@ describe("inputSignature", () => {
     );
   });
 
+  it("otro portafolio de destino cambia la firma (la vista previa se armó contra el otro)", () => {
+    const file = { kind: "file", name: "a.csv", size: 1 } as const;
+    const text = { kind: "text", text: "x" } as const;
+    expect(inputSignature(file, false, "p1")).not.toBe(
+      inputSignature(file, false, "p2"),
+    );
+    expect(inputSignature(text, false, "p1")).not.toBe(
+      inputSignature(text, false, "p2"),
+    );
+    expect(inputSignature(file, false, "p1")).toBe(
+      inputSignature(file, false, "p1"),
+    );
+    expect(inputSignature({ kind: "none" }, false, "p1")).toBe("");
+  });
+
   it("sin nada elegido, la firma es vacía", () => {
     expect(inputSignature({ kind: "none" }, true)).toBe("");
   });

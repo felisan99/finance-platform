@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { portfolioContextLine } from "@/components/app/portfolio-context";
 import { PageHeader } from "@/components/app/stat";
 import { TxRow } from "@/components/app/tx-row";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -13,11 +14,8 @@ import {
   parseActivityFilters,
 } from "@/lib/portfolio/activity";
 import { formatDayHeader } from "@/lib/portfolio/format";
-import {
-  getActivityPage,
-  getInstruments,
-  getPrimaryAccount,
-} from "@/lib/portfolio/queries";
+import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
+import { getActivityPage, getInstruments } from "@/lib/portfolio/queries";
 import { TX_TYPES } from "@/lib/portfolio/rows";
 import { describeTransaction } from "@/lib/portfolio/tx-view";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/validation/transaction";
@@ -32,7 +30,8 @@ export default async function ActivityPage({
 }) {
   const filters = parseActivityFilters(await searchParams);
   const supabase = await createClient();
-  const account = await getPrimaryAccount(supabase);
+  const context = await getPortfolioContext(supabase);
+  const account = context.current?.account ?? null;
   const { rows, hasNext } = account
     ? await getActivityPage(supabase, account.id, filters)
     : { rows: [], hasNext: false };
@@ -55,6 +54,7 @@ export default async function ActivityPage({
     <div className="flex flex-col gap-3">
       <PageHeader
         title="Actividad"
+        context={portfolioContextLine(context)}
         actions={
           <Link href="/activity/new" className={buttonVariants({ size: "sm" })}>
             Agregar

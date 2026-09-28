@@ -21,7 +21,7 @@ describe("collectRefreshTargets", () => {
       openSymbols: ["VOO", "AAPL"],
       instrumentBySymbol: bySymbol("VOO", "AAPL"),
       followed: [instrument("AAPL"), instrument("MSFT")],
-      benchmark: instrument("SPY"),
+      benchmarks: [instrument("SPY")],
     });
     expect(symbolsOf(targets.instruments)).toEqual([
       "VOO",
@@ -29,7 +29,7 @@ describe("collectRefreshTargets", () => {
       "MSFT",
       "SPY",
     ]);
-    expect(targets.extraBenchmark?.symbol).toBe("SPY");
+    expect(symbolsOf(targets.extraBenchmarks)).toEqual(["SPY"]);
   });
 
   it("si la persona ya tiene o sigue el benchmark no se agrega de más ni cuenta aparte", () => {
@@ -37,19 +37,19 @@ describe("collectRefreshTargets", () => {
       openSymbols: ["SPY"],
       instrumentBySymbol: bySymbol("SPY"),
       followed: [],
-      benchmark: instrument("SPY"),
+      benchmarks: [instrument("SPY")],
     });
     expect(symbolsOf(held.instruments)).toEqual(["SPY"]);
-    expect(held.extraBenchmark).toBeNull();
+    expect(held.extraBenchmarks).toEqual([]);
 
     const followed = collectRefreshTargets({
       openSymbols: [],
       instrumentBySymbol: new Map(),
       followed: [instrument("SPY")],
-      benchmark: instrument("SPY"),
+      benchmarks: [instrument("SPY")],
     });
     expect(symbolsOf(followed.instruments)).toEqual(["SPY"]);
-    expect(followed.extraBenchmark).toBeNull();
+    expect(followed.extraBenchmarks).toEqual([]);
   });
 
   it("sin posiciones ni seguidos no hay nada que actualizar, ni siquiera el benchmark", () => {
@@ -57,9 +57,9 @@ describe("collectRefreshTargets", () => {
       openSymbols: [],
       instrumentBySymbol: new Map(),
       followed: [],
-      benchmark: instrument("SPY"),
+      benchmarks: [instrument("SPY")],
     });
-    expect(targets).toEqual({ instruments: [], extraBenchmark: null });
+    expect(targets).toEqual({ instruments: [], extraBenchmarks: [] });
   });
 
   it("sin benchmark actualiza lo demás", () => {
@@ -67,10 +67,21 @@ describe("collectRefreshTargets", () => {
       openSymbols: ["VOO"],
       instrumentBySymbol: bySymbol("VOO"),
       followed: [],
-      benchmark: null,
+      benchmarks: [],
     });
     expect(symbolsOf(targets.instruments)).toEqual(["VOO"]);
-    expect(targets.extraBenchmark).toBeNull();
+    expect(targets.extraBenchmarks).toEqual([]);
+  });
+
+  it("varios portafolios: cada benchmark una sola vez y solo los que no se tienen cuentan aparte", () => {
+    const targets = collectRefreshTargets({
+      openSymbols: ["VOO", "QQQ"],
+      instrumentBySymbol: bySymbol("VOO", "QQQ"),
+      followed: [],
+      benchmarks: [instrument("SPY"), instrument("QQQ"), instrument("SPY")],
+    });
+    expect(symbolsOf(targets.instruments)).toEqual(["VOO", "QQQ", "SPY"]);
+    expect(symbolsOf(targets.extraBenchmarks)).toEqual(["SPY"]);
   });
 
   it("un símbolo abierto que no vino en los instrumentos se omite", () => {
@@ -78,14 +89,14 @@ describe("collectRefreshTargets", () => {
       openSymbols: ["VOO", "FANTASMA"],
       instrumentBySymbol: bySymbol("VOO"),
       followed: [],
-      benchmark: null,
+      benchmarks: [],
     });
     expect(symbolsOf(targets.instruments)).toEqual(["VOO"]);
   });
 });
 
 describe("refreshMessage", () => {
-  const spy = { symbol: "SPY" };
+  const spy = [{ symbol: "SPY" }];
 
   it("cuenta lo que la persona tiene: el benchmark agregado por nosotros no suma", () => {
     expect(refreshMessage({ updated: 3, missing: [] }, spy)).toBe(
@@ -94,7 +105,7 @@ describe("refreshMessage", () => {
   });
 
   it("sin benchmark agregado cuenta todo", () => {
-    expect(refreshMessage({ updated: 2, missing: [] }, null)).toBe(
+    expect(refreshMessage({ updated: 2, missing: [] }, [])).toBe(
       "Precios actualizados (2).",
     );
   });
@@ -105,6 +116,15 @@ describe("refreshMessage", () => {
     );
   });
 
+  it("con dos benchmarks agregados, ninguno cuenta", () => {
+    expect(
+      refreshMessage({ updated: 3, missing: ["QQQ"] }, [
+        { symbol: "SPY" },
+        { symbol: "QQQ" },
+      ]),
+    ).toBe("Precios actualizados (2).");
+  });
+
   it("lista los símbolos de la persona sin cotización", () => {
     expect(refreshMessage({ updated: 2, missing: ["ZZZ"] }, spy)).toBe(
       "Actualizado (1). Sin cotización: ZZZ.",
@@ -112,7 +132,7 @@ describe("refreshMessage", () => {
     expect(refreshMessage({ updated: 1, missing: ["ZZZ", "SPY"] }, spy)).toBe(
       "Actualizado (1). Sin cotización: ZZZ.",
     );
-    expect(refreshMessage({ updated: 1, missing: ["ZZZ"] }, null)).toBe(
+    expect(refreshMessage({ updated: 1, missing: ["ZZZ"] }, [])).toBe(
       "Actualizado (1). Sin cotización: ZZZ.",
     );
   });

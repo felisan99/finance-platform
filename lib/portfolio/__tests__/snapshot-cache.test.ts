@@ -112,12 +112,20 @@ describe("buildCachedSnapshot", () => {
     ).toEqual(["A", "B", "C", "D", "E", "F"]);
   });
 
+  it("con varios portafolios guarda de cuál es; con uno solo, nada", () => {
+    expect(buildCachedSnapshot(valued, NOW).portfolioName).toBeNull();
+    expect(buildCachedSnapshot(valued, NOW, "Cripto").portfolioName).toBe(
+      "Cripto",
+    );
+  });
+
   it("no guarda nada más que lo que muestra la pantalla sin conexión", () => {
     const snapshot = buildCachedSnapshot(valued, NOW);
     expect(Object.keys(snapshot).sort()).toEqual([
       "cash",
       "dayChange",
       "dayChangePct",
+      "portfolioName",
       "positions",
       "savedAt",
       "tone",
@@ -154,6 +162,7 @@ describe("contrato con la pantalla sin conexión (public/pwa/offline.js)", () =>
       "positions",
       "savedAt",
       "tone",
+      "portfolioName",
     ]) {
       expect(source, field).toContain(`data.${field}`);
     }

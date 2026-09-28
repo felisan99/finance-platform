@@ -25,17 +25,23 @@ export type ImportInput =
   | { kind: "text"; text: string }
   | { kind: "none" };
 
+/**
+ * `portfolio` es el id del portafolio de destino: la vista previa se arma contra lo que ya hay en ese
+ * portafolio, así que la de otro no sirve.
+ */
 export function inputSignature(
   input: ImportInput,
   includeSuspected: boolean,
+  portfolio = "",
 ): string {
   const flag = includeSuspected ? "1" : "0";
+  const target = portfolio === "" ? "" : `|${portfolio}`;
   switch (input.kind) {
     case "file":
-      return `file|${input.name}|${input.size}|${flag}`;
+      return `file|${input.name}|${input.size}|${flag}${target}`;
     case "text": {
       const text = unifyNewlines(input.text);
-      return `text|${text.length}|${hash(text)}|${flag}`;
+      return `text|${text.length}|${hash(text)}|${flag}${target}`;
     }
     case "none":
       return "";

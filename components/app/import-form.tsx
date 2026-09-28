@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   confirmImport,
@@ -312,8 +313,17 @@ function PreviewPanel({
  * en cada paso (el navegador limpia el campo de archivo después de una acción de formulario). El
  * servidor vuelve a leerlo y a validarlo al confirmar: no confía en la vista previa.
  */
-export function ImportForm() {
+export function ImportForm({
+  portfolios,
+  initialPortfolio,
+}: {
+  /** Los portafolios de la persona: con más de uno se elige a cuál importar. */
+  portfolios: ReadonlyArray<{ id: string; name: string }>;
+  /** El que se está mirando. */
+  initialPortfolio: string;
+}) {
   const [mode, setMode] = useState<Mode>("file");
+  const [portfolio, setPortfolio] = useState(initialPortfolio);
   const [file, setFile] = useState<File | null>(null);
   const [pasted, setPasted] = useState("");
   const [includeSuspected, setIncludeSuspected] = useState(false);
@@ -332,9 +342,10 @@ export function ImportForm() {
       ? inputSignature(
           { kind: "file", name: file.name, size: file.size },
           include,
+          portfolio,
         )
       : mode === "paste" && pasted.trim() !== ""
-        ? inputSignature({ kind: "text", text: pasted }, include)
+        ? inputSignature({ kind: "text", text: pasted }, include, portfolio)
         : "";
   const signature = signatureFor(includeSuspected);
 
@@ -354,6 +365,7 @@ export function ImportForm() {
     if (mode === "file" && file) data.set("file", file);
     else data.set("text", pasted);
     data.set("include_suspected", include ? "1" : "0");
+    data.set("portfolio", portfolio);
     startTransition(() => action(data));
   };
 
@@ -366,6 +378,23 @@ export function ImportForm() {
 
   return (
     <div className="flex flex-col gap-4">
+      {portfolios.length > 1 && (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="import-portfolio">Importar al portafolio</Label>
+          <NativeSelect
+            id="import-portfolio"
+            value={portfolio}
+            disabled={busy}
+            onChange={(event) => setPortfolio(event.target.value)}
+          >
+            {portfolios.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+      )}
       <Segmented
         label="Cómo cargar las operaciones"
         options={MODES}

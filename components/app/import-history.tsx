@@ -16,6 +16,8 @@ export interface ImportHistoryItem {
   id: string;
   filename: string;
   formatLabel: string;
+  /** A qué portafolio fue (solo con más de uno; `null` si no hace falta decirlo o se borró). */
+  portfolioName: string | null;
   /** `09/03/2026 19:34`, en hora de Montevideo. */
   when: string;
   /** Cuántas operaciones quedan ligadas hoy a esta importación. */
@@ -111,6 +113,7 @@ export function ImportHistory({ items }: { items: ImportHistoryItem[] }) {
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
+            {item.portfolioName && `${item.portfolioName} · `}
             Formato {item.formatLabel}
             {item.status === "active" &&
               ` · ${item.liveCount} ${plural(item.liveCount, "operación", "operaciones")}`}

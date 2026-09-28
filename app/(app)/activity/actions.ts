@@ -24,11 +24,20 @@ import {
   rowToTransaction,
 } from "@/lib/portfolio/mappers";
 import {
+  getPortfolioContext,
+  resolveChosenPortfolio,
+} from "@/lib/portfolio/current-portfolio";
+import {
+  portfolioOfAccount,
+  type PortfolioRef,
+} from "@/lib/portfolio/portfolio-scope";
+import {
   getInstruments,
-  getPrimaryAccount,
   getProviderSymbol,
+  getTransactionRow,
   getTransactionRows,
 } from "@/lib/portfolio/queries";
+import type { TransactionRow } from "@/lib/portfolio/rows";
 import {
   buildReferencePrice,
   type ReferencePrice,
@@ -64,6 +73,51 @@ function echo(formData: FormData): Record<string, string> {
   return values;
 }
 
+type Client = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * El portafolio donde se guarda la operación. Una edición o un borrado van al portafolio al que
+ * pertenece la operación (no se mueve de portafolio); un alta, al elegido en el formulario, que
+ * tiene que ser uno de la persona (sin campo, el que se está mirando).
+ */
+async function targetPortfolio(
+  supabase: Client,
+  args: { editId: string | null; chosen: FormDataEntryValue | null },
+): Promise<
+  | { ok: true; portfolio: PortfolioRef; current: TransactionRow | null }
+  | { ok: false; message: string }
+> {
+  if (args.editId !== null) {
+    const [found, { portfolios }] = await Promise.all([
+      getTransactionRow(supabase, args.editId),
+      getPortfolioContext(supabase),
+    ]);
+    const portfolio = found
+      ? portfolioOfAccount(portfolios, found.accountId)
+      : null;
+    if (!found || !portfolio)
+      return { ok: false, message: "No encontramos esa operación." };
+    return { ok: true, portfolio, current: found.row };
+  }
+  const portfolio = await resolveChosenPortfolio(supabase, args.chosen);
+  return portfolio
+    ? { ok: true, portfolio, current: null }
+    : { ok: false, message: "Elegí un portafolio de la lista." };
+}
+
+/** Las operaciones de una cuenta, como filas y como transacciones del motor. */
+async function loadLedger(supabase: Client, accountId: string) {
+  const rows = await getTransactionRows(supabase, accountId);
+  const instruments = await getInstruments(supabase, [
+    ...new Set(rows.flatMap((r) => (r.instrument_id ? [r.instrument_id] : []))),
+  ]);
+  const symbolById = new Map(instruments.map((i) => [i.id, i.symbol]));
+  return {
+    rows,
+    existing: rows.map((r) => rowToTransaction(r, accountId, symbolById)),
+  };
+}
+
 /** Alta o edición de una operación (spec §10.3). Con `id` en el formulario, edita; sin él, crea. */
 export async function saveTransaction(
   _previous: FormState,
@@ -89,29 +143,14 @@ export async function saveTransaction(
   const input = parsed.data;
 
   try {
-    const account = await getPrimaryAccount(supabase);
-    if (!account)
-      return { status: "error", message: "No encontramos tu cuenta.", values };
-
-    const rows = await getTransactionRows(supabase, account.id);
-    const instruments = await getInstruments(supabase, [
-      ...new Set(
-        rows.flatMap((r) => (r.instrument_id ? [r.instrument_id] : [])),
-      ),
-    ]);
-    const symbolById = new Map(instruments.map((i) => [i.id, i.symbol]));
-    const existing = rows.map((r) =>
-      rowToTransaction(r, account.id, symbolById),
-    );
-
-    const current = editId ? rows.find((r) => r.id === editId) : undefined;
-    if (editId && !current) {
-      return {
-        status: "error",
-        message: "No encontramos esa operación.",
-        values,
-      };
-    }
+    const target = await targetPortfolio(supabase, {
+      editId,
+      chosen: formData.get("portfolio"),
+    });
+    if (!target.ok) return { status: "error", message: target.message, values };
+    const { account } = target.portfolio;
+    const { current } = target;
+    const { existing } = await loadLedger(supabase, account.id);
 
     // El libro tiene que seguir siendo consistente (p. ej. no vender más de lo que hay).
     const change: LedgerChange = current
@@ -201,22 +240,13 @@ export async function deleteTransaction(
   }
 
   try {
-    const account = await getPrimaryAccount(supabase);
-    if (!account)
-      return { status: "error", message: "No encontramos tu cuenta." };
-    const rows = await getTransactionRows(supabase, account.id);
-    if (!rows.some((r) => r.id === id)) {
-      return { status: "error", message: "No encontramos esa operación." };
-    }
-    const instruments = await getInstruments(supabase, [
-      ...new Set(
-        rows.flatMap((r) => (r.instrument_id ? [r.instrument_id] : [])),
-      ),
-    ]);
-    const symbolById = new Map(instruments.map((i) => [i.id, i.symbol]));
-    const existing = rows.map((r) =>
-      rowToTransaction(r, account.id, symbolById),
-    );
+    const target = await targetPortfolio(supabase, {
+      editId: id,
+      chosen: null,
+    });
+    if (!target.ok) return { status: "error", message: target.message };
+    const { account } = target.portfolio;
+    const { existing } = await loadLedger(supabase, account.id);
 
     const check = validateLedgerChange(
       existing,
