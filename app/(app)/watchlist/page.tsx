@@ -1,15 +1,19 @@
 import { RefreshButton } from "@/components/app/refresh-button";
 import { Notice, PageHeader } from "@/components/app/stat";
 import { WatchlistAddForm } from "@/components/app/watchlist-add-form";
+import { MoversCard } from "@/components/app/watchlist-movers";
 import { WatchlistRow } from "@/components/app/watchlist-row";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
+import { buildMoversView } from "@/lib/portfolio/movers-view";
 import { WATCHLIST_MAX } from "@/lib/portfolio/watchlist";
 import { loadWatchlist } from "@/lib/portfolio/watchlist-data";
 
 export default async function WatchlistPage() {
   const supabase = await createClient();
-  const rows = await loadWatchlist(supabase, new Date());
+  const now = new Date();
+  const rows = await loadWatchlist(supabase, now);
+  const movers = buildMoversView(rows, now);
   const withoutPrice = rows.filter((row) => row.price === null);
 
   return (
@@ -34,6 +38,21 @@ export default async function WatchlistPage() {
           {withoutPrice.map((row) => row.symbol).join(", ")}. Un símbolo nuevo
           se descarga solo en unos segundos: actualizá la página.
         </Notice>
+      )}
+
+      {movers && (
+        <>
+          <MoversCard
+            title="Mayores subas del día"
+            movers={movers.gainers}
+            emptyText="Hoy no sube ninguno."
+          />
+          <MoversCard
+            title="Mayores bajas del día"
+            movers={movers.losers}
+            emptyText="Hoy no baja ninguno."
+          />
+        </>
       )}
 
       {rows.length === 0 ? (
