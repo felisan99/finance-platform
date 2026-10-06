@@ -7,6 +7,7 @@ import {
   createTestUser,
   createTestUserRecord,
   deleteTestUser,
+  generateLoginCode,
   type DbClient,
   type TestUser,
   type TestUserRecord,
@@ -181,15 +182,7 @@ describe("ingreso con código (integración, finance-dev)", () => {
   });
 
   describe("código OTP real", () => {
-    async function freshCode(email: string): Promise<string> {
-      const { data, error } = await admin.auth.admin.generateLink({
-        type: "magiclink",
-        email,
-      });
-      if (error || !data.properties)
-        throw new Error(`generateLink: ${error?.message}`);
-      return data.properties.email_otp;
-    }
+    const freshCode = (email: string) => generateLoginCode(admin, email);
     const otherThan = (code: string) =>
       code === "111111" ? "222222" : "111111";
 

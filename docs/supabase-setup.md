@@ -66,7 +66,7 @@ Se puede ejecutar con `pnpm supabase db query --linked "…"` o desde el Table E
 - Un instrumento nuevo se descarga solo: el próximo cron lo ve sin historial y lo baja desde su primera transacción (menos 7 días), o 5 años atrás si solo está en una watchlist.
 - Para forzar que un instrumento se vuelva a descargar completo: `update public.instruments set history_backfilled_at = null where symbol = 'VOO';` (el próximo cron lo hace).
 - **Leer series largas de `prices_daily` por páginas o con `price_series`**: PostgREST corta cada respuesta en 1000 filas y cinco años de un instrumento son ~1260 (ver `docs/decisions.md`, observación 9). Varias series juntas van con el RPC `price_series`, una fila por instrumento.
-- El advisor de seguridad puede avisar `auth_leaked_password_protection`: es de plan Pro y no aplica (la app no usa contraseñas).
+- El advisor de seguridad puede avisar `auth_leaked_password_protection`: es de plan Pro y no aplica (no hay contraseñas: ver "Sin contraseñas" más abajo).
 
 ## Funciones de la app (Fases 4 y 6)
 
@@ -88,6 +88,8 @@ Flujo: `/login` (email) → `signInWithOtp` → correo con un **código de 6 dí
 - **Duración de la sesión:** no vence sola (cookies de 400 días, sin tope ni cierre por inactividad). El token de acceso dura 1 semana (`jwt_expiry = 604800` en `config.toml`, aplicado en `finance-dev` y en `finance`): con 1 hora, una renovación perdida en el teléfono hacía que Supabase revocara la sesión por "reuso" del refresh token (ver `docs/decisions.md`, 2026-09-28). Cerrar sesión no invalida el token de acceso ya emitido hasta que vence.
 - **Límite de intentos de verificación** (antes de tener sesión): tabla `login_attempts` y funciones `take_login_attempt` / `clear_login_attempts`, solo ejecutables por `service_role`. La política (5 verificaciones por 15 minutos por email, clave = SHA-256 del email) vive en la función. Si alguien queda bloqueado por error: `delete from public.login_attempts;`.
 - **Un email sin acceso** (fuera de `allowed_emails`) recibe la misma respuesta que uno con acceso: el hook "Before User Created" responde 403 y no se manda ningún correo. Un usuario que ya existe y se sacó de la lista sigue pudiendo pedir un código: para quitar el acceso de verdad hay que borrar el usuario (Authentication → Users) además de la fila de `allowed_emails`.
+- **Sin contraseñas:** la migración `no_passwords` agrega el trigger `strip_user_password` sobre `auth.users`, que borra el hash cada vez que Auth lo escribe. Ninguna contraseña sirve para entrar, ni la de un alta por la API ni la que alguien le ponga a una cuenta con una sesión robada. Para comprobarlo: `select count(*) from auth.users where encrypted_password is not null;` tiene que dar 0. Los usuarios de los tests entran con un código (`generateLoginCode`).
+- **El asunto del correo lleva el código** (`{{ .Token }} es tu código de ingreso…`, en `supabase/config.toml`): se ve en la notificación y cada correo queda en su propia conversación.
 - **Plan B si el correo falla** (Gmail bloquea el envío, cuota agotada, correo en spam): generar el código con la clave secreta, sin enviar nada, y escribirlo en `/login`. Con la clave en `.env.local`, desde la raíz del repo:
 
   ```bash

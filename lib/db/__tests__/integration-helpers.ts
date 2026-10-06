@@ -71,8 +71,9 @@ export interface TestUser {
 
 /**
  * Crea un usuario de prueba por la API de administración (no envía correos; el hook de registro
- * no alcanza a este camino) y abre su sesión con contraseña. El trigger handle_new_user le crea
- * perfil, portafolio, cuenta y watchlist.
+ * no alcanza a este camino) y abre su sesión con un código, como en la app (no hay contraseñas:
+ * migración `no_passwords`). El trigger handle_new_user le crea perfil, portafolio, cuenta y
+ * watchlist.
  */
 export async function createTestUser(
   admin: DbClient,
@@ -80,11 +81,9 @@ export async function createTestUser(
 ): Promise<TestUser> {
   const { url, publishableKey } = assertDevProject();
   const email = `rls-${label}-${randomBytes(4).toString("hex")}@example.com`;
-  const password = randomBytes(16).toString("hex");
 
   const { data, error } = await admin.auth.admin.createUser({
     email,
-    password,
     email_confirm: true,
   });
   if (error || !data.user) {
@@ -92,11 +91,30 @@ export async function createTestUser(
   }
 
   const client = createClient<Database>(url, publishableKey, clientOptions);
-  const signIn = await client.auth.signInWithPassword({ email, password });
+  const signIn = await client.auth.verifyOtp({
+    email,
+    token: await generateLoginCode(admin, email),
+    type: "email",
+  });
   if (signIn.error) {
     throw new Error(`No se pudo iniciar sesión: ${signIn.error.message}`);
   }
   return { id: data.user.id, email, client };
+}
+
+/** Código de ingreso de 6 dígitos para un usuario que ya existe. `generateLink` nunca manda mail. */
+export async function generateLoginCode(
+  admin: DbClient,
+  email: string,
+): Promise<string> {
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+  });
+  if (error || !data.properties) {
+    throw new Error(`generateLink: ${error?.message}`);
+  }
+  return data.properties.email_otp;
 }
 
 export type TestUserRecord = Pick<TestUser, "id" | "email">;
@@ -113,7 +131,6 @@ export async function createTestUserRecord(
   const email = `rls-${label}-${randomBytes(4).toString("hex")}@example.com`;
   const { data, error } = await admin.auth.admin.createUser({
     email,
-    password: randomBytes(16).toString("hex"),
     email_confirm: true,
   });
   if (error || !data.user) {

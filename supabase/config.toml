@@ -36,13 +36,16 @@ otp_expiry = 600
 max_frequency = "1m0s"
 
 # Supabase manda una u otra según el email ya exista (magic_link) o sea un alta nueva
-# (confirmation): las dos muestran solo el código.
+# (confirmation): las dos muestran solo el código. El asunto también lleva el código (Auth lo
+# procesa como plantilla, igual que el cuerpo): se lee en la notificación sin abrir el correo y
+# cada correo queda en su propia conversación (con el mismo asunto, Gmail los agrupa y el nuevo
+# queda escondido debajo del viejo).
 [auth.email.template.magic_link]
-subject = "Tu código de ingreso a Portfolio Tracker"
+subject = "{{ .Token }} es tu código de ingreso a Portfolio Tracker"
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.confirmation]
-subject = "Tu código de ingreso a Portfolio Tracker"
+subject = "{{ .Token }} es tu código de ingreso a Portfolio Tracker"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.hook.before_user_created]

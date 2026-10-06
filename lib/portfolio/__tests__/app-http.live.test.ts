@@ -5,6 +5,7 @@ import {
   createAdmin,
   assertDevProject,
   deleteTestUser,
+  generateLoginCode,
   randomSymbol,
   type DbClient,
 } from "@/lib/db/__tests__/integration-helpers";
@@ -97,10 +98,8 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
   async function newSession(label: string): Promise<Session> {
     const { url, publishableKey } = assertDevProject();
     const email = `rls-http-${label}-${Math.random().toString(16).slice(2, 10)}@example.com`;
-    const password = `p${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
     const { data, error } = await admin.auth.admin.createUser({
       email,
-      password,
       email_confirm: true,
     });
     if (error || !data.user)
@@ -114,7 +113,11 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
         setAll: (list) => jar.setAll(list),
       },
     });
-    const signIn = await client.auth.signInWithPassword({ email, password });
+    const signIn = await client.auth.verifyOtp({
+      email,
+      token: await generateLoginCode(admin, email),
+      type: "email",
+    });
     if (signIn.error)
       throw new Error(`No se pudo iniciar sesión: ${signIn.error.message}`);
     return { userId: data.user.id, email, jar, client };
