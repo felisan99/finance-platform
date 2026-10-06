@@ -18,6 +18,9 @@ const ORIGIN = ${JSON.stringify(origin)};
 const KEYCHAIN_KEY = "portfolio-tracker-widget-token";
 const TOKEN_PATTERN = /^ptw_[A-Za-z0-9_-]{43}$/;
 const VIEW_VERSION = 1;
+// Cada cuánto se le pide al iPhone que redibuje el widget (iOS puede tardar más, nunca menos).
+// Redibujar solo consulta nuestro servidor: a Yahoo se le piden precios recién cuando los
+// guardados tienen 2 horas o más (lo decide el servidor).
 const REFRESH_MINUTES = 30;
 
 const COLORS = {
@@ -132,43 +135,58 @@ function footerText(view, note) {
   const parts = [];
   if (note) parts.push(note);
   if (view.partial) parts.push("Total parcial");
-  if (view.pricesAsOf) parts.push("Precios al " + view.pricesAsOf);
-  parts.push(time(view.generatedAt));
+  parts.push("Actualizado " + time(view.generatedAt));
+  // La fecha de los precios solo si no son de hoy (un fin de semana, antes de la apertura).
+  if (!view.pricesToday && view.pricesAsOf) parts.push("precios al " + view.pricesAsOf);
   return parts.join(" · ");
+}
+
+function changeText(tone, amount, pct) {
+  return arrow(tone) + amount + (pct ? " (" + pct + ")" : "");
+}
+
+function addChange(stack, label, tone, amount, pct) {
+  addText(stack, label, 11, COLORS.muted, "semibold");
+  addText(stack, changeText(tone, amount, pct), 12, toneColor(tone));
 }
 
 function addSummary(stack, view, totalSize) {
   addText(stack, view.title || "Portafolio", 12, COLORS.muted, "semibold");
   stack.addSpacer(4);
   addText(stack, view.totalValue, totalSize, COLORS.text, "bold");
-  stack.addSpacer(2);
-  if (view.dayChangePct) {
-    addText(stack, "Hoy " + arrow(view.dayTone) + view.dayChangePct, 13, toneColor(view.dayTone), "semibold");
-  }
   if (view.dayChange) {
-    addText(stack, view.dayChange, 12, toneColor(view.dayTone));
+    stack.addSpacer(6);
+    addChange(stack, "Hoy", view.dayTone, view.dayChange, view.dayChangePct);
   }
 }
 
 function addGain(stack, view) {
   if (!view.totalGain) return;
-  addText(stack, "Ganancia total", 11, COLORS.muted, "semibold");
-  addText(
-    stack,
-    arrow(view.gainTone) + view.totalGain + (view.totalGainPct ? " (" + view.totalGainPct + ")" : ""),
-    12,
-    toneColor(view.gainTone),
-  );
+  addChange(stack, "Ganancia total", view.gainTone, view.totalGain, view.totalGainPct);
 }
 
-function addPositions(stack, view, count) {
+function addPositions(stack, view, count, withValue) {
   for (const position of view.positions.slice(0, count)) {
     const row = stack.addStack();
     row.layoutHorizontally();
+    row.centerAlignContent();
     addText(row, position.symbol, 12, COLORS.text, "semibold");
     row.addSpacer();
-    addText(row, position.value, 12, COLORS.muted);
-    stack.addSpacer(2);
+    if (withValue) {
+      addText(row, position.value, 12, COLORS.muted);
+      row.addSpacer(8);
+    }
+    // Ancho fijo para que los porcentajes queden alineados a la derecha.
+    const cell = row.addStack();
+    cell.size = new Size(withValue ? 72 : 64, 0);
+    cell.addSpacer();
+    addText(
+      cell,
+      position.dayChangePct ? arrow(position.dayTone) + position.dayChangePct : "—",
+      12,
+      toneColor(position.dayTone),
+    );
+    stack.addSpacer(3);
   }
 }
 
@@ -224,14 +242,14 @@ function summaryWidget(view, family, note) {
     right.layoutVertically();
     addGain(right, view);
     right.addSpacer(6);
-    addPositions(right, view, 3);
+    addPositions(right, view, 4, false);
   } else {
     addSummary(widget, view, family === "large" ? 30 : 22);
     if (family === "large") {
       widget.addSpacer(12);
       addGain(widget, view);
       widget.addSpacer(12);
-      addPositions(widget, view, 6);
+      addPositions(widget, view, 6, true);
     }
   }
 

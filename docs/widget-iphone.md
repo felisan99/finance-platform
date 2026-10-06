@@ -18,12 +18,14 @@ También se puede poner en la pantalla de bloqueo, con el widget rectangular de 
 
 ## Qué muestra
 
-| Tamaño             | Contenido                                                         |
-| ------------------ | ----------------------------------------------------------------- |
-| Chico              | Valor total, cambio del día y la fecha de los precios             |
-| Mediano            | Lo mismo, más la ganancia total y tus 3 posiciones de mayor valor |
-| Grande             | Lo mismo, con hasta 6 posiciones                                  |
-| Pantalla bloqueada | Valor total y cambio del día en %                                 |
+| Tamaño             | Contenido                                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| Chico              | Valor total y cambio del día                                                                 |
+| Mediano            | Lo mismo, más la ganancia total y tus 4 posiciones de mayor valor con cuánto se movieron hoy |
+| Grande             | Lo mismo, con hasta 6 posiciones, su valor y cuánto se movieron hoy                          |
+| Pantalla bloqueada | Valor total y cambio del día en %                                                            |
+
+Abajo dice cuándo se actualizó («Actualizado 19:53»). Si los precios no son de hoy (un fin de semana o antes de que abra la bolsa), agrega de qué día son: «precios al 03/10».
 
 Al tocar el widget se abre la app.
 
@@ -33,6 +35,7 @@ Al tocar el widget se abre la app.
 - **Dice «Código revocado o incorrecto».** El código se revocó o se reemplazó por otro. Creá uno nuevo en **Más → Widget para iPhone** y volvé a ejecutar el script en Scriptable: elegí **Cambiar el código**.
 - **Dice «Sin conexión».** Muestra lo último que pudo leer y vuelve a probar solo.
 - **Quiero que muestre otro portafolio.** Creá un código nuevo eligiendo el portafolio y cambialo en Scriptable (ejecutá el script → **Cambiar el código**).
+- **Actualicé el script y no cambió nada.** El script vive en el teléfono: cuando haya una versión nueva, copiala de nuevo desde **Más → Widget para iPhone** y reemplazá todo el contenido del script en Scriptable. El código no hay que volver a cargarlo.
 - **Lo uso en dos teléfonos.** Usá el mismo código en los dos. Si creás uno nuevo, el anterior deja de funcionar en todos lados.
 
 ## Seguridad

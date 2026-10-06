@@ -6,11 +6,14 @@ import {
   formatPercent,
 } from "@/lib/portfolio/format";
 import { buildCachedSnapshot } from "@/lib/portfolio/snapshot-cache";
+import { localDateKey } from "@/lib/portfolio/time";
 import { toneOf, type Tone } from "@/lib/portfolio/tone";
 
 // Lo que devuelve `/api/widget` (docs/widget-iphone.md): solo textos ya formateados, como el
 // último estado conocido de la PWA. Nada de operaciones ni de identificadores de la base. El script
-// de Scriptable (`script.ts`) lee esta forma: mantenerlos en sincronía.
+// de Scriptable (`script.ts`) lee esta forma: mantenerlos en sincronía. Un campo nuevo se agrega
+// sin quitar ni cambiar los que hay (el script viejo sigue andando en los teléfonos hasta que lo
+// reemplacen); `WIDGET_VIEW_VERSION` se sube solo si se rompe la forma.
 
 export const WIDGET_VIEW_VERSION = 1;
 
@@ -34,8 +37,18 @@ export interface WidgetView {
   gainTone: Tone | null;
   /** «precios al 05/10»: la fecha más vieja de los precios usados (hora de Montevideo). */
   pricesAsOf: string | null;
-  /** Las posiciones abiertas de mayor valor. */
-  positions: Array<{ symbol: string; value: string }>;
+  /** `true` si todos los precios son de hoy (hora de Montevideo): el widget no muestra la fecha. */
+  pricesToday: boolean;
+  /** Las posiciones abiertas de mayor valor, con su cambio del día. */
+  positions: WidgetPosition[];
+}
+
+export interface WidgetPosition {
+  symbol: string;
+  value: string;
+  /** `null` si no hay cierre anterior conocido. */
+  dayChangePct: string | null;
+  dayTone: Tone | null;
 }
 
 export function buildWidgetView(
@@ -66,7 +79,22 @@ export function buildWidgetView(
     gainTone: toneOf(view.totalGain, 2),
     pricesAsOf:
       view.oldestPriceAt === null ? null : formatDayMonth(view.oldestPriceAt),
-    positions: cached.positions,
+    pricesToday:
+      view.oldestPriceAt !== null &&
+      localDateKey(view.oldestPriceAt) === localDateKey(now),
+    // El mismo orden que el último estado conocido de la PWA (por valor), con el cambio del día.
+    positions: cached.positions.map(({ symbol, value }) => {
+      const pct =
+        valued.positions.find((position) => position.symbol === symbol)
+          ?.dayChangePct ?? null;
+      return {
+        symbol,
+        value,
+        dayChangePct:
+          pct === null ? null : formatPercent(pct, { signed: true }),
+        dayTone: toneOf(pct, 4),
+      };
+    }),
   };
 }
 
@@ -86,6 +114,7 @@ export function emptyWidgetView(now: Date): WidgetView {
     totalGainPct: null,
     gainTone: null,
     pricesAsOf: null,
+    pricesToday: false,
     positions: [],
   };
 }

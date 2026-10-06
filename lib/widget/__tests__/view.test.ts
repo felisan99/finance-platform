@@ -59,10 +59,66 @@ describe("buildWidgetView", () => {
     expect(plain(view.totalValue)).toBe("US$ 5.240,00");
     expect(plain(view.dayChange)).toBe("+US$ 16,00");
     expect(plain(view.totalGain)).toBe("+US$ 240,00");
-    expect(view.positions.map((p) => [p.symbol, plain(p.value)])).toEqual([
-      ["VOO", "US$ 1.200,00"],
-      ["AAA", "US$ 240,00"],
+    expect(
+      view.positions.map((p) => [
+        p.symbol,
+        plain(p.value),
+        p.dayChangePct,
+        p.dayTone,
+      ]),
+    ).toEqual([
+      // VOO 118 → 120; AAA 61 → 60.
+      ["VOO", "US$ 1.200,00", "+1,69%", "gain"],
+      ["AAA", "US$ 240,00", "-1,64%", "loss"],
     ]);
+    // Precios del 05/10 mirados el 06/10: el widget muestra la fecha.
+    expect(view.pricesToday).toBe(false);
+  });
+
+  it("precios de hoy (hora de Montevideo): el widget no muestra la fecha", () => {
+    const today = (price: string, previousClose: string): PriceInfo => ({
+      ...quote(price, previousClose),
+      // 06/10 a las 00:30 de Montevideo (03:30 UTC): ya es hoy allá.
+      asOf: new Date("2026-10-06T03:30:00Z"),
+    });
+    const view = buildWidgetView(
+      buildDashboard(
+        valued(
+          new Map([
+            ["VOO", today("120", "118")],
+            ["AAA", today("60", "61")],
+          ]),
+        ),
+        transactions,
+        NOW,
+      ),
+      NOW,
+      null,
+    );
+    expect(view.pricesToday).toBe(true);
+    expect(view.pricesAsOf).toBe("06/10");
+  });
+
+  it("una posición sin cierre anterior no tiene cambio del día", () => {
+    const view = buildWidgetView(
+      buildDashboard(
+        valued(
+          new Map([
+            ["VOO", quote("120", null)],
+            ["AAA", quote("60", "61")],
+          ]),
+        ),
+        transactions,
+        NOW,
+      ),
+      NOW,
+      null,
+    );
+    expect(view.positions[0]).toMatchObject({
+      symbol: "VOO",
+      dayChangePct: null,
+      dayTone: null,
+    });
   });
 
   it("si falta un precio: total parcial y sin ganancia total (no se puede comparar)", () => {
@@ -112,6 +168,7 @@ describe("buildWidgetView", () => {
     expect(view.positions).toEqual([]);
     expect(emptyWidgetView(NOW)).toMatchObject({
       hasTransactions: false,
+      pricesToday: false,
       positions: [],
       generatedAt: "2026-10-06T18:30:00.000Z",
     });
