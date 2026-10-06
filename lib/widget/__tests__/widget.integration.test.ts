@@ -70,7 +70,7 @@ describe("widget de iPhone (integración, finance-dev)", () => {
 
   /** El widget sin salir a Yahoo: el proveedor falso no devuelve cotizaciones. */
   const load = (hash: string) =>
-    loadWidget(admin, hash, NOW, fakeQuotes().deps);
+    loadWidget(admin, hash, NOW, { quoteDeps: fakeQuotes().deps });
 
   /** Crea (o reemplaza) el código de `user` con su sesión y devuelve el hash. */
   async function createToken(
@@ -314,6 +314,57 @@ describe("widget de iPhone (integración, finance-dev)", () => {
     expect((await load(hash)).kind).toBe("ok");
   });
 
+  describe("un widget por portafolio (campo Parameter)", () => {
+    const named = (hash: string, portfolioName: string) =>
+      loadWidget(admin, hash, NOW, {
+        portfolioName,
+        quoteDeps: fakeQuotes().deps,
+      });
+
+    it("con un código de «Todos», el widget elige el portafolio por su nombre (sin mayúsculas ni espacios)", async () => {
+      const hash = await createToken(a);
+      const crypto_ = await named(hash, "  cRIPTO ");
+      expect(crypto_.kind).toBe("ok");
+      if (crypto_.kind !== "ok") return;
+      expect(crypto_.view.title).toBe("Cripto");
+      expect(crypto_.view.totalValue.replace(/\s/g, " ")).toBe("US$ 50,00");
+
+      const principal = await named(hash, main.name);
+      expect(principal.kind).toBe("ok");
+      if (principal.kind === "ok") expect(principal.view.title).toBe(main.name);
+
+      expect(await named(hash, "No existe")).toEqual({
+        kind: "unknown_portfolio",
+      });
+      // La respuesta no dice qué portafolios hay.
+      expect(
+        (
+          await admin.rpc("widget_ledger", {
+            p_token_hash: hash,
+            p_portfolio_name: "No existe",
+          })
+        ).data,
+      ).toEqual({ unknown_portfolio: true });
+    });
+
+    it("el nombre de un portafolio de otra persona no sirve, y un código de un solo portafolio no muestra otro", async () => {
+      must(
+        await b.client.rpc("create_portfolio", { p_name: "Exclusivo B" }),
+        "portafolio de B",
+      );
+      const all = await createToken(a);
+      expect(await named(all, "Exclusivo B")).toEqual({
+        kind: "unknown_portfolio",
+      });
+
+      const scoped = await createToken(a, crypto.id);
+      expect(await named(scoped, main.name)).toEqual({
+        kind: "unknown_portfolio",
+      });
+      expect((await named(scoped, "cripto")).kind).toBe("ok");
+    });
+  });
+
   describe("cotizaciones a demanda", () => {
     let symbol: string;
     const quote = (price: string, change: string): Quote => ({
@@ -355,7 +406,9 @@ describe("widget de iPhone (integración, finance-dev)", () => {
       await allowAttempt();
       const fake = fakeQuotes(async () => [quote("130", "10")]);
 
-      const outcome = await loadWidget(admin, hash, new Date(), fake.deps);
+      const outcome = await loadWidget(admin, hash, new Date(), {
+        quoteDeps: fake.deps,
+      });
       expect(fake.calls).toEqual([[symbol]]);
       // Solo el principal: 800 de efectivo (1000 − 2 × 100) + 2 × 130; el día: 2 × 10.
       expect(total(outcome)).toBe("US$ 1.060,00");
@@ -379,18 +432,20 @@ describe("widget de iPhone (integración, finance-dev)", () => {
       await allowAttempt();
       const fake = fakeQuotes(async () => [quote("140", "20")]);
 
-      await loadWidget(admin, hash, new Date(), fake.deps);
+      await loadWidget(admin, hash, new Date(), { quoteDeps: fake.deps });
       expect(fake.calls).toEqual([]);
 
       // Dentro de 3 horas, la cotización ya es vieja: la pide.
       const later = new Date(Date.now() + 3 * HOUR);
-      expect(total(await loadWidget(admin, hash, later, fake.deps))).toBe(
-        "US$ 1.080,00",
-      );
+      expect(
+        total(await loadWidget(admin, hash, later, { quoteDeps: fake.deps })),
+      ).toBe("US$ 1.080,00");
       expect(fake.calls).toHaveLength(1);
 
       // Otra vez "dentro de 3 horas" (vieja otra vez), pero el código intentó hace un instante.
-      await loadWidget(admin, hash, new Date(Date.now() + 6 * HOUR), fake.deps);
+      await loadWidget(admin, hash, new Date(Date.now() + 6 * HOUR), {
+        quoteDeps: fake.deps,
+      });
       expect(fake.calls).toHaveLength(1);
     });
 
@@ -402,16 +457,20 @@ describe("widget de iPhone (integración, finance-dev)", () => {
       const failing = fakeQuotes(async () => {
         throw new Error("yahoo caído");
       });
-      expect(total(await loadWidget(admin, hash, later, failing.deps))).toBe(
-        "US$ 1.080,00",
-      );
+      expect(
+        total(
+          await loadWidget(admin, hash, later, { quoteDeps: failing.deps }),
+        ),
+      ).toBe("US$ 1.080,00");
       expect(failing.calls).toHaveLength(1);
 
       await allowAttempt();
       const hanging = fakeQuotes(() => new Promise<Quote[]>(() => {}), 200);
-      expect(total(await loadWidget(admin, hash, later, hanging.deps))).toBe(
-        "US$ 1.080,00",
-      );
+      expect(
+        total(
+          await loadWidget(admin, hash, later, { quoteDeps: hanging.deps }),
+        ),
+      ).toBe("US$ 1.080,00");
       expect(hanging.calls).toHaveLength(1);
     });
 

@@ -450,6 +450,16 @@ Felipe aprobó la etapa 3 junto con el commit de la etapa 2 (`fb14db1`). Alcance
 
   Los campos nuevos de la respuesta **se agregan sin quitar los que había** y no se subió `WIDGET_VIEW_VERSION`: el script viejo sigue andando en los teléfonos hasta que lo reemplacen. `script-run.test.ts` ejecuta el script con una imitación de las APIs de Scriptable y comprueba el texto de cada tamaño, los errores y una respuesta sin los campos nuevos. No mide tamaños ni colores reales.
 
+- **Un widget por portafolio con un solo código (2026-10-06).** Felipe quería un widget por portafolio. Con un código por persona, crear el segundo anulaba el primero. Elegido, antes que varios códigos por persona:
+  - El campo **Parameter** de cada widget de Scriptable lleva el nombre del portafolio. El script lo manda como `?portfolio=` (un nombre no es secreto).
+  - `widget_ledger(p_token_hash, p_portfolio_name)` (migración `widget_portfolio_param`) decide:
+    - Sin nombre: lo que eligió el código.
+    - Con un código de «Todos»: el portafolio de esa persona con ese nombre, sin distinguir mayúsculas (los nombres ya son únicos así).
+    - Con un código de un solo portafolio: solo ese.
+    - Si no corresponde: `{"unknown_portfolio": true}` (404), sin decir qué portafolios hay.
+  - Un nombre de más de 40 caracteres no llega a la base.
+  - El argumento es opcional, así que el deploy anterior siguió andando al aplicar la migración.
+  - El script guarda el último resumen por widget, para que dos widgets sin conexión no se pisen.
 - **El script** (`lib/widget/script.ts`) es el mismo para todos y no lleva el código: la primera vez lo pide y lo guarda en el Keychain de Scriptable. El origen se incrusta con `JSON.stringify` (un host raro no rompe el script; `appOrigin` además lo valida). Guarda el último resumen en el teléfono para mostrarlo sin conexión y lo borra si el código ya no sirve. Tamaños chico, mediano y grande, y la pantalla de bloqueo.
 - **Riesgos aceptados:** un código filtrado muestra el resumen (valor total, día, ganancia, posiciones principales) hasta que se revoque; los montos quedan a la vista en la pantalla de inicio o de bloqueo; el código no vence; Scriptable es de un tercero (el código vive en su Keychain).
 - **Verificación:** integración 12/12 (`widget.integration.test.ts`; las 4 de cotizaciones con un proveedor falso: pide solo lo viejo y en una llamada, respeta las 2 horas y el freno de 10 minutos, muestra lo guardado si el proveedor falla o tarda): permisos de las funciones, el hash que no se lee, el alcance por persona y por portafolio, reemplazar, revocar, el límite, borrar el portafolio, y que el resumen sea **igual** al que arma Inicio con la sesión. Unitarias de token, vista, script (compila y el origen va escapado), origen y rutas públicas. Por HTTP con `next start`: 401 sin código, con uno inventado, con formato inválido y en la URL; 200 con el resumen; la pantalla con sesión no muestra ni el código ni el hash. **Falta probar el script en un iPhone de verdad.**

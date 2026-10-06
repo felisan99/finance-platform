@@ -85,7 +85,14 @@ async function run(options: {
   status?: number;
   body?: unknown;
   token?: string | null;
+  /** El campo «Parameter» del widget. */
+  parameter?: string | null;
+  /** Sin conexión: el pedido falla. */
+  offline?: boolean;
+  /** Los archivos del teléfono (para probar el último resumen entre corridas). */
+  files?: Map<string, string>;
 }) {
+  const files = options.files ?? new Map<string, string>();
   const requests: Array<{ url: string; headers: Record<string, string> }> = [];
   let shown: StackNode | null = null;
 
@@ -114,6 +121,7 @@ async function run(options: {
     constructor(readonly url: string) {}
     async loadString() {
       requests.push({ url: this.url, headers: this.headers });
+      if (options.offline) throw new Error("sin conexión");
       this.response = { statusCode: options.status ?? 200 };
       return JSON.stringify(options.body ?? {});
     }
@@ -147,10 +155,14 @@ async function run(options: {
       local: () => ({
         joinPath: (a: string, b: string) => `${a}/${b}`,
         cacheDirectory: () => "/cache",
-        fileExists: () => false,
-        writeString() {},
-        readString: () => "",
-        remove() {},
+        fileExists: (path: string) => files.has(path),
+        writeString: (path: string, text: string) => files.set(path, text),
+        readString: (path: string) => files.get(path) ?? "",
+        remove: (path: string) => files.delete(path),
+        listContents: (dir: string) =>
+          [...files.keys()]
+            .filter((path) => path.startsWith(`${dir}/`))
+            .map((path) => path.slice(dir.length + 1)),
       }),
     },
     config: {
@@ -165,6 +177,7 @@ async function run(options: {
       complete() {},
     },
     Alert: class {},
+    args: { widgetParameter: options.parameter ?? null },
   };
 
   const AsyncFunction = Object.getPrototypeOf(async () => {})
@@ -177,7 +190,7 @@ async function run(options: {
   );
   await script(...Object.values(globals));
   if (!shown) throw new Error("el script no mostró ningún widget");
-  return { lines: lines(shown), requests };
+  return { lines: lines(shown), requests, files };
 }
 
 const view: WidgetView = {
@@ -329,5 +342,68 @@ describe("el script de Scriptable, ejecutado", () => {
     expect((await run({ family: "medium", status: 429 })).lines[0]).toBe(
       "Demasiadas consultas",
     );
+  });
+
+  describe("un widget por portafolio (campo Parameter)", () => {
+    it("manda el nombre en la consulta, codificado", async () => {
+      const { requests } = await run({
+        family: "small",
+        body: view,
+        parameter: "  Jubilación & más ",
+      });
+      expect(requests[0]?.url).toBe(
+        `${ORIGIN}/api/widget?portfolio=${encodeURIComponent("Jubilación & más")}`,
+      );
+    });
+
+    it("sin Parameter no manda nada (lo que eligió el código)", async () => {
+      const { requests } = await run({
+        family: "small",
+        body: view,
+        parameter: "",
+      });
+      expect(requests[0]?.url).toBe(`${ORIGIN}/api/widget`);
+    });
+
+    it("si el portafolio no existe o el código no lo incluye, lo dice con el nombre", async () => {
+      const { lines: drawn } = await run({
+        family: "medium",
+        status: 404,
+        parameter: "Cripto",
+      });
+      expect(drawn[0]).toBe("No encontré «Cripto»");
+    });
+
+    it("sin conexión, cada widget muestra su propio último resumen", async () => {
+      const files = new Map<string, string>();
+      const crypto = { ...view, title: "Cripto", totalValue: "US$ 50,00" };
+      await run({ family: "small", body: view, parameter: "", files });
+      await run({ family: "small", body: crypto, parameter: "Cripto", files });
+      expect(files.size).toBe(2);
+
+      const offlineCrypto = await run({
+        family: "small",
+        parameter: "cripto",
+        offline: true,
+        files,
+      });
+      expect(offlineCrypto.lines.slice(0, 2)).toEqual(["Cripto", "US$ 50,00"]);
+      expect(offlineCrypto.lines.at(-1)).toBe(
+        "Sin conexión · Actualizado 19:53",
+      );
+
+      const offlineAll = await run({ family: "small", offline: true, files });
+      expect(offlineAll.lines[1]).toBe("US$ 10.691,47");
+    });
+
+    it("un código revocado borra el resumen de ese widget", async () => {
+      const files = new Map<string, string>();
+      await run({ family: "small", body: view, parameter: "Cripto", files });
+      await run({ family: "small", body: view, files });
+      await run({ family: "small", status: 401, parameter: "Cripto", files });
+      expect([...files.keys()]).toEqual([
+        "/cache/portfolio-tracker-widget.json",
+      ]);
+    });
   });
 });

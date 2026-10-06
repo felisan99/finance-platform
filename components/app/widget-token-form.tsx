@@ -52,7 +52,7 @@ export function WidgetTokenForm({
           <Field
             id="widget-portfolio"
             label="Qué muestra"
-            hint="Después podés cambiarlo creando otro código."
+            hint="Con «Todos», cada widget puede mostrar un portafolio distinto (ver el paso a paso). Con uno solo, el código sirve solo para ese."
           >
             <NativeSelect
               id="widget-portfolio"
@@ -70,7 +70,8 @@ export function WidgetTokenForm({
         )}
         {hasToken && (
           <p className="text-xs text-muted-foreground">
-            Al crear uno nuevo, el código anterior deja de funcionar.
+            Al crear uno nuevo, el código anterior deja de funcionar en todos
+            tus widgets: hay que cargar el nuevo en Scriptable.
           </p>
         )}
         <Button type="submit" disabled={pending}>

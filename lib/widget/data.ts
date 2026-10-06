@@ -31,11 +31,20 @@ export type WidgetOutcome =
   | { kind: "ok"; view: WidgetView }
   /** El token no existe (nunca existió, se revocó o se reemplazó). */
   | { kind: "unknown" }
-  | { kind: "limited" };
+  | { kind: "limited" }
+  /** El portafolio pedido no es de la persona o el código no lo incluye. */
+  | { kind: "unknown_portfolio" };
+
+export interface LoadWidgetOptions {
+  /** El nombre que escribió la persona en el widget; `null` = lo que eligió el código. */
+  portfolioName?: string | null;
+  quoteDeps?: WidgetQuoteDeps;
+}
 
 const ledgerSchema = z.union([
   z.null(),
   z.object({ limited: z.literal(true) }),
+  z.object({ unknown_portfolio: z.literal(true) }),
   z.object({
     limited: z.literal(false),
     portfolio_id: z.string().nullable(),
@@ -49,16 +58,21 @@ export async function loadWidget(
   admin: SupabaseClient<Database>,
   tokenHash: string,
   now: Date,
-  quoteDeps: WidgetQuoteDeps = defaultQuoteDeps,
+  {
+    portfolioName = null,
+    quoteDeps = defaultQuoteDeps,
+  }: LoadWidgetOptions = {},
 ): Promise<WidgetOutcome> {
   const { data, error } = await admin.rpc("widget_ledger", {
     p_token_hash: tokenHash,
+    ...(portfolioName === null ? {} : { p_portfolio_name: portfolioName }),
   });
   if (error) throw new Error(`db widget_ledger: ${error.message}`);
   const parsed = ledgerSchema.safeParse(data);
   if (!parsed.success) throw new Error("db widget_ledger: formato inesperado");
   const ledger = parsed.data;
   if (ledger === null) return { kind: "unknown" };
+  if ("unknown_portfolio" in ledger) return { kind: "unknown_portfolio" };
   if (ledger.limited) return { kind: "limited" };
 
   const portfolios = toPortfolioRefs(ledger.portfolios);

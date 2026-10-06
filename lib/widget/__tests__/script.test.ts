@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildScriptableScript } from "../script";
 import { WIDGET_VIEW_VERSION } from "../view";
@@ -25,6 +27,16 @@ describe("buildScriptableScript", () => {
     const script = buildScriptableScript(origin);
     expect(script).toContain(`const ORIGIN = ${JSON.stringify(origin)};`);
     expect(() => new AsyncFunction(script)).not.toThrow();
+  });
+
+  it("la plantilla no lleva barras invertidas: se perderían (`\\.` llegaría al teléfono como `.`)", () => {
+    const source = readFileSync(resolve(__dirname, "../script.ts"), "utf8");
+    const template = source.slice(
+      source.indexOf("return `"),
+      source.lastIndexOf("`;"),
+    );
+    expect(template.length).toBeGreaterThan(1000);
+    expect(template).not.toContain("\\");
   });
 
   it("no lleva ningún código personal", () => {

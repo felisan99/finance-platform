@@ -29,12 +29,22 @@ Abajo dice cuándo se actualizó («Actualizado 19:53»). Si los precios no son 
 
 Al tocar el widget se abre la app.
 
+## Un widget por portafolio
+
+Con un mismo código podés tener un widget para cada portafolio, por ejemplo uno de acciones y otro de cripto:
+
+1. Creá el código con **Todos los portafolios** (es la opción de arriba del selector).
+2. Agregá un widget de Scriptable por cada portafolio, todos con el script **Portfolio**.
+3. En cada uno, mantenelo apretado → **Editar widget** → en **Parameter** escribí el nombre del portafolio tal como está en la app. Las mayúsculas y los espacios de los bordes no importan.
+
+Con **Parameter** vacío, el widget muestra todos juntos. Si el nombre no coincide con ningún portafolio tuyo, el widget dice «No encontré «…»». Un código creado para **un solo** portafolio muestra solo ese, aunque escribas otro nombre: sirve para limitar qué deja ver el código.
+
 ## Preguntas frecuentes
 
 - **¿Cada cuánto se actualiza?** El iPhone decide cuándo redibujarlo, en general cada 15 a 60 minutos. Cada vez, si las cotizaciones de tus posiciones tienen **2 horas o más**, el widget pide las nuevas. Así los precios tienen como mucho unas 2 horas de atraso (más lo que tarde el iPhone). Para ver la cotización del momento, abrí la app y tocá **Actualizar precios**.
 - **Dice «Código revocado o incorrecto».** El código se revocó o se reemplazó por otro. Creá uno nuevo en **Más → Widget para iPhone** y volvé a ejecutar el script en Scriptable: elegí **Cambiar el código**.
 - **Dice «Sin conexión».** Muestra lo último que pudo leer y vuelve a probar solo.
-- **Quiero que muestre otro portafolio.** Creá un código nuevo eligiendo el portafolio y cambialo en Scriptable (ejecutá el script → **Cambiar el código**).
+- **Quiero que muestre otro portafolio.** Si tu código es de «Todos los portafolios», escribí el nombre en el **Parameter** del widget (ver «Un widget por portafolio»). Si es de un solo portafolio, creá uno nuevo de «Todos» y cambialo en Scriptable (ejecutá el script → **Cambiar el código**).
 - **Actualicé el script y no cambió nada.** El script vive en el teléfono: cuando haya una versión nueva, copiala de nuevo desde **Más → Widget para iPhone** y reemplazá todo el contenido del script en Scriptable. El código no hay que volver a cargarlo.
 - **Lo uso en dos teléfonos.** Usá el mismo código en los dos. Si creás uno nuevo, el anterior deja de funcionar en todos lados.
 

@@ -5,7 +5,8 @@
 // mostrarlo sin conexión, y lo borra si el código ya no sirve.
 //
 // Va como texto: dentro del script no se usan plantillas con comillas invertidas, para que la única
-// interpolación sea el origen, escapado con `JSON.stringify`.
+// interpolación sea el origen, escapado con `JSON.stringify`. Tampoco barras invertidas: dentro de
+// esta plantilla se pierden (`\.` llega como `.`).
 
 export const SCRIPT_NAME = "Portfolio";
 
@@ -31,8 +32,18 @@ const COLORS = {
   loss: Color.dynamic(new Color("#b91c1c"), new Color("#f87171")),
 };
 
+// El campo «Parameter» del widget (mantenerlo apretado → Editar widget): el nombre de un
+// portafolio, para tener un widget por portafolio con el mismo código. Vacío = lo que eligió el código.
+const PORTFOLIO =
+  typeof args !== "undefined" && args.widgetParameter ? String(args.widgetParameter).trim() : "";
+
+// El último resumen, uno por widget (por portafolio): dos widgets no se pisan sin conexión.
 const fm = FileManager.local();
-const cachePath = fm.joinPath(fm.cacheDirectory(), "portfolio-tracker-widget.json");
+const CACHE_PREFIX = "portfolio-tracker-widget";
+const cachePath = fm.joinPath(
+  fm.cacheDirectory(),
+  CACHE_PREFIX + (PORTFOLIO ? "-" + encodeURIComponent(PORTFOLIO.toLowerCase()) : "") + ".json",
+);
 
 function readToken() {
   return Keychain.contains(KEYCHAIN_KEY) ? Keychain.get(KEYCHAIN_KEY) : null;
@@ -56,7 +67,7 @@ async function askToken() {
     return false;
   }
   Keychain.set(KEYCHAIN_KEY, token);
-  forgetSummary();
+  forgetAllSummaries();
   return true;
 }
 
@@ -78,8 +89,18 @@ function forgetSummary() {
   if (fm.fileExists(cachePath)) fm.remove(cachePath);
 }
 
+/** Los de todos los widgets: al cambiar o borrar el código. */
+function forgetAllSummaries() {
+  const dir = fm.cacheDirectory();
+  for (const name of fm.listContents(dir)) {
+    if (name.indexOf(CACHE_PREFIX) === 0 && name.slice(-5) === ".json") fm.remove(fm.joinPath(dir, name));
+  }
+}
+
 async function fetchSummary(token) {
-  const request = new Request(ORIGIN + "/api/widget");
+  const request = new Request(
+    ORIGIN + "/api/widget" + (PORTFOLIO ? "?portfolio=" + encodeURIComponent(PORTFOLIO) : ""),
+  );
   request.headers = { Authorization: "Bearer " + token, Accept: "application/json" };
   request.timeoutInterval = 20;
   let text;
@@ -90,6 +111,7 @@ async function fetchSummary(token) {
   }
   const status = request.response ? request.response.statusCode : 0;
   if (status === 401) return { error: "unauthorized" };
+  if (status === 404) return { error: "unknown_portfolio" };
   if (status === 429) return { error: "rate_limited" };
   if (status !== 200) return { error: "error" };
   try {
@@ -290,6 +312,13 @@ async function buildWidget(family) {
       "Creá uno nuevo en la app, en Más → Widget para iPhone, y volvé a ejecutar este script.",
     );
   }
+  if (result.error === "unknown_portfolio") {
+    forgetSummary();
+    return messageWidget(
+      "No encontré «" + PORTFOLIO + "»",
+      "Revisá el nombre en Editar widget → Parameter: tiene que ser el de la app (las mayúsculas no importan). Si tu código es de un solo portafolio, solo muestra ese.",
+    );
+  }
   const last = lastSummary();
   const note = result.error === "offline" ? "Sin conexión" : "Sin actualizar";
   if (last) return summaryWidget(last, family, note);
@@ -315,7 +344,7 @@ async function main() {
       if (choice === 1 && !(await askToken())) return;
       if (choice === 2) {
         Keychain.remove(KEYCHAIN_KEY);
-        forgetSummary();
+        forgetAllSummaries();
         return;
       }
     }

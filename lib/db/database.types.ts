@@ -680,7 +680,10 @@ export type Database = {
           recent: Json
         }[]
       }
-      widget_ledger: { Args: { p_token_hash: string }; Returns: Json }
+      widget_ledger: {
+        Args: { p_portfolio_name?: string; p_token_hash: string }
+        Returns: Json
+      }
     }
     Enums: {
       tx_type:

@@ -136,6 +136,19 @@ export default async function WidgetPage() {
               Script elegí «{SCRIPT_NAME}».
             </li>
           </ol>
+          {portfolios.length > 1 && (
+            <div className="mt-3 flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm">
+              <p className="font-medium">Un widget por portafolio</p>
+              <p className="text-muted-foreground">
+                Con un código de «{ALL_PORTFOLIOS_LABEL}», cada widget puede
+                mostrar uno distinto: en <strong>Editar widget</strong>, en{" "}
+                <strong>Parameter</strong>, escribí el nombre del portafolio
+                (por ejemplo «{portfolios[1]?.name}»). Vacío muestra todos
+                juntos. Agregá un widget por cada portafolio, con el mismo
+                script y el mismo código.
+              </p>
+            </div>
+          )}
           <p className="mt-3 text-xs text-muted-foreground">
             También funciona en la pantalla de bloqueo (el widget rectangular de
             Scriptable). Para cambiar o borrar el código del teléfono, volvé a
