@@ -10,10 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionUser } from "@/lib/db/auth";
 import { createClient } from "@/lib/db/server";
 import { formatDate, formatDateTime } from "@/lib/portfolio/format";
-import {
-  ALL_PORTFOLIOS,
-  ALL_PORTFOLIOS_LABEL,
-} from "@/lib/portfolio/portfolio-scope";
 import { listPortfolios } from "@/lib/portfolio/queries";
 import { appOrigin } from "@/lib/widget/origin";
 import { SCRIPT_NAME, buildScriptableScript } from "@/lib/widget/script";
@@ -39,26 +35,16 @@ export default async function WidgetPage() {
     getWidgetTokenInfo(supabase),
   ]);
 
-  const options =
-    portfolios.length > 1
-      ? [
-          { value: ALL_PORTFOLIOS, label: ALL_PORTFOLIOS_LABEL },
-          ...portfolios.map((p) => ({ value: p.id, label: p.name })),
-        ]
-      : [];
-  const shows =
-    token === null
-      ? null
-      : token.portfolioId === null
-        ? portfolios.length > 1
-          ? ALL_PORTFOLIOS_LABEL
-          : null
-        : (portfolios.find((p) => p.id === token.portfolioId)?.name ?? null);
-  // Un código de un solo portafolio, con más de uno: el Parameter no le sirve para elegir otro.
-  const scopedTo =
-    token !== null && token.portfolioId !== null && portfolios.length > 1
-      ? shows
+  // Los códigos valen para todos los portafolios; uno de un solo portafolio es de antes (la app ya
+  // no los crea, pero siguen andando): con él, el Parameter no elige otro.
+  const legacyPortfolio =
+    token !== null && token.portfolioId !== null
+      ? (portfolios.find((p) => p.id === token.portfolioId)?.name ?? null)
       : null;
+  const shows =
+    legacyPortfolio ??
+    (portfolios.length > 1 ? "Todos (cada widget elige el suyo)" : null);
+  const scopedTo = portfolios.length > 1 ? legacyPortfolio : null;
   const script = origin ? buildScriptableScript(origin) : null;
 
   return (
@@ -100,13 +86,12 @@ export default async function WidgetPage() {
           )}
           {scopedTo && (
             <Notice tone="info">
-              Este código muestra solo «{scopedTo}»: con él, cada widget muestra
-              ese portafolio aunque escribas otro nombre en Parameter. Para
-              tener un widget por portafolio, creá uno nuevo con «
-              {ALL_PORTFOLIOS_LABEL}».
+              Este código es de antes y muestra solo «{scopedTo}», aunque
+              escribas otro nombre en Parameter. Creá uno nuevo: ahora valen
+              para todos tus portafolios y cada widget elige el suyo.
             </Notice>
           )}
-          <WidgetTokenForm options={options} hasToken={token !== null} />
+          <WidgetTokenForm hasToken={token !== null} />
           {token && <RevokeWidgetTokenForm />}
         </CardContent>
       </Card>
@@ -129,16 +114,7 @@ export default async function WidgetPage() {
               </a>{" "}
               desde la App Store (es gratis).
             </li>
-            <li>
-              Creá tu código acá arriba y copialo.
-              {portfolios.length > 1 && (
-                <>
-                  {" "}
-                  Si querés un widget por portafolio, elegí «
-                  {ALL_PORTFOLIOS_LABEL}» (ver más abajo).
-                </>
-              )}
-            </li>
+            <li>Creá tu código acá arriba y copialo.</li>
             <li>Copiá el script de abajo.</li>
             <li>
               En Scriptable tocá <strong>+</strong>, pegá el script y ponele de
@@ -162,12 +138,11 @@ export default async function WidgetPage() {
             <div className="mt-3 flex flex-col gap-1 rounded-lg bg-muted px-3 py-2 text-sm">
               <p className="font-medium">Un widget por portafolio</p>
               <p className="text-muted-foreground">
-                Con un código de «{ALL_PORTFOLIOS_LABEL}», cada widget puede
-                mostrar uno distinto: en <strong>Editar widget</strong>, en{" "}
+                Con el mismo script y el mismo código, cada widget puede mostrar
+                un portafolio distinto: en <strong>Editar widget</strong>, en{" "}
                 <strong>Parameter</strong>, escribí el nombre del portafolio
                 (por ejemplo «{portfolios[1]?.name}»). Vacío muestra todos
-                juntos. Agregá un widget por cada portafolio, con el mismo
-                script y el mismo código.
+                juntos.
               </p>
             </div>
           )}
