@@ -54,6 +54,11 @@ export default async function WidgetPage() {
           ? ALL_PORTFOLIOS_LABEL
           : null
         : (portfolios.find((p) => p.id === token.portfolioId)?.name ?? null);
+  // Un código de un solo portafolio, con más de uno: el Parameter no le sirve para elegir otro.
+  const scopedTo =
+    token !== null && token.portfolioId !== null && portfolios.length > 1
+      ? shows
+      : null;
   const script = origin ? buildScriptableScript(origin) : null;
 
   return (
@@ -93,6 +98,14 @@ export default async function WidgetPage() {
               resumen; solo sirve para eso, no para entrar a la app.
             </p>
           )}
+          {scopedTo && (
+            <Notice tone="info">
+              Este código muestra solo «{scopedTo}»: con él, cada widget muestra
+              ese portafolio aunque escribas otro nombre en Parameter. Para
+              tener un widget por portafolio, creá uno nuevo con «
+              {ALL_PORTFOLIOS_LABEL}».
+            </Notice>
+          )}
           <WidgetTokenForm options={options} hasToken={token !== null} />
           {token && <RevokeWidgetTokenForm />}
         </CardContent>
@@ -116,7 +129,16 @@ export default async function WidgetPage() {
               </a>{" "}
               desde la App Store (es gratis).
             </li>
-            <li>Creá tu código acá arriba y copialo.</li>
+            <li>
+              Creá tu código acá arriba y copialo.
+              {portfolios.length > 1 && (
+                <>
+                  {" "}
+                  Si querés un widget por portafolio, elegí «
+                  {ALL_PORTFOLIOS_LABEL}» (ver más abajo).
+                </>
+              )}
+            </li>
             <li>Copiá el script de abajo.</li>
             <li>
               En Scriptable tocá <strong>+</strong>, pegá el script y ponele de
@@ -166,6 +188,11 @@ export default async function WidgetPage() {
             <>
               <p className="text-sm text-muted-foreground">
                 Es el mismo para todos: no lleva tu código.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                ¿Ya tenés el widget y hay una versión nueva? Copialo de nuevo,
+                abrí «{SCRIPT_NAME}» en Scriptable, seleccioná todo y pegá
+                encima. El código no hace falta volver a cargarlo.
               </p>
               <textarea
                 readOnly
