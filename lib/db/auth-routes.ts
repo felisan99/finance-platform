@@ -6,11 +6,17 @@
  * conexión (`/pwa/*`). Los crons no tienen sesión de usuario: cada handler exige
  * `Authorization: Bearer ${CRON_SECRET}` y falla cerrado (ver lib/cron/auth.ts). Nada de lo
  * público de la PWA tiene datos de nadie: el último estado conocido vive en el dispositivo.
+ * `/api/widget` (exacto) es el resumen para el widget de iPhone: no tiene sesión, lo protege el
+ * código personal que manda el widget (ver app/api/widget/route.ts).
  */
 const PUBLIC_PREFIXES = ["/login", "/api/cron", "/pwa"] as const;
 
 /** Archivos sueltos que también son públicos (coincidencia exacta). */
-const PUBLIC_FILES = new Set(["/sw.js", "/manifest.webmanifest"]);
+const PUBLIC_FILES = new Set([
+  "/sw.js",
+  "/manifest.webmanifest",
+  "/api/widget",
+]);
 
 const startsWithSegment = (pathname: string, prefix: string) =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);

@@ -49,6 +49,24 @@ export default async function MorePage() {
 
       <Card size="sm">
         <CardHeader>
+          <CardTitle className="text-sm">Widget para iPhone</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">
+            Tu valor total y el cambio del día en la pantalla de inicio, con la
+            app gratuita Scriptable.
+          </p>
+          <Link
+            href="/more/widget"
+            className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+          >
+            Configurar el widget
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader>
           <CardTitle className="text-sm">Tus datos</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">

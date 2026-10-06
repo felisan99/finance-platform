@@ -19,6 +19,8 @@ describe("isPublicPath", () => {
     "/pwa/offline.html",
     "/pwa/offline.js",
     "/pwa/offline.css",
+    // El widget de iPhone: sin sesión, lo protege su código.
+    "/api/widget",
   ])("%s es pública", (pathname) => {
     expect(isPublicPath(pathname)).toBe(true);
   });
@@ -35,6 +37,9 @@ describe("isPublicPath", () => {
     "/api",
     "/api/other",
     "/api/export",
+    "/api/widget/",
+    "/api/widget/x",
+    "/api/widgetx",
   ])("%s es privada", (pathname) => {
     expect(isPublicPath(pathname)).toBe(false);
   });

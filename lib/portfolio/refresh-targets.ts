@@ -1,3 +1,4 @@
+import type { ActiveInstrument } from "@/lib/market-jobs";
 import type { InstrumentRow } from "./rows";
 
 // A qué instrumentos les pide cotización "Actualizar precios" y cómo cuenta el resultado. Puro.
@@ -58,4 +59,23 @@ export function refreshMessage(
   return missing.length > 0
     ? `Actualizado (${updated}). Sin cotización: ${missing.join(", ")}.`
     : `Precios actualizados (${updated}).`;
+}
+
+/**
+ * Los instrumentos como los recibe `refreshQuotes`: solo se piden cotizaciones, así que lo del
+ * historial queda vacío. Lo usan «Actualizar precios» y el widget.
+ */
+export function toQuoteInstruments(
+  instruments: readonly InstrumentRow[],
+): ActiveInstrument[] {
+  return instruments.map((instrument) => ({
+    id: instrument.id,
+    symbol: instrument.symbol,
+    providerSymbol: instrument.provider_symbol,
+    historyBackfilledAt: null,
+    historyFrom: null,
+    firstTxDate: null,
+    inWatchlist: false,
+    latestPriceDate: null,
+  }));
 }

@@ -7,11 +7,7 @@ import { createAdminClient } from "@/lib/db/admin";
 import { takeRateLimit } from "@/lib/db/rate-limit";
 import { createClient } from "@/lib/db/server";
 import { describeError, getMarketDataProvider } from "@/lib/market-data";
-import {
-  createSupabaseMarketStore,
-  refreshQuotes,
-  type ActiveInstrument,
-} from "@/lib/market-jobs";
+import { createSupabaseMarketStore, refreshQuotes } from "@/lib/market-jobs";
 import { backfillPendingInBackground } from "@/lib/portfolio/background";
 import { forgetPortfolio } from "@/lib/portfolio/current-portfolio";
 import {
@@ -24,6 +20,7 @@ import { benchmarkOfScope } from "@/lib/portfolio/portfolio-scope";
 import {
   collectRefreshTargets,
   refreshMessage,
+  toQuoteInstruments,
 } from "@/lib/portfolio/refresh-targets";
 
 export async function signOut() {
@@ -99,23 +96,10 @@ export async function refreshQuotesAction(): Promise<RefreshState> {
       };
     }
 
-    const instruments: ActiveInstrument[] = targets.instruments.map(
-      (instrument) => ({
-        id: instrument.id,
-        symbol: instrument.symbol,
-        providerSymbol: instrument.provider_symbol,
-        historyBackfilledAt: null,
-        historyFrom: null,
-        firstTxDate: null,
-        inWatchlist: false,
-        latestPriceDate: null,
-      }),
-    );
-
     const result = await refreshQuotes({
       provider: await getMarketDataProvider(),
       store: createSupabaseMarketStore(createAdminClient()),
-      instruments,
+      instruments: toQuoteInstruments(targets.instruments),
     });
     // La cotización ya está; el historial de una posición nueva se completa en segundo plano.
     backfillPendingInBackground("refresh-backfill");

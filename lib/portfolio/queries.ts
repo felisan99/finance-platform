@@ -65,6 +65,14 @@ export async function listPortfolios(client: Client): Promise<PortfolioRef[]> {
     .order("created_at", { referencedTable: "accounts" })
     .order("id", { referencedTable: "accounts" });
   if (error) throw new Error(`db portfolios: ${error.message}`);
+  return toPortfolioRefs(data);
+}
+
+/**
+ * Filas de `portfolios` con sus cuentas, ya ordenadas, a `PortfolioRef`: cada portafolio con su
+ * cuenta más vieja; uno sin cuenta no se muestra. También lo usa el widget (`widget_ledger`).
+ */
+export function toPortfolioRefs(data: unknown): PortfolioRef[] {
   return parseRows(portfolioRowSchema, data, "portfolios").flatMap((row) => {
     const account = row.accounts[0];
     return account
@@ -421,6 +429,20 @@ export async function loadScopeSnapshot(
       getTransactionRows(client, portfolio.account.id),
     ),
   );
+  return snapshotFromRows(client, scope, rowsByPortfolio);
+}
+
+/**
+ * El snapshot a partir de las transacciones de cada portafolio del alcance (en el orden de
+ * `portfoliosOfScope`): lee los instrumentos, las cotizaciones y los últimos cierres, que son datos
+ * de mercado y no de una persona. Lo comparten Inicio y el widget.
+ */
+export async function snapshotFromRows(
+  client: Client,
+  scope: PortfolioScope,
+  rowsByPortfolio: ReadonlyArray<readonly TransactionRow[]>,
+): Promise<PortfolioSnapshot> {
+  const portfolios = portfoliosOfScope(scope);
   const ids = [
     ...new Set(
       rowsByPortfolio
@@ -439,7 +461,7 @@ export async function loadScopeSnapshot(
     scope,
     parts: portfolios.map((portfolio, i) => ({
       portfolio,
-      transactionRows: rowsByPortfolio[i]!,
+      transactionRows: rowsByPortfolio[i] ?? [],
     })),
     instruments,
     quotes,

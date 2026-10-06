@@ -352,6 +352,7 @@ export type Database = {
           as_of: string
           change: number | null
           change_pct: number | null
+          fetched_at: string | null
           instrument_id: string
           price: number
         }
@@ -359,6 +360,7 @@ export type Database = {
           as_of: string
           change?: number | null
           change_pct?: number | null
+          fetched_at?: string | null
           instrument_id: string
           price: number
         }
@@ -366,6 +368,7 @@ export type Database = {
           as_of?: string
           change?: number | null
           change_pct?: number | null
+          fetched_at?: string | null
           instrument_id?: string
           price?: number
         }
@@ -539,6 +542,47 @@ export type Database = {
         }
         Relationships: []
       }
+      widget_tokens: {
+        Row: {
+          created_at: string
+          last_used_at: string | null
+          portfolio_id: string | null
+          quotes_attempted_at: string | null
+          token_hash: string
+          user_id: string
+          window_count: number
+          window_start: string
+        }
+        Insert: {
+          created_at?: string
+          last_used_at?: string | null
+          portfolio_id?: string | null
+          quotes_attempted_at?: string | null
+          token_hash: string
+          user_id: string
+          window_count?: number
+          window_start?: string
+        }
+        Update: {
+          created_at?: string
+          last_used_at?: string | null
+          portfolio_id?: string | null
+          quotes_attempted_at?: string | null
+          token_hash?: string
+          user_id?: string
+          window_count?: number
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "widget_tokens_portfolio_fk"
+            columns: ["portfolio_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "portfolios"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -561,6 +605,10 @@ export type Database = {
       create_portfolio: {
         Args: { p_benchmark?: string; p_name: string }
         Returns: string
+      }
+      create_widget_token: {
+        Args: { p_portfolio_id: string; p_token_hash: string }
+        Returns: undefined
       }
       hook_before_user_created: { Args: { event: Json }; Returns: Json }
       import_transactions: {
@@ -614,6 +662,10 @@ export type Database = {
       }
       take_login_attempt: { Args: { p_key: string }; Returns: boolean }
       take_rate_limit: { Args: { p_key: string }; Returns: boolean }
+      take_widget_quote_refresh: {
+        Args: { p_token_hash: string }
+        Returns: boolean
+      }
       undo_import: { Args: { p_import_id: string }; Returns: number }
       watchlist_market: {
         Args: { p_instrument_ids: string[]; p_points: number; p_since: string }
@@ -628,6 +680,7 @@ export type Database = {
           recent: Json
         }[]
       }
+      widget_ledger: { Args: { p_token_hash: string }; Returns: Json }
     }
     Enums: {
       tx_type:

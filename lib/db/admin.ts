@@ -13,7 +13,8 @@ const secretKeySchema = z
  * (`server-only` rompe el build si un Client Component lo importa) y solo para tareas que no
  * pertenecen a un usuario: crons de precios, alta de instrumentos, el límite de intentos del
  * código de ingreso (corre antes de que haya sesión) y tests de integración.
- * Nunca para atender lecturas o escrituras de un usuario.
+ * Nunca para atender lecturas o escrituras de un usuario. Única excepción: el widget de iPhone
+ * llama a `widget_ledger`, que fija por el token de quién son los datos (lib/widget/data.ts).
  */
 export function createAdminClient() {
   const env = getPublicEnv();
