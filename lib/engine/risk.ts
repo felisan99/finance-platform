@@ -10,7 +10,7 @@ import type { SeriesPoint } from "./series";
 /** Con menos días de retornos la desviación estándar no dice nada. */
 export const MIN_VOLATILITY_DAYS = 20;
 /** Ruedas por año, para anualizar la volatilidad diaria. */
-const TRADING_DAYS = 252;
+export const TRADING_DAYS = 252;
 
 const HUNDRED = ZERO.plus(100);
 

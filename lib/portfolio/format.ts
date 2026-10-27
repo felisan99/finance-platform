@@ -136,9 +136,21 @@ export function formatCompact(value: number | null): string {
   return `${sign}${compactNumber.format(rounded)} ${rounded === 1 ? unit.one : unit.many}`;
 }
 
-/** Precio unitario: mínimo 2 decimales, hasta 4. */
-export function formatPrice(value: Dec | null): string {
-  return value === null ? EMPTY : price.format(text(value));
+const priceMoney = new Intl.NumberFormat(LOCALE, {
+  style: "currency",
+  currency: "USD",
+  currencyDisplay: "symbol",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+});
+
+/** Precio unitario: mínimo 2 decimales, hasta 4. `currency` antepone la moneda: `US$ 252,00`. */
+export function formatPrice(
+  value: Dec | null,
+  options: { currency?: boolean } = {},
+): string {
+  if (value === null) return EMPTY;
+  return (options.currency ? priceMoney : price).format(text(value));
 }
 
 /** `09/03/2026` en hora de Montevideo. */

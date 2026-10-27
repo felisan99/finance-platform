@@ -14,7 +14,13 @@ export function Segmented<T extends string>({
   className,
 }: {
   label: string;
-  options: ReadonlyArray<{ id: T; text: string; disabled?: boolean }>;
+  /** `className` de una opción: para repartirlas en una grilla (`col-span-2`). */
+  options: ReadonlyArray<{
+    id: T;
+    text: string;
+    disabled?: boolean;
+    className?: string;
+  }>;
   value: T;
   onChange: (id: T) => void;
   className?: string;
@@ -40,6 +46,7 @@ export function Segmented<T extends string>({
             option.id === value
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",
+            option.className,
           )}
         >
           {option.text}

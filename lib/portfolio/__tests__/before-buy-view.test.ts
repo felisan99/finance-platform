@@ -1,23 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  addMonths,
+  alignReturns,
+  analyzeFit,
   computeEngine,
   d,
   isWeekday,
+  simulateAddition,
   valuePortfolio,
   type DailyClose,
   type PriceInfo,
   type Transaction,
 } from "@/lib/engine";
 import { buy, deposit } from "@/lib/engine/__tests__/helpers";
+import { impactRows, planView } from "../before-buy-amount";
 import {
   MAX_CHART_POINTS,
+  TYPICAL_AMOUNT_ID,
   amountOptions,
   buildBeforeBuyView,
   fitSentence,
   sectorLabel,
   type BeforeBuyInput,
 } from "../before-buy-view";
+import { formatPercent } from "../format";
 
 /** ICU usa espacios de no separación: se normalizan para poder escribir el esperado a mano. */
 const plain = (value: string) => value.replace(/[\u00a0\u202f]/g, " ");
@@ -112,44 +119,55 @@ function input(patch: Partial<BeforeBuyInput> = {}): BeforeBuyInput {
 }
 
 describe("amountOptions", () => {
-  it("sin depósitos: los cuatro fijos y arranca en US$ 1.000", () => {
+  it("sin depósitos: los cuatro fijos chicos y arranca en US$ 500", () => {
     const result = amountOptions(null);
     expect(result.options.map((o) => plain(o.text))).toEqual([
+      "US$ 100",
+      "US$ 250",
       "US$ 500",
       "US$ 1.000",
-      "US$ 2.000",
-      "US$ 5.000",
     ]);
-    expect(result.defaultId).toBe("1000");
-    expect(result.note).toMatch(/^Sin depósitos/);
+    expect(result.options.map((o) => o.value)).toEqual([100, 250, 500, 1000]);
+    expect(result.defaultId).toBe("500");
+    expect(plain(result.note)).toBe(
+      "Sin depósitos en los últimos 12 meses: arranca en US$ 500. Con «Otro» probás cualquier monto.",
+    );
   });
 
-  it("un aporte típico que coincide con un fijo no lo duplica", () => {
-    const result = amountOptions(d("2000"));
+  it("un aporte típico que coincide con un fijo no se repite: arranca en ese", () => {
+    const result = amountOptions(d("250"));
     expect(result.options.map((o) => o.id)).toEqual([
+      "100",
+      "250",
       "500",
       "1000",
-      "2000",
-      "5000",
     ]);
-    expect(result.defaultId).toBe("2000");
-    expect(plain(result.note)).toContain("tu aporte típico, US$ 2.000");
+    expect(result.defaultId).toBe("250");
+    expect(plain(result.note)).toContain("tu aporte, US$ 250");
   });
 
-  it("un aporte típico distinto reemplaza al fijo más cercano (redondeado al dólar)", () => {
-    const result = amountOptions(d("1234.5"));
+  it("un aporte típico distinto va aparte (no reemplaza a un fijo) y es con el que arranca", () => {
+    const result = amountOptions(d("3269.5"));
     expect(result.options.map((o) => o.id)).toEqual([
+      "100",
+      "250",
       "500",
-      "1235",
-      "2000",
-      "5000",
+      "1000",
+      TYPICAL_AMOUNT_ID,
     ]);
-    expect(result.defaultId).toBe("1235");
-    expect(result.options.find((o) => o.id === "1235")?.value).toBe(1235);
+    const typical = result.options.at(-1)!;
+    expect(plain(typical.text)).toBe("Tu aporte: US$ 3.270");
+    expect(typical.value).toBe(3270);
+    expect(result.defaultId).toBe(TYPICAL_AMOUNT_ID);
+    expect(plain(result.note)).toBe(
+      "Arranca en tu aporte, US$ 3.270: lo que depositás en un mes (mediana de los últimos 12). Con «Otro» probás cualquier monto.",
+    );
   });
 
   it("un aporte típico de menos de un dólar no cuenta", () => {
-    expect(amountOptions(d("0.4")).defaultId).toBe("1000");
+    const result = amountOptions(d("0.4"));
+    expect(result.defaultId).toBe("500");
+    expect(result.options).toHaveLength(4);
   });
 });
 
@@ -183,8 +201,8 @@ describe("buildBeforeBuyView: qué le hace a tu cartera", () => {
     expect(view.defaultAmountId).toBe("1000");
   });
 
-  it("las filas de antes y después para cada monto", () => {
-    const rows = view.impact!.byAmount["1000"]!;
+  it("las filas de antes y después para cualquier monto", () => {
+    const rows = impactRows(view.impact!.model, 1000);
     // Antes: AAPL 1.000, VOO 2.000, efectivo 3.000 → total 6.000; después 7.000.
     expect(rows.map((r) => [r.label, plain(r.before), plain(r.after)])).toEqual(
       [
@@ -193,12 +211,88 @@ describe("buildBeforeBuyView: qué le hace a tu cartera", () => {
         ["Volatilidad (1 año)", rows[2]!.before, rows[2]!.after].map(plain),
       ],
     );
-    expect(view.impact!.byAmount["5000"]![0]!.after).toMatch(/45,45/);
+    expect(impactRows(view.impact!.model, 5000)[0]!.after).toMatch(/45,45/);
+    // Un monto escrito a mano: 6.000 + 1.234 = 7.234 → 17,06 %.
+    expect(impactRows(view.impact!.model, 1234)[0]!.after).toMatch(/17,06/);
   });
 
   it("con 3 posiciones o menos no muestra «Tus 3 posiciones más grandes»", () => {
-    const labels = view.impact!.byAmount["1000"]!.map((r) => r.label);
+    const labels = impactRows(view.impact!.model, 1000).map((r) => r.label);
     expect(labels).not.toContain("Tus 3 posiciones más grandes");
+  });
+
+  it("las filas que arma el cliente son las del motor (pesos exactos y volatilidad) para cualquier monto", () => {
+    // Cuatro posiciones y el candidato ya en la cartera: entran las cuatro filas.
+    const transactions = [
+      deposit("2026-01-02T15:00:00Z", "10000"),
+      buy("2026-01-05T15:00:00Z", "AAPL", "10", "100"),
+      buy("2026-01-05T15:00:00Z", "VOO", "5", "400"),
+      buy("2026-01-05T15:00:00Z", "NVDA", "7", "100"),
+      buy("2026-01-05T15:00:00Z", "SPY", "3", "500"),
+    ];
+    const valued = valuePortfolio(
+      computeEngine(transactions),
+      new Map([
+        ["AAPL", price("103.17")],
+        ["VOO", price("411.5")],
+        ["NVDA", price("97.25")],
+        ["SPY", price("512")],
+      ]),
+    );
+    const holdingCloses = new Map([
+      ["AAPL", series("2025-09-15", END, wobble(1))],
+      ["VOO", series("2025-09-15", END, wobble(5))],
+      ["SPY", series("2025-09-15", END, wobble(9))],
+    ]);
+    const candidateCloses = series(FIVE_YEARS_AGO, END, wave);
+    const built = buildBeforeBuyView(
+      input({ transactions, valued, holdingCloses, candidateCloses }),
+    )!;
+    const groupOf = (symbol: string) => GROUPS[symbol] ?? null;
+    const aligned = alignReturns(
+      new Map([...holdingCloses, ["NVDA", candidateCloses]]),
+      addMonths(END, -12),
+      END,
+      "NVDA",
+    );
+
+    for (const amount of [1, 100, 250, 1000, 3270, 1_000_000]) {
+      const engine = simulateAddition(
+        valued,
+        "NVDA",
+        d(String(amount)),
+        groupOf,
+      );
+      const fit = analyzeFit(
+        aligned,
+        "NVDA",
+        engine.before!.weights,
+        engine.after.weights,
+      );
+      const pct = (value: number) => formatPercent(d(value.toFixed(8)));
+      expect(impactRows(built.impact!.model, amount)).toEqual([
+        {
+          label: "NVDA en tu cartera",
+          before: formatPercent(engine.before!.weights.get("NVDA")!),
+          after: formatPercent(engine.after.weights.get("NVDA")!),
+        },
+        {
+          label: "Tecnología",
+          before: formatPercent(engine.before!.groupWeight),
+          after: formatPercent(engine.after.groupWeight),
+        },
+        {
+          label: "Tus 3 posiciones más grandes",
+          before: formatPercent(engine.before!.top3),
+          after: formatPercent(engine.after.top3),
+        },
+        {
+          label: "Volatilidad (1 año)",
+          before: pct(fit.volatilityBefore!),
+          after: pct(fit.volatilityAfter!),
+        },
+      ]);
+    }
   });
 
   it("el parecido lleva la correlación, una frase y lo que más se le parece", () => {
@@ -253,9 +347,9 @@ describe("buildBeforeBuyView: qué le hace a tu cartera", () => {
     expect(short.impact!.notes[0]).toMatch(
       /hacen falta 60 ruedas en común; hay \d+\./,
     );
-    expect(short.impact!.byAmount["1000"]!.map((r) => r.label)).not.toContain(
-      "Volatilidad (1 año)",
-    );
+    expect(
+      impactRows(short.impact!.model, 1000).map((r) => r.label),
+    ).not.toContain("Volatilidad (1 año)");
   });
 
   it("si el candidato es la única posición, no hay con qué compararlo", () => {
@@ -277,7 +371,9 @@ describe("buildBeforeBuyView: qué le hace a tu cartera", () => {
     expect(only.impact!.notes).toContain(
       "No hay otra posición con la que compararlo.",
     );
-    expect(only.impact!.byAmount["1000"]![0]!.label).toBe("NVDA en tu cartera");
+    expect(impactRows(only.impact!.model, 1000)[0]!.label).toBe(
+      "NVDA en tu cartera",
+    );
   });
 });
 
@@ -295,7 +391,7 @@ describe("buildBeforeBuyView: ¿lo habrías aguantado?", () => {
     // Cada período arranca el 1.º del mes siguiente: 12, 36 y 60 aportes justos.
     expect(
       view.windows.map(
-        (w) => /\((\d+) aportes\)/.exec(w.plans["1000"]!.heading)![1],
+        (w) => /\((\d+) aportes\)/.exec(planView(w.plan, 1000).heading)![1],
       ),
     ).toEqual(["12", "36", "60"]);
     expect(view.asOf).toBe("25/09/2026");
@@ -303,7 +399,7 @@ describe("buildBeforeBuyView: ¿lo habrías aguantado?", () => {
 
   it("el texto del plan escala con el monto", () => {
     const year = view.windows[0]!;
-    const one = year.plans["1000"]!;
+    const one = planView(year.plan, 1000);
     expect(plain(one.heading)).toMatch(
       /^US\$ 1\.000 por mes desde octubre de 2025 \(12 aportes\)$/,
     );
@@ -314,7 +410,7 @@ describe("buildBeforeBuyView: ¿lo habrías aguantado?", () => {
         " ",
       ),
     );
-    const five = year.plans["5000"]!;
+    const five = planView(year.plan, 5000);
     expect(plain(five.invested)).toBe(
       `US$ ${(contributions * 5000).toLocaleString("es-UY")},00`.replace(
         / /g,
@@ -322,11 +418,21 @@ describe("buildBeforeBuyView: ¿lo habrías aguantado?", () => {
       ),
     );
     expect(one.gain.text).toBe(five.gain.text); // el porcentaje no depende del monto
+    // Un monto escrito a mano.
+    expect(plain(planView(year.plan, 1234).heading)).toMatch(
+      /^US\$ 1\.234 por mes desde octubre de 2025/,
+    );
+    expect(plain(planView(year.plan, 1234).invested)).toBe(
+      `US$ ${(contributions * 1234).toLocaleString("es-UY")},00`.replace(
+        / /g,
+        " ",
+      ),
+    );
   });
 
   it("compara contra el benchmark, salvo que el candidato sea el benchmark", () => {
     expect(view.benchmarkLabel).toBe("S&P 500");
-    expect(view.windows[0]!.plans["1000"]!.benchmark!.text).toMatch(
+    expect(planView(view.windows[0]!.plan, 1000).benchmark!.text).toMatch(
       /^Lo mismo en S&P 500: US\$/,
     );
     const spy = buildBeforeBuyView(
@@ -336,7 +442,7 @@ describe("buildBeforeBuyView: ¿lo habrías aguantado?", () => {
       }),
     )!;
     expect(spy.benchmarkLabel).toBeNull();
-    expect(spy.windows[0]!.plans["1000"]!.benchmark).toBeNull();
+    expect(planView(spy.windows[0]!.plan, 1000).benchmark).toBeNull();
   });
 
   it("el peor momento, su recuperación y la pregunta", () => {
@@ -382,7 +488,7 @@ describe("buildBeforeBuyView: ¿lo habrías aguantado?", () => {
     )!;
     expect(ipo.windows.map((w) => w.id)).toEqual(["1A", "ALL"]);
     expect(ipo.defaultWindowId).toBe("ALL");
-    expect(plain(ipo.windows[1]!.plans["1000"]!.heading)).toMatch(
+    expect(plain(planView(ipo.windows[1]!.plan, 1000).heading)).toMatch(
       /desde mayo de 2025/,
     );
   });

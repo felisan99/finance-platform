@@ -9,7 +9,7 @@ import {
 } from "@/lib/market-data";
 import {
   intradayInput,
-  type ChartRange,
+  type IntradayChartRange,
   type RangeInputPoint,
 } from "./range-chart";
 import type { InstrumentRow } from "./rows";
@@ -43,7 +43,7 @@ const fetchCompany = unstable_cache(
 const fetchIntraday = unstable_cache(
   async (
     providerSymbol: string,
-    range: Exclude<ChartRange, "1y">,
+    range: IntradayChartRange,
   ): Promise<RangeInputPoint[]> => {
     const provider = await getMarketDataProvider();
     if (!provider.getIntradaySeries) {
@@ -101,7 +101,7 @@ export const loadCompanyData = cache(
 /** Las barras de la semana o del mes; lanza si Yahoo falla (el que llama decide el respaldo). */
 export function loadIntraday(
   providerSymbol: string,
-  range: Exclude<ChartRange, "1y">,
+  range: IntradayChartRange,
 ): Promise<RangeInputPoint[]> {
   return fetchIntraday(providerSymbol, range);
 }

@@ -26,7 +26,7 @@ vi.mock("../queries", () => ({
   getWatchlistMarket: mocks.getWatchlistMarket,
 }));
 
-import { loadIntradayRange, loadWeek52, loadYearSeries } from "../range-data";
+import { loadDailyRanges, loadIntradayRange, loadWeek52 } from "../range-data";
 
 const NOW = new Date("2026-09-25T20:30:00.000Z");
 const client = {} as never;
@@ -111,22 +111,25 @@ describe("loadWeek52", () => {
   });
 });
 
-describe("loadYearSeries", () => {
+describe("loadDailyRanges", () => {
+  const live = async () => ({
+    price: (await import("@/lib/engine")).d("110"),
+    asOf: new Date("2026-09-25T17:00:00.000Z"),
+    source: "quote" as const,
+  });
+
   it("arma el año con la cotización de hoy al final si todavía no hay cierre de hoy", async () => {
     mocks.getPriceSeries.mockResolvedValue(daily(["2026-09-23", "2026-09-24"]));
-    const series = await loadYearSeries({
+    const ranges = await loadDailyRanges({
       client,
       instrument,
-      price: {
-        price: (await import("@/lib/engine")).d("110"),
-        asOf: new Date("2026-09-25T17:00:00.000Z"),
-        source: "quote",
-      },
+      price: await live(),
       week52: { low: "90", high: "130" },
       now: NOW,
     });
-    expect(series!.range).toBe("1y");
-    expect(series!.points.map((p) => p.close)).toEqual([100, 101, 110]);
+    const year = ranges["1y"]!;
+    expect(year.range).toBe("1y");
+    expect(year.points.map((p) => p.close)).toEqual([100, 101, 110]);
     expect(mocks.getPriceSeries).toHaveBeenCalledWith(
       client,
       "i-1",
@@ -134,17 +137,58 @@ describe("loadYearSeries", () => {
     );
   });
 
-  it("sin historial no hay serie", async () => {
+  it("los 3 meses salen de la misma lectura (una sola consulta, ninguna a Yahoo), con la cotización de hoy", async () => {
+    mocks.getPriceSeries.mockResolvedValue(
+      daily([
+        "2026-01-05",
+        "2026-06-23",
+        "2026-06-24",
+        "2026-07-01",
+        "2026-09-24",
+      ]),
+    );
+    const ranges = await loadDailyRanges({
+      client,
+      instrument,
+      price: await live(),
+      week52: { low: "90", high: "130" },
+      now: NOW,
+    });
+    expect(mocks.getPriceSeries).toHaveBeenCalledTimes(1);
+    expect(mocks.loadIntraday).not.toHaveBeenCalled();
+    expect(mocks.loadCompanyData).not.toHaveBeenCalled();
+    const quarter = ranges["3m"]!;
+    expect(quarter.range).toBe("3m");
+    expect(quarter.source).toBe("daily");
+    // 92 días corridos antes del 25/09 (la cotización de hoy): desde el 25/06.
+    expect(quarter.points.map((p) => p.close)).toEqual([103, 104, 110]);
+    expect(ranges["1y"]!.points).toHaveLength(6);
+  });
+
+  it("sin historial no hay ninguna serie", async () => {
     mocks.getPriceSeries.mockResolvedValue([]);
     expect(
-      await loadYearSeries({
+      await loadDailyRanges({
         client,
         instrument,
         price: null,
         week52: { low: null, high: null },
         now: NOW,
       }),
-    ).toBeNull();
+    ).toEqual({ "3m": null, "1y": null });
+  });
+
+  it("con un solo cierre en los últimos 3 meses no hay 3M, pero sí el año", async () => {
+    mocks.getPriceSeries.mockResolvedValue(daily(["2026-01-05", "2026-09-24"]));
+    const ranges = await loadDailyRanges({
+      client,
+      instrument,
+      price: null,
+      week52: { low: null, high: null },
+      now: NOW,
+    });
+    expect(ranges["3m"]).toBeNull();
+    expect(ranges["1y"]!.points).toHaveLength(2);
   });
 });
 

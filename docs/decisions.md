@@ -469,6 +469,11 @@ Felipe aprobó la etapa 3 junto con el commit de la etapa 2 (`fb14db1`). Alcance
 - **Verificación:** integración 12/12 (`widget.integration.test.ts`; las 4 de cotizaciones con un proveedor falso: pide solo lo viejo y en una llamada, respeta las 2 horas y el freno de 10 minutos, muestra lo guardado si el proveedor falla o tarda): permisos de las funciones, el hash que no se lee, el alcance por persona y por portafolio, reemplazar, revocar, el límite, borrar el portafolio, y que el resumen sea **igual** al que arma Inicio con la sesión. Unitarias de token, vista, script (compila y el origen va escapado), origen y rutas públicas. Por HTTP con `next start`: 401 sin código, con uno inventado, con formato inválido y en la URL; 200 con el resumen; la pantalla con sesión no muestra ni el código ni el hash. **Falta probar el script en un iPhone de verdad.**
 - **Fase 7:** la migración va con las demás a `finance`.
 
+## Lista de posiciones: ganancia más visible y un solo «Ordenar» (2026-10-26)
+
+- **Ya no se ordena por ganancia en dólares.** Los órdenes son Valor, Ganancia (en %), Hoy y A–Z, en un menú «Ordenar: Valor ▾» (`components/app/sort-menu.tsx`, un `<details>` de enlaces que se cierra al tocar afuera o con Escape). En dólares, una posición grande con poca ganancia quedaba arriba de una chica que rindió mucho; el porcentaje es lo que la persona compara. Los enlaces viejos `?orden=pnl` siguen andando y ahora ordenan por Ganancia (%) (`parsePositionSort`).
+- **La fila ya no muestra el peso en el portafolio** (el «4,28 %» sin rótulo, que se confundía con el cambio del día) ni el costo total. Los dos siguen en la ficha del activo (Valor de mercado y Costo base). La fila queda: símbolo, nombre y «cantidad × costo promedio» a la izquierda; valor, ganancia con el porcentaje en una pastilla y «Hoy» a la derecha.
+
 ## Observaciones del spec para fases posteriores
 
 1. **Splits y precios.** Resuelto en la Fase 3 del lado de los datos (ver "Desvíos y decisiones de la Fase 3"); el des-ajuste al valuar es de la Fase 5. El motor aplica solo transacciones `SPLIT`; `corporate_actions` informa o propone splits, pero no se aplican dos veces.

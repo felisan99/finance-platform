@@ -14,6 +14,8 @@ import {
   simulateAddition,
   simulateMonthlyPlan,
   typicalMonthlyDeposit,
+  volatilityModel,
+  type VolatilityModel,
 } from "../what-if";
 import { buy, cashTx, deposit, dividend, expectDec } from "./helpers";
 
@@ -514,6 +516,98 @@ describe("analyzeFit", () => {
     expect(fit.correlation).toBeNull();
     expect(fit.closest).toBeNull();
     expect(fit.volatilityBefore).not.toBeNull();
+  });
+});
+
+describe("volatilityModel", () => {
+  const START = "2026-01-02";
+  const n = 120;
+  const rA = noise(31, n);
+  const rB = noise(42, n);
+  const aligned = alignReturns(
+    new Map([
+      ["A", fromReturns(START, rA)],
+      ["B", fromReturns(START, rB)],
+      [
+        "C",
+        fromReturns(
+          START,
+          rA.map((x, i) => 0.5 * x - 0.5 * (rB[i] as number)),
+        ),
+      ],
+    ]),
+    START,
+    "2026-12-31",
+  );
+  const w = (entries: Record<string, number>) =>
+    new Map(
+      Object.entries(entries).map(
+        ([s, v]) => [s, d(v.toFixed(12))] as [string, Dec],
+      ),
+    );
+  /** La volatilidad de después según el modelo, comprando `x` veces el total de hoy. */
+  const after = (model: VolatilityModel, x: number) =>
+    Math.sqrt(
+      model.portfolio + 2 * x * model.covariance + x * x * model.candidate,
+    ) /
+    (1 + x);
+
+  it("da la misma volatilidad que analyzeFit para cualquier monto (candidato nuevo)", () => {
+    // Hoy: 30 % A, 20 % B y el resto efectivo. Se compra C por x veces el total.
+    const before = { A: 0.3, B: 0.2 };
+    const model = volatilityModel(aligned, "C", w(before))!;
+    for (const x of [0.001, 0.05, 0.5, 1, 3, 250]) {
+      const fit = analyzeFit(
+        aligned,
+        "C",
+        w(before),
+        w({ A: 0.3 / (1 + x), B: 0.2 / (1 + x), C: x / (1 + x) }),
+      );
+      expect(Math.sqrt(model.portfolio)).toBeCloseTo(fit.volatilityBefore!, 9);
+      expect(after(model, x)).toBeCloseTo(fit.volatilityAfter!, 9);
+    }
+  });
+
+  it("sumar a una posición que ya existe también coincide", () => {
+    const before = { A: 0.3, B: 0.2 };
+    const model = volatilityModel(aligned, "A", w(before))!;
+    for (const x of [0.01, 0.4, 2]) {
+      const fit = analyzeFit(
+        aligned,
+        "A",
+        w(before),
+        w({ A: (0.3 + x) / (1 + x), B: 0.2 / (1 + x) }),
+      );
+      expect(after(model, x)).toBeCloseTo(fit.volatilityAfter!, 9);
+    }
+  });
+
+  it("un candidato sin historia solo diluye: la volatilidad baja con el monto", () => {
+    const model = volatilityModel(aligned, "ZZZ", w({ A: 1 }))!;
+    expect(model.covariance).toBe(0);
+    expect(model.candidate).toBe(0);
+    const fit = analyzeFit(
+      aligned,
+      "ZZZ",
+      w({ A: 1 }),
+      w({ A: 0.5, ZZZ: 0.5 }),
+    );
+    expect(after(model, 1)).toBeCloseTo(fit.volatilityAfter!, 9);
+    expect(after(model, 1)).toBeCloseTo(Math.sqrt(model.portfolio) / 2, 12);
+  });
+
+  it("sin cartera, sin retornos en común suficientes o sin posiciones medibles: null", () => {
+    expect(volatilityModel(aligned, "C", null)).toBeNull();
+    expect(volatilityModel(aligned, "C", w({ ZZZ: 1 }))).toBeNull();
+    const short = alignReturns(
+      new Map([
+        ["A", fromReturns(START, rA.slice(0, MIN_SHARED_DAYS - 1))],
+        ["C", fromReturns(START, rB.slice(0, MIN_SHARED_DAYS - 1))],
+      ]),
+      START,
+      "2026-12-31",
+    );
+    expect(volatilityModel(short, "C", w({ A: 1 }))).toBeNull();
   });
 });
 

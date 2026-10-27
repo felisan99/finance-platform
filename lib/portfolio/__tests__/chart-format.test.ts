@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { d } from "@/lib/engine";
+import { formatPercent } from "../format";
 import {
   axisWidthFor,
   formatChartMoney,
   formatChartMoneySigned,
+  formatChartMoneyWhole,
+  formatChartShare,
   formatChartPercent,
   formatChartThousandsTick,
   formatChartTick,
@@ -14,6 +18,22 @@ import {
 const plain = (value: string) => value.replace(/[\u00a0\u202f]/g, " ");
 
 describe("formatos de gráficos", () => {
+  it("monto entero, igual que formatMoneyWhole: `US$ 1.500`", () => {
+    expect(plain(formatChartMoneyWhole(1500))).toBe("US$ 1.500");
+    expect(plain(formatChartMoneyWhole(1_000_000))).toBe("US$ 1.000.000");
+    expect(plain(formatChartMoneyWhole(1500.6))).toBe("US$ 1.501");
+    expect(plain(formatChartMoneyWhole(1))).toBe("US$ 1");
+  });
+
+  it("fracción como porcentaje sin signo, igual que formatPercent; lo que redondea a cero es cero", () => {
+    expect(plain(formatChartShare(0.0682))).toBe(
+      plain(formatPercent(d("0.0682"))),
+    );
+    expect(plain(formatChartShare(0.142857))).toBe("14,29%");
+    expect(plain(formatChartShare(1))).toBe("100,00%");
+    expect(plain(formatChartShare(-0.00001))).toBe("0,00%");
+  });
+
   it("dinero con signo para el tooltip de la ganancia", () => {
     expect(plain(formatChartMoneySigned(320))).toBe("+US$ 320,00");
     expect(plain(formatChartMoneySigned(-52.5))).toBe("-US$ 52,50");

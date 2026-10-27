@@ -12,11 +12,16 @@ import { RANGE_NAME, type ChartRange } from "./range-options";
 import { toneOf, type Tone } from "./tone";
 
 // Gráfico de precio de la ficha de un activo con rango variable: 1S (barras de 30 min), 1M (de 1
-// hora) y 1A (cierres diarios), con el rango de 52 semanas superpuesto. Puro. El gráfico se dibuja
+// hora), 3M y 1A (cierres diarios), con el rango de 52 semanas superpuesto. Puro. El gráfico se dibuja
 // por índice (sin el hueco de las noches y los fines de semana): acá se calcula qué marcas lleva
 // el eje, la escala, el cambio del período y qué líneas de 52 semanas entran.
 
-export { RANGE_NAME, RANGE_OPTIONS, type ChartRange } from "./range-options";
+export {
+  RANGE_NAME,
+  RANGE_OPTIONS,
+  type ChartRange,
+  type IntradayChartRange,
+} from "./range-options";
 
 /** Un punto listo para armar una serie: `day` es el día de rueda (Nueva York), `YYYY-MM-DD`. */
 export interface RangeInputPoint {
@@ -56,6 +61,14 @@ export interface RangeSeries {
 }
 
 const MAX_TICKS = 5;
+/**
+ * Puntos como mucho por rango: más que eso en ~300 px es ruido. La semana de una acción son ~65
+ * barras y el mes ~150; la cripto cotiza todo el día (~240 y ~740) y se ralea parejo.
+ */
+export const MAX_POINTS: Partial<Record<ChartRange, number>> = {
+  "1w": 80,
+  "1m": 180,
+};
 const PAD = 0.08;
 /** Aire, como fracción de la franja de 52 semanas, entre el máximo o el mínimo y el borde del gráfico. */
 const LABEL_ROOM = 0.1;
@@ -115,8 +128,9 @@ function ticksFor(
 /**
  * La serie de un rango, lista para dibujar. `null` con menos de dos puntos (no hay línea).
  * `week52` es el rango de 52 semanas del proveedor (o, si no vino, el de los cierres): en 1A las dos
- * líneas siempre entran y la escala se estira para incluirlas; en 1S y 1M solo se dibuja una línea
- * si cae dentro de la escala del período (si no, aplastaría la curva y queda solo la barra de rango).
+ * líneas siempre entran y la escala se estira para incluirlas; en 1S, 1M y 3M solo se dibuja una
+ * línea si cae dentro de la escala del período (si no, aplastaría la curva y queda solo la barra de
+ * rango).
  */
 export function buildRangeSeries(input: {
   range: ChartRange;
@@ -124,15 +138,19 @@ export function buildRangeSeries(input: {
   points: readonly RangeInputPoint[];
   week52: Week52Input;
 }): RangeSeries | null {
-  const { range, source, points } = input;
-  const numeric = points
-    .map((p) => ({ label: p.label, close: Number(p.close) }))
-    .filter((p) => Number.isFinite(p.close) && p.close > 0);
+  const { range, source } = input;
   // Se recorta sobre lo ya válido: un cierre roto en el medio no descoloca las marcas del eje.
-  const clean = points.filter(
+  const valid = input.points.filter(
     (p) => Number.isFinite(Number(p.close)) && Number(p.close) > 0,
   );
-  if (clean.length < 2) return null;
+  if (valid.length < 2) return null;
+  // Con más puntos de los que entran, se toman parejos (siempre el primero y el último).
+  const cap = MAX_POINTS[range];
+  const clean = cap === undefined ? valid : evenly(valid, cap);
+  const numeric = clean.map((p) => ({
+    label: p.label,
+    close: Number(p.close),
+  }));
 
   const closes = numeric.map((p) => p.close);
   const min = Math.min(...closes);
@@ -219,9 +237,17 @@ export function intradayInput(
   }));
 }
 
+/** Días corridos hacia atrás desde el último dato de cada rango armado con cierres diarios. */
+const SLICE_DAYS: Record<Exclude<ChartRange, "1y">, number> = {
+  "1w": 7,
+  "1m": 31,
+  "3m": 92,
+};
+
 /**
- * La semana o el mes a partir de cierres diarios, cuando no se pudo traer el detalle del día:
- * los cierres de los últimos 7 o 31 días corridos del último dato.
+ * Un tramo de los cierres diarios: los 3 meses (que salen del año que ya se leyó, sin otra
+ * consulta) y la semana o el mes cuando no se pudo traer el detalle del día. Son los cierres de los
+ * últimos 7, 31 o 92 días corridos del último dato.
  */
 export function sliceDaily(
   range: Exclude<ChartRange, "1y">,
@@ -229,7 +255,7 @@ export function sliceDaily(
 ): RangeInputPoint[] {
   const last = points.at(-1);
   if (!last) return [];
-  const days = range === "1w" ? 7 : 31;
+  const days = SLICE_DAYS[range];
   const from = new Date(`${last.day}T12:00:00Z`);
   from.setUTCDate(from.getUTCDate() - days);
   const cut = from.toISOString().slice(0, 10);

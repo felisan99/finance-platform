@@ -1,6 +1,11 @@
 import { addDays, addMonths, isWeekday, marketDay } from "./dates";
 import { D, ZERO, type Dec } from "./decimal";
-import { annualizedVolatilityOf, type DrawdownStat } from "./risk";
+import {
+  MIN_VOLATILITY_DAYS,
+  TRADING_DAYS,
+  annualizedVolatilityOf,
+  type DrawdownStat,
+} from "./risk";
 import { sortCloses } from "./series";
 import type { Transaction } from "./types";
 import type { DailyClose, ValuedPortfolio } from "./valuation";
@@ -346,6 +351,63 @@ export function analyzeFit(
       ? annualizedVolatilityOf(beforeReturns)
       : null,
     volatilityAfter: afterReturns ? annualizedVolatilityOf(afterReturns) : null,
+  };
+}
+
+// --- Volatilidad para cualquier monto ------------------------------------------------------------
+
+/**
+ * Varianzas y covarianza anualizadas (× 252, muestrales) de los retornos diarios de la cartera de hoy
+ * y del candidato. La persona puede elegir cualquier monto en la pantalla y no se recalcula nada en
+ * el servidor: comprar `x` veces el total de hoy deja el retorno diario en `(cartera + x·candidato)
+ * / (1 + x)`, así que la volatilidad de después es
+ * `√(portfolio + 2·x·covariance + x²·candidate) / (1 + x)` (y la de antes, `√portfolio`): la misma
+ * que da `analyzeFit` con los pesos de `simulateAddition`.
+ */
+export interface VolatilityModel {
+  portfolio: number;
+  covariance: number;
+  /** 0 si el candidato no tiene retornos (no suma variación: solo diluye). */
+  candidate: number;
+}
+
+/** Covarianza muestral de dos series alineadas (`a` consigo misma: la varianza). */
+function sampleCovariance(a: readonly number[], b: readonly number[]): number {
+  const n = Math.min(a.length, b.length);
+  let meanA = 0;
+  let meanB = 0;
+  for (let i = 0; i < n; i++) {
+    meanA += a[i] as number;
+    meanB += b[i] as number;
+  }
+  meanA /= n;
+  meanB /= n;
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    sum += ((a[i] as number) - meanA) * ((b[i] as number) - meanB);
+  }
+  return sum / (n - 1);
+}
+
+/**
+ * El modelo de la volatilidad de la cartera después de comprar `candidate` con cualquier monto.
+ * `before` son los pesos de hoy de `simulateAddition`. `null` cuando `analyzeFit` no daría la
+ * volatilidad de antes: sin cartera, con menos de `MIN_SHARED_DAYS` retornos en común o si ninguna
+ * posición tiene retornos.
+ */
+export function volatilityModel(
+  aligned: AlignedReturns,
+  candidate: string,
+  before: ReadonlyMap<string, Dec> | null,
+): VolatilityModel | null {
+  if (before === null || aligned.dates.length < MIN_SHARED_DAYS) return null;
+  const portfolio = weightedReturns(aligned, before);
+  if (portfolio === null || portfolio.length < MIN_VOLATILITY_DAYS) return null;
+  const own = aligned.bySymbol.get(candidate) ?? null;
+  return {
+    portfolio: sampleCovariance(portfolio, portfolio) * TRADING_DAYS,
+    covariance: own ? sampleCovariance(portfolio, own) * TRADING_DAYS : 0,
+    candidate: own ? sampleCovariance(own, own) * TRADING_DAYS : 0,
   };
 }
 

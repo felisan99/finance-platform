@@ -4,6 +4,7 @@ import { useId, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { PnlText } from "@/components/app/pnl-text";
 import { Segmented } from "@/components/app/segmented";
+import { Input } from "@/components/ui/input";
 import {
   ChartContainer,
   ChartTooltip,
@@ -11,17 +12,29 @@ import {
 } from "@/components/ui/chart";
 import {
   formatChartMoney,
+  formatChartMoneyWhole,
   formatChartThousandsTick,
   formatChartTick,
   formatDateKey,
 } from "@/lib/portfolio/chart-format";
 import { niceScale } from "@/lib/portfolio/chart-scale";
+import {
+  MAX_AMOUNT,
+  MIN_AMOUNT,
+  TYPICAL_AMOUNT_ID,
+  impactRows,
+  parseAmount,
+  planView,
+} from "@/lib/portfolio/before-buy-amount";
 import type {
   BeforeBuyView,
   ImpactView,
   WindowId,
   WindowView,
 } from "@/lib/portfolio/before-buy-view";
+
+/** La opción de escribir el monto. */
+const CUSTOM = "custom";
 
 const config = {
   value: { label: "Valor", color: "var(--foreground)" },
@@ -70,12 +83,12 @@ function PlanTooltip({
 
 function ImpactSection({
   impact,
-  amountId,
+  amount,
 }: {
   impact: ImpactView;
-  amountId: string;
+  amount: number;
 }) {
-  const rows = impact.byAmount[amountId] ?? [];
+  const rows = impactRows(impact.model, amount);
   return (
     <>
       <dl className="flex flex-col gap-2">
@@ -255,30 +268,105 @@ function PlanChart({
 /**
  * «Antes de comprar» (ficha de un activo): qué le haría una compra a la cartera y cómo le habría
  * ido a un aporte mensual en el activo. Solo elige monto y período y dibuja: los textos, los tonos
- * y los puntos (por cada dólar al mes) vienen del servidor (`lib/portfolio/before-buy-view.ts`).
+ * y lo medido por cada dólar vienen del servidor (`lib/portfolio/before-buy-view.ts`); con el monto
+ * elegido (uno fijo o el que se escribe en «Otro») los escala `before-buy-amount.ts`, acá mismo.
  */
 export function BeforeBuyCard({ view }: { view: BeforeBuyView }) {
   const [amountId, setAmountId] = useState(view.defaultAmountId);
   const [windowId, setWindowId] = useState<WindowId | null>(
     view.defaultWindowId,
   );
+  // «Otro»: lo que se escribe, el último monto válido (es el que se muestra) y el aviso si no vale.
+  const [customText, setCustomText] = useState("");
+  const [customAmount, setCustomAmount] = useState<number | null>(null);
+  const [customProblem, setCustomProblem] = useState<string | null>(null);
+  const preset =
+    view.amounts.find((a) => a.id === amountId) ??
+    view.amounts.find((a) => a.id === view.defaultAmountId) ??
+    view.amounts[0]!;
   const amount =
-    view.amounts.find((a) => a.id === amountId) ?? view.amounts[0]!;
+    amountId === CUSTOM ? (customAmount ?? preset.value) : preset.value;
   const period =
     view.windows.find((w) => w.id === windowId) ?? view.windows.at(-1) ?? null;
-  const plan = period?.plans[amount.id] ?? null;
+  const plan = period ? planView(period.plan, amount) : null;
   const id = useId();
+  const hasTypical = view.amounts.some((a) => a.id === TYPICAL_AMOUNT_ID);
+
+  function choose(next: string) {
+    if (next === CUSTOM && amountId !== CUSTOM) {
+      // Arranca con el monto que se estaba mirando, así el resultado no salta.
+      setCustomText(String(amount));
+      setCustomAmount(amount);
+      setCustomProblem(null);
+    }
+    setAmountId(next);
+  }
+
+  function type(text: string) {
+    setCustomText(text);
+    const parsed = parseAmount(text);
+    if (parsed.ok) {
+      setCustomAmount(parsed.value);
+      setCustomProblem(null);
+    } else {
+      setCustomProblem(parsed.message);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
+        {/* Cuatro fijos en una fila; abajo, el aporte típico (si lo hay) y «Otro». */}
         <Segmented
           label="Monto por mes"
-          value={amount.id}
-          onChange={setAmountId}
-          options={view.amounts.map((a) => ({ id: a.id, text: a.text }))}
-          className="w-full"
+          value={amountId}
+          onChange={choose}
+          options={[
+            ...view.amounts.map((a) => ({
+              id: a.id,
+              text: a.text,
+              className: a.id === TYPICAL_AMOUNT_ID ? "col-span-3" : "px-1",
+            })),
+            {
+              id: CUSTOM,
+              text: "Otro",
+              className: hasTypical ? undefined : "col-span-4",
+            },
+          ]}
+          className="grid w-full grid-cols-4"
         />
+        {amountId === CUSTOM && (
+          <div className="flex flex-col gap-1 pt-1">
+            <label htmlFor={`${id}-amount`} className="text-xs font-medium">
+              Monto por mes, en dólares
+            </label>
+            <Input
+              id={`${id}-amount`}
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              enterKeyHint="done"
+              placeholder="Por ejemplo, 1.500"
+              value={customText}
+              onChange={(event) => type(event.target.value)}
+              aria-invalid={customProblem !== null || undefined}
+              aria-describedby={`${id}-amount-hint`}
+            />
+            <p
+              id={`${id}-amount-hint`}
+              aria-live="polite"
+              className={
+                customProblem
+                  ? "text-xs text-destructive"
+                  : "text-xs text-muted-foreground"
+              }
+            >
+              {customProblem
+                ? `${customProblem} Se sigue mostrando ${formatChartMoneyWhole(amount)}.`
+                : `De ${formatChartMoneyWhole(MIN_AMOUNT)} a ${formatChartMoneyWhole(MAX_AMOUNT)}, en dólares enteros.`}
+            </p>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">{view.typicalNote}</p>
       </div>
 
@@ -287,7 +375,7 @@ export function BeforeBuyCard({ view }: { view: BeforeBuyView }) {
           Qué le hace a tu cartera
         </h3>
         {view.impact ? (
-          <ImpactSection impact={view.impact} amountId={amount.id} />
+          <ImpactSection impact={view.impact} amount={amount} />
         ) : (
           <p className="text-sm text-muted-foreground">
             Cuando tengas posiciones, acá vas a ver qué le haría esta compra a
@@ -324,7 +412,7 @@ export function BeforeBuyCard({ view }: { view: BeforeBuyView }) {
             <p className="text-sm text-muted-foreground">{plan.heading}</p>
             <PlanChart
               period={period}
-              amount={amount.value}
+              amount={amount}
               benchmarkLabel={view.benchmarkLabel}
               symbol={view.symbol}
             />

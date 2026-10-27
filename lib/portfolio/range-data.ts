@@ -16,7 +16,7 @@ import {
   buildRangeSeries,
   dailyInput,
   sliceDaily,
-  type ChartRange,
+  type IntradayChartRange,
   type RangeSeries,
   type Week52Input,
 } from "./range-chart";
@@ -72,25 +72,43 @@ export async function loadWeek52(
   }
 }
 
-/** El año de cierres diarios (con la cotización de hoy al final si todavía no hay cierre de hoy). */
-export async function loadYearSeries(args: {
+/** Las series que salen de los cierres diarios: se arman juntas en el servidor y no se piden. */
+export interface DailyRanges {
+  "3m": RangeSeries | null;
+  "1y": RangeSeries | null;
+}
+
+/**
+ * El año de cierres diarios (con la cotización de hoy al final si todavía no hay cierre de hoy) y,
+ * recortados de esa misma lectura, los últimos 3 meses: una sola consulta y ninguna a Yahoo.
+ */
+export async function loadDailyRanges(args: {
   client: Client;
   instrument: InstrumentRow;
   price: LivePrice | null;
   week52: Week52Input;
   now: Date;
-}): Promise<RangeSeries | null> {
+}): Promise<DailyRanges> {
   const closes = await getPriceSeries(
     args.client,
     args.instrument.id,
     addDays(isoDate(args.now), -RANGE_DAYS),
   );
-  return buildRangeSeries({
-    range: "1y",
-    source: "daily",
-    points: dailyInput(withLiveBar(closes, args.price)),
-    week52: args.week52,
-  });
+  const points = dailyInput(withLiveBar(closes, args.price));
+  return {
+    "3m": buildRangeSeries({
+      range: "3m",
+      source: "daily",
+      points: sliceDaily("3m", points),
+      week52: args.week52,
+    }),
+    "1y": buildRangeSeries({
+      range: "1y",
+      source: "daily",
+      points,
+      week52: args.week52,
+    }),
+  };
 }
 
 export type RangeLoad =
@@ -104,7 +122,7 @@ export type RangeLoad =
 export async function loadIntradayRange(args: {
   client: Client;
   instrument: InstrumentRow;
-  range: Exclude<ChartRange, "1y">;
+  range: IntradayChartRange;
   now: Date;
 }): Promise<RangeLoad> {
   const { client, instrument, range, now } = args;

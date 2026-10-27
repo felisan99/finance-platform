@@ -7,7 +7,7 @@ import type { Database } from "@/lib/db/database.types";
 import { d } from "@/lib/engine";
 import type { LivePrice } from "@/lib/portfolio/live-series";
 import { companyForChart } from "@/lib/portfolio/range-data";
-import { loadWeek52, loadYearSeries } from "@/lib/portfolio/range-data";
+import { loadDailyRanges, loadWeek52 } from "@/lib/portfolio/range-data";
 import type { InstrumentRow } from "@/lib/portfolio/rows";
 import { buildRange } from "@/lib/portfolio/watchlist";
 
@@ -27,9 +27,10 @@ export function PriceRangeSkeleton() {
 }
 
 /**
- * Tarjeta «Precio» de la ficha de un activo: el gráfico con rango (1S/1M/1A) y, debajo, la barra
- * del rango de 52 semanas con el precio marcado. Lee el año de cierres y los datos de la empresa
- * (de ahí sale el rango de 52 semanas oficial): si Yahoo tarda, usa los cierres de la base.
+ * Tarjeta «Precio» de la ficha de un activo: el gráfico con rango (1S/1M/3M/1A) y, debajo, la barra
+ * del rango de 52 semanas con el precio marcado. Lee el año de cierres (de ahí salen 3M y 1A) y los
+ * datos de la empresa (de ahí sale el rango de 52 semanas oficial): si Yahoo tarda, usa los cierres
+ * de la base.
  */
 export async function PriceRangeSection({
   client,
@@ -43,7 +44,13 @@ export async function PriceRangeSection({
   const now = new Date();
   const company = await companyForChart(instrument);
   const week52 = await loadWeek52(client, instrument, company, now);
-  const year = await loadYearSeries({ client, instrument, price, week52, now });
+  const daily = await loadDailyRanges({
+    client,
+    instrument,
+    price,
+    week52,
+    now,
+  });
 
   // La marca de la barra es el precio de hoy; sin precio, sin marca.
   const range =
@@ -61,7 +68,7 @@ export async function PriceRangeSection({
         <CardTitle className="text-sm">Evolución del precio</CardTitle>
       </CardHeader>
       <CardContent>
-        <PriceRangeChart symbol={instrument.symbol} initial={year}>
+        <PriceRangeChart symbol={instrument.symbol} initial={daily}>
           {price.price !== null && (
             <div className="flex flex-col gap-1">
               <p className="text-xs text-muted-foreground">

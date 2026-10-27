@@ -116,6 +116,20 @@ describe("formatQuantity y formatPrice", () => {
     expect(formatQuantity(null)).toBe(EMPTY);
     expect(formatPrice(null)).toBe(EMPTY);
   });
+
+  it.each([
+    ["252", "US$ 252,00"],
+    ["1657.09", "US$ 1.657,09"],
+    ["0.5123", "US$ 0,5123"],
+    ["1730.97998", "US$ 1.730,98"],
+    ["84458.0859", "US$ 84.458,0859"],
+  ])("precio con moneda %s → %s", (input, expected) => {
+    expect(plain(formatPrice(d(input), { currency: true }))).toBe(expected);
+  });
+
+  it("precio con moneda null: raya (sin «US$»)", () => {
+    expect(formatPrice(null, { currency: true })).toBe(EMPTY);
+  });
 });
 
 describe("fechas en hora de Montevideo", () => {

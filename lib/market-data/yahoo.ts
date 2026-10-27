@@ -33,6 +33,8 @@ export interface YahooClient {
       period2: Date;
       interval: "1d" | "30m" | "1h";
       events?: string;
+      /** Barras de antes y después de la rueda; la librería las incluye si no se dice nada. */
+      includePrePost?: boolean;
     },
   ): Promise<unknown>;
   quote(symbols: string[]): Promise<unknown>;
@@ -88,6 +90,27 @@ const SEARCH_MAX_LENGTH = 40;
 
 const decimalsHint = z.number().int().min(0).max(10).nullish();
 
+const instantSchema = z.union([
+  z.date(),
+  z.number().transform((seconds) => new Date(seconds * 1000)),
+]);
+const tradingPeriodSchema = z.object({
+  start: instantSchema,
+  end: instantSchema,
+});
+
+/** Los horarios de las ruedas (en milisegundos), venga en la forma que venga. */
+function regularPeriods(
+  periods: z.infer<typeof chartSchema>["meta"]["tradingPeriods"],
+): Array<{ start: number; end: number }> {
+  if (!periods) return [];
+  const lists = Array.isArray(periods) ? periods : periods.regular;
+  return lists
+    .flat()
+    .map((p) => ({ start: p.start.getTime(), end: p.end.getTime() }))
+    .filter((p) => Number.isFinite(p.start) && p.end > p.start);
+}
+
 const chartSchema = z.object({
   meta: z.object({
     exchangeTimezoneName: z.string().min(1),
@@ -95,6 +118,16 @@ const chartSchema = z.object({
     currentTradingPeriod: z
       .object({ regular: z.object({ start: z.date(), end: z.date() }) })
       .nullish(),
+    // Horario de cada rueda. Sin las barras de antes y después llega como lista de listas (con
+    // segundos); con ellas, separado en `pre`, `regular` y `post` (con fechas). Si cambia de forma
+    // se ignora: es solo un filtro de más.
+    tradingPeriods: z
+      .union([
+        z.array(z.array(tradingPeriodSchema)),
+        z.object({ regular: z.array(z.array(tradingPeriodSchema)) }),
+      ])
+      .nullish()
+      .catch(null),
   }),
   quotes: z.array(
     z.object({
@@ -472,10 +505,12 @@ export function createYahooProvider(
   }
 
   // La semana muestra las últimas 5 ruedas (barras de 30 min) y el mes, un mes calendario (barras
-  // de 1 hora). Se pide un poco más de ventana y se recorta.
+  // de 1 hora). Se pide un poco más de ventana y se recorta. Solo el horario de la rueda: con las
+  // barras de antes y después (que la librería pide si no se le dice nada) la semana pasaba de ~65
+  // puntos a ~160 y la línea se llenaba de ruido de poco volumen.
   const INTRADAY = {
-    "1w": { days: 7, interval: "30m", sessions: 5 },
-    "1m": { days: 31, interval: "1h", sessions: null },
+    "1w": { days: 7, interval: "30m", minutes: 30, sessions: 5 },
+    "1m": { days: 31, interval: "1h", minutes: 60, sessions: null },
   } as const;
 
   async function getIntradaySeries(
@@ -490,25 +525,11 @@ export function createYahooProvider(
         period1: new Date(to.getTime() - spec.days * 86_400_000),
         period2: to,
         interval: spec.interval,
+        includePrePost: false,
       }),
     );
     const chart = parseOrThrow(chartSchema, raw, symbol);
     const timeZone = chart.meta.exchangeTimezoneName;
-
-    const byInstant = new Map<number, IntradayPoint>();
-    for (const quote of chart.quotes) {
-      const close = quote.close;
-      if (close == null || close <= 0) continue;
-      const decimals = priceDecimals(chart.meta.priceHint, close);
-      byInstant.set(quote.date.getTime(), {
-        at: quote.date,
-        close: round(close, decimals),
-      });
-    }
-    const points = [...byInstant.values()].sort(
-      (a, b) => a.at.getTime() - b.at.getTime(),
-    );
-    if (spec.sessions === null) return points;
 
     let sessionOf: (at: Date) => string;
     try {
@@ -524,6 +545,44 @@ export function createYahooProvider(
         },
       );
     }
+
+    // Segunda defensa por si Yahoo igual manda barras fuera de la rueda: solo las que caen dentro
+    // del horario de alguna rueda (`tradingPeriods`, día por día: respeta las ruedas cortas). El
+    // punto del cierre (16:00) entra. Sin horarios, no se filtra.
+    const periods = regularPeriods(chart.meta.tradingPeriods);
+    const inSession = (at: Date) =>
+      periods.length === 0 ||
+      periods.some((p) => at.getTime() >= p.start && at.getTime() <= p.end);
+
+    const byInstant = new Map<number, IntradayPoint>();
+    for (const quote of chart.quotes) {
+      const close = quote.close;
+      if (close == null || close <= 0 || !inSession(quote.date)) continue;
+      const decimals = priceDecimals(chart.meta.priceHint, close);
+      byInstant.set(quote.date.getTime(), {
+        at: quote.date,
+        close: round(close, decimals),
+      });
+    }
+    const sorted = [...byInstant.values()].sort(
+      (a, b) => a.at.getTime() - b.at.getTime(),
+    );
+
+    // Durante la rueda Yahoo agrega al final un punto con la cotización del momento (14:47) encima
+    // de la barra en curso (14:30): dos puntos para la misma barra. Queda uno por barra, el último.
+    const step = spec.minutes * 60_000;
+    const points: IntradayPoint[] = [];
+    let barStart = Number.NEGATIVE_INFINITY;
+    for (const point of sorted) {
+      if (point.at.getTime() - barStart < step) {
+        points[points.length - 1] = point;
+      } else {
+        barStart = point.at.getTime();
+        points.push(point);
+      }
+    }
+    if (spec.sessions === null) return points;
+
     const days = [...new Set(points.map((p) => sessionOf(p.at)))].slice(
       -spec.sessions,
     );

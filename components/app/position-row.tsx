@@ -5,7 +5,6 @@ import type { InstrumentRow } from "@/lib/portfolio/rows";
 import {
   formatDayMonth,
   formatMoney,
-  formatPercent,
   formatPrice,
   formatQuantity,
 } from "@/lib/portfolio/format";
@@ -14,7 +13,11 @@ import { typeLabelOf } from "@/lib/portfolio/instrument-type";
 
 const href = (symbol: string) => `/positions/${encodeURIComponent(symbol)}`;
 
-/** Posición abierta: valor, ganancia y cambio del día (o el costo, si todavía no hay precio). */
+/**
+ * Posición abierta. A la izquierda, qué es: símbolo, nombre y «cantidad × costo promedio». A la
+ * derecha, cómo va: el valor, la ganancia (dólares y porcentaje en una pastilla) y el cambio de hoy.
+ * Sin precio todavía, el costo base. El peso en el portafolio y el costo total están en la ficha.
+ */
 export function PositionRow({
   position,
   instrument,
@@ -29,7 +32,7 @@ export function PositionRow({
       className="flex flex-col gap-1 rounded-xl border bg-card p-3 text-card-foreground active:bg-muted"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <p className="flex items-center gap-1.5 font-semibold">
             {position.symbol}
             {instrument?.type && (
@@ -41,17 +44,23 @@ export function PositionRow({
           <p className="truncate text-xs text-muted-foreground">
             {instrument?.name ?? ""}
           </p>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {formatQuantity(position.quantity)} ×{" "}
+            {formatPrice(position.avgCost, { currency: true })}
+          </p>
         </div>
-        <div className="shrink-0 text-right tabular-nums">
+        <div className="flex shrink-0 flex-col items-end gap-0.5 text-right tabular-nums">
           {priced ? (
             <>
               <p className="font-semibold">
                 {formatMoney(position.marketValue)}
               </p>
-              <p className="text-xs">
-                <Pnl value={position.unrealizedPnl} kind="money" />{" "}
-                <span className="text-muted-foreground">·</span>{" "}
-                <Pnl value={position.unrealizedPct} kind="percent" />
+              <p className="flex items-center gap-1.5 text-xs">
+                <Pnl value={position.unrealizedPnl} kind="money" />
+                <Pnl value={position.unrealizedPct} kind="percent" pill />
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Hoy <Pnl value={position.dayChangePct} kind="percent" />
               </p>
             </>
           ) : (
@@ -63,22 +72,6 @@ export function PositionRow({
             </>
           )}
         </div>
-      </div>
-      <div className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground tabular-nums">
-        <span>
-          {formatQuantity(position.quantity)} × {formatPrice(position.avgCost)}
-          <span className="ml-1">
-            (costo {formatMoney(position.costBasis)})
-          </span>
-        </span>
-        {priced && (
-          <span className="shrink-0">
-            Hoy <Pnl value={position.dayChangePct} kind="percent" />
-            {position.weight !== null && (
-              <> · {formatPercent(position.weight)}</>
-            )}
-          </span>
-        )}
       </div>
       {priced && position.priceAsOf && position.priceSource === "close" && (
         <p className="text-xs text-muted-foreground">

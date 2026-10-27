@@ -17,6 +17,8 @@ import {
 } from "../activity";
 import { buildDashboard } from "../dashboard";
 import {
+  POSITION_SORT_LABELS,
+  POSITION_SORTS,
   parsePositionSort,
   sortPositions,
   splitPositions,
@@ -58,13 +60,29 @@ function sample() {
 
 describe("parsePositionSort", () => {
   it("valores válidos y por defecto", () => {
-    expect(parsePositionSort("pnl")).toBe("pnl");
+    expect(parsePositionSort("pnlPct")).toBe("pnlPct");
+    expect(parsePositionSort("symbol")).toBe("symbol");
     expect(parsePositionSort(["dayPct", "value"])).toBe("dayPct");
     expect(parsePositionSort(undefined)).toBe("value");
     expect(parsePositionSort("")).toBe("value");
     expect(parsePositionSort("nope")).toBe("value");
     expect(parsePositionSort("__proto__")).toBe("value");
     expect(parsePositionSort("constructor")).toBe("value");
+    expect(parsePositionSort("hasOwnProperty")).toBe("value");
+  });
+
+  it("el enlace viejo `?orden=pnl` (Ganancia $) sigue andando: es Ganancia", () => {
+    expect(parsePositionSort("pnl")).toBe("pnlPct");
+    expect(parsePositionSort(["pnl"])).toBe("pnlPct");
+  });
+
+  it("cuatro opciones en el menú, en orden: Valor, Ganancia, Hoy, A–Z", () => {
+    expect(POSITION_SORTS.map((sort) => POSITION_SORT_LABELS[sort])).toEqual([
+      "Valor",
+      "Ganancia",
+      "Hoy",
+      "A–Z",
+    ]);
   });
 });
 
@@ -82,12 +100,8 @@ describe("sortPositions", () => {
     expect(symbols("dayPct")).toEqual(["CCC", "AAA", "DDD", "BBB", "NOPRICE"]);
   });
 
-  it("por ganancia en dólares", () => {
-    // AAA +100, CCC +100 (empate: por símbolo), DDD 0, BBB −50.
-    expect(symbols("pnl")).toEqual(["AAA", "CCC", "DDD", "BBB", "NOPRICE"]);
-  });
-
-  it("por ganancia porcentual", () => {
+  it("por ganancia (porcentual, no en dólares)", () => {
+    // CCC +50 %, AAA +10 %, DDD 0 %, BBB −10 %. En dólares AAA y CCC empatarían en +100.
     expect(symbols("pnlPct")).toEqual(["CCC", "AAA", "DDD", "BBB", "NOPRICE"]);
   });
 
@@ -115,9 +129,6 @@ describe("sortPositions", () => {
     expect(
       sortPositions(valued.positions, "pnlPct").map((p) => p.symbol),
     ).toEqual(["X", "Y"]);
-    expect(sortPositions(valued.positions, "pnl").map((p) => p.symbol)).toEqual(
-      ["X", "Y"],
-    );
     expect(
       sortPositions(valued.positions, "value").map((p) => p.symbol),
     ).toEqual(["X", "Y"]);
@@ -125,9 +136,9 @@ describe("sortPositions", () => {
 
   it("no muta la entrada y es estable entre corridas", () => {
     const before = open.map((p) => p.symbol);
-    sortPositions(open, "pnl");
+    sortPositions(open, "pnlPct");
     expect(open.map((p) => p.symbol)).toEqual(before);
-    expect(symbols("pnl")).toEqual(symbols("pnl"));
+    expect(symbols("pnlPct")).toEqual(symbols("pnlPct"));
   });
 
   it("sin precio para ninguna: se ordena por costo base (mayor primero)", () => {

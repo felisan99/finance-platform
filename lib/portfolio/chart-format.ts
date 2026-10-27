@@ -76,3 +76,24 @@ export const formatChartThousandsTick = (
   decimals: number,
 ): string =>
   value === 0 ? "0" : `${formatChartTick(value / 1000, decimals)} mil`;
+
+const chartMoneyWhole = new Intl.NumberFormat(LOCALE, {
+  style: "currency",
+  currency: "USD",
+  currencyDisplay: "symbol",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+/** Un monto elegido, sin centavos: `US$ 1.500` (igual que `formatMoneyWhole` del servidor). */
+export const formatChartMoneyWhole = (value: number): string =>
+  chartMoneyWhole.format(Math.round(value));
+
+const chartShare = new Intl.NumberFormat(LOCALE, {
+  style: "percent",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+/** Fracción → porcentaje sin signo: `0.0682` → `6,82%` (igual que `formatPercent` del servidor). */
+export const formatChartShare = (fraction: number): string =>
+  // Lo que redondea a cero es cero: sin «-0,00 %».
+  chartShare.format(Math.abs(fraction) < 0.00005 ? 0 : fraction);

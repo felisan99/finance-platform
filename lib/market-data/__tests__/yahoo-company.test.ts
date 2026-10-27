@@ -536,6 +536,7 @@ describe("getIntradaySeries", () => {
         period1: new Date("2026-09-18T20:30:00.000Z"),
         period2: NOW,
         interval: "30m",
+        includePrePost: false,
       },
     ]);
     expect([
@@ -551,9 +552,11 @@ describe("getIntradaySeries", () => {
   });
 
   it("el mes pide barras de 1 hora de los últimos 31 días y las deja todas", async () => {
-    const { provider, calls } = providerFor(
-      chartResponse({ quotes: twoWeeks }),
-    );
+    const hourly = sessions.flatMap((day, i) => [
+      bar(`${day}T13:30:00.000Z`, 100 + i),
+      bar(`${day}T14:30:00.000Z`, 100.5 + i),
+    ]);
+    const { provider, calls } = providerFor(chartResponse({ quotes: hourly }));
     const points = await provider.getIntradaySeries!("GOOGL", "1m");
     expect(calls.chart[0]).toEqual([
       "GOOGL",
@@ -561,6 +564,7 @@ describe("getIntradaySeries", () => {
         period1: new Date("2026-08-25T20:30:00.000Z"),
         period2: NOW,
         interval: "1h",
+        includePrePost: false,
       },
     ]);
     expect(points).toHaveLength(16);
@@ -587,15 +591,224 @@ describe("getIntradaySeries", () => {
     const { provider } = providerFor(
       chartResponse({
         quotes: [
-          bar("2026-09-25T15:00:00.000Z", 3),
+          bar("2026-09-25T15:30:00.000Z", 3),
           bar("2026-09-25T13:30:00.000Z", 1),
-          bar("2026-09-25T14:00:00.000Z", 2),
-          bar("2026-09-25T14:00:00.000Z", 2.5),
+          bar("2026-09-25T14:30:00.000Z", 2),
+          bar("2026-09-25T14:30:00.000Z", 2.5),
         ],
       }),
     );
     const points = await provider.getIntradaySeries!("GOOGL", "1m");
     expect(points.map((p) => p.close)).toEqual(["1", "2.5", "3"]);
+  });
+
+  /** Una rueda de Nueva York (EDT) completa cada 30 min, con o sin las barras de antes y después. */
+  function session(day: string, extended: boolean) {
+    const start = new Date(`${day}T${extended ? "08:00" : "13:30"}:00.000Z`);
+    const end = new Date(`${day}T${extended ? "23:30" : "19:30"}:00.000Z`);
+    const quotes = [];
+    for (let t = start.getTime(); t <= end.getTime(); t += 30 * 60_000) {
+      quotes.push(bar(new Date(t).toISOString(), 100));
+    }
+    return quotes;
+  }
+  /** `tradingPeriods` tal como llega sin las barras de antes y después: segundos, una lista por día. */
+  const periodsOf = (days: string[]) =>
+    days.map((day) => [
+      {
+        timezone: "EDT",
+        gmtoffset: -14400,
+        start: Date.parse(`${day}T13:30:00.000Z`) / 1000,
+        end: Date.parse(`${day}T20:00:00.000Z`) / 1000,
+      },
+    ]);
+  const week = sessions.slice(-5);
+
+  it("1S de una acción: 13 barras por rueda en 5 ruedas, más el cierre de hoy (66, no ~160)", async () => {
+    const { provider } = providerFor({
+      ...chartResponse({
+        quotes: [
+          ...week.flatMap((day) => session(day, false)),
+          bar("2026-09-25T20:00:00.000Z", 101), // el punto del cierre que Yahoo agrega al final
+        ],
+      }),
+    });
+    const points = await provider.getIntradaySeries!("GOOGL", "1w");
+    expect(points).toHaveLength(66);
+    expect(points.at(-1)).toEqual({
+      at: new Date("2026-09-25T20:00:00.000Z"),
+      close: "101",
+    });
+  });
+
+  it("si igual llegan barras de antes y después de la rueda, se descartan con el horario de cada día", async () => {
+    const response = chartResponse({
+      quotes: week.flatMap((day) => session(day, true)),
+    });
+    const { provider } = providerFor({
+      ...response,
+      meta: { ...response.meta, tradingPeriods: periodsOf(week) },
+    });
+    const points = await provider.getIntradaySeries!("GOOGL", "1w");
+    // 32 barras por día con pre y post → solo las 13 de 09:30 a 15:30 y la de las 16:00.
+    expect(points).toHaveLength(5 * 14);
+    const hours = new Set(points.map((p) => p.at.toISOString().slice(11, 16)));
+    expect([...hours].sort()[0]).toBe("13:30");
+    expect([...hours].sort().at(-1)).toBe("20:00");
+  });
+
+  it("el horario también llega con fechas y separado en pre/regular/post: se usa el regular", async () => {
+    const response = chartResponse({
+      quotes: session("2026-09-25", true),
+    });
+    const regular = periodsOf(["2026-09-25"]).map((list) =>
+      list.map((p) => ({
+        ...p,
+        start: new Date(p.start * 1000),
+        end: new Date(p.end * 1000),
+      })),
+    );
+    const { provider } = providerFor({
+      ...response,
+      meta: {
+        ...response.meta,
+        tradingPeriods: { pre: [], regular, post: [] },
+      },
+    });
+    const points = await provider.getIntradaySeries!("GOOGL", "1w");
+    expect(points).toHaveLength(14);
+  });
+
+  it("una rueda corta (cierra 13:00) no recorta a las demás", async () => {
+    const days = ["2026-07-02", "2026-07-03"];
+    const response = chartResponse({
+      quotes: days.flatMap((day) => session(day, false)),
+    });
+    const periods = periodsOf(days);
+    periods[1]![0]!.end = Date.parse("2026-07-03T18:00:00.000Z") / 1000;
+    const { provider } = providerFor({
+      ...response,
+      meta: { ...response.meta, tradingPeriods: periods },
+    });
+    const points = await provider.getIntradaySeries!("GOOGL", "1w");
+    const perDay = (day: string) =>
+      points.filter((p) => p.at.toISOString().startsWith(day)).length;
+    expect(perDay("2026-07-02")).toBe(13);
+    expect(perDay("2026-07-03")).toBe(10); // 09:30 a 13:00
+  });
+
+  it("un horario con forma rara se ignora (no rompe la serie)", async () => {
+    const response = chartResponse({ quotes: session("2026-09-25", false) });
+    const { provider } = providerFor({
+      ...response,
+      meta: { ...response.meta, tradingPeriods: "x" },
+    });
+    expect(await provider.getIntradaySeries!("GOOGL", "1w")).toHaveLength(13);
+  });
+
+  it("el punto de la cotización del momento no duplica la barra en curso: queda uno, el último", async () => {
+    const { provider } = providerFor(
+      chartResponse({
+        quotes: [
+          bar("2026-09-25T17:30:00.000Z", 100),
+          bar("2026-09-25T18:00:00.000Z", 101),
+          bar("2026-09-25T18:17:42.000Z", 101.4), // la cotización de las 14:17
+        ],
+      }),
+    );
+    const week = await provider.getIntradaySeries!("GOOGL", "1w");
+    expect(week).toEqual([
+      { at: new Date("2026-09-25T17:30:00.000Z"), close: "100" },
+      { at: new Date("2026-09-25T18:17:42.000Z"), close: "101.4" },
+    ]);
+  });
+
+  it("cripto: barras de 30 min justas (todo el día, en UTC) nunca se juntan", async () => {
+    const days = [
+      "2026-09-21",
+      "2026-09-22",
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-25",
+    ];
+    const quotes = days.flatMap((day) =>
+      Array.from({ length: 48 }, (_, i) =>
+        bar(
+          new Date(
+            Date.parse(`${day}T00:00:00.000Z`) + i * 30 * 60_000,
+          ).toISOString(),
+          80_000 + i,
+        ),
+      ),
+    );
+    const response = chartResponse({
+      quotes,
+      timeZone: "UTC",
+      regular: {
+        start: "2026-09-25T00:00:00.000Z",
+        end: "2026-09-25T23:59:00.000Z",
+      },
+    });
+    const { provider } = providerFor({
+      ...response,
+      meta: {
+        ...response.meta,
+        // Así llega el horario de la cripto: cada día de 00:00 a 23:59 UTC.
+        tradingPeriods: days.map((day) => [
+          {
+            timezone: "UTC",
+            gmtoffset: 0,
+            start: Date.parse(`${day}T00:00:00.000Z`) / 1000,
+            end: Date.parse(`${day}T23:59:00.000Z`) / 1000,
+          },
+        ]),
+      },
+    });
+    const points = await provider.getIntradaySeries!("BTC-USD", "1w");
+    expect(points).toHaveLength(5 * 48);
+    const gaps = new Set(
+      points.slice(1).map((p, i) => p.at.getTime() - points[i]!.at.getTime()),
+    );
+    expect([...gaps]).toEqual([30 * 60_000]);
+  });
+
+  it("un punto que llega más de una barra después de la última queda como punto propio", async () => {
+    const { provider } = providerFor(
+      chartResponse({
+        quotes: [
+          bar("2026-09-25T17:30:00.000Z", 100),
+          bar("2026-09-25T18:00:00.000Z", 101),
+          bar("2026-09-25T18:47:12.000Z", 102), // 47 min después: falta la barra de las 18:30
+        ],
+      }),
+    );
+    const week = await provider.getIntradaySeries!("GOOGL", "1w");
+    expect(week.map((p) => p.close)).toEqual(["100", "101", "102"]);
+    // Justo una barra después (30 min) también es un punto nuevo, no se junta.
+    const { provider: exact } = providerFor(
+      chartResponse({
+        quotes: [
+          bar("2026-09-25T18:00:00.000Z", 101),
+          bar("2026-09-25T18:30:00.000Z", 102),
+        ],
+      }),
+    );
+    expect(await exact.getIntradaySeries!("GOOGL", "1w")).toHaveLength(2);
+  });
+
+  it("en el mes (barras de 1 hora, a las y media) el punto del cierre de las 16:00 reemplaza a la barra de las 15:30", async () => {
+    const { provider } = providerFor(
+      chartResponse({
+        quotes: [
+          bar("2026-09-25T18:30:00.000Z", 100),
+          bar("2026-09-25T19:30:00.000Z", 101),
+          bar("2026-09-25T20:00:00.000Z", 101.2),
+          bar("2026-09-26T13:30:00.000Z", 102),
+        ],
+      }),
+    );
+    const month = await provider.getIntradaySeries!("GOOGL", "1m");
+    expect(month.map((p) => p.close)).toEqual(["100", "101.2", "102"]);
   });
 
   it("una respuesta con formato inesperado es BAD_DATA", async () => {

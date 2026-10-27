@@ -1,20 +1,19 @@
 import type { Dec, ValuedPosition } from "@/lib/engine";
 
-export const POSITION_SORTS = [
-  "value",
-  "dayPct",
-  "pnl",
-  "pnlPct",
-  "symbol",
-] as const;
+/** Los órdenes que se ofrecen, en el orden del menú. */
+export const POSITION_SORTS = ["value", "pnlPct", "dayPct", "symbol"] as const;
 export type PositionSort = (typeof POSITION_SORTS)[number];
 
 export const POSITION_SORT_LABELS: Record<PositionSort, string> = {
   value: "Valor",
+  pnlPct: "Ganancia",
   dayPct: "Hoy",
-  pnl: "Ganancia $",
-  pnlPct: "Ganancia %",
-  symbol: "Símbolo",
+  symbol: "A–Z",
+};
+
+/** Órdenes que ya no se ofrecen, para que los enlaces viejos sigan andando. */
+const LEGACY_SORTS: Readonly<Record<string, PositionSort>> = {
+  pnl: "pnlPct",
 };
 
 /** `?orden=` de la URL → orden válido; lo desconocido (o `__proto__`) vuelve al valor por defecto. */
@@ -22,6 +21,9 @@ export function parsePositionSort(
   param: string | string[] | undefined,
 ): PositionSort {
   const value = Array.isArray(param) ? param[0] : param;
+  if (value !== undefined && Object.hasOwn(LEGACY_SORTS, value)) {
+    return LEGACY_SORTS[value]!;
+  }
   return POSITION_SORTS.find((sort) => sort === value) ?? "value";
 }
 
@@ -62,10 +64,6 @@ export function sortPositions(
     case "dayPct":
       return list.sort(
         (a, b) => desc(a, b, (p) => p.dayChangePct) || bySymbol(a, b),
-      );
-    case "pnl":
-      return list.sort(
-        (a, b) => desc(a, b, (p) => p.unrealizedPnl) || bySymbol(a, b),
       );
     case "pnlPct":
       return list.sort(

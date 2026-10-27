@@ -78,6 +78,7 @@ export {
   simulateAddition,
   simulateMonthlyPlan,
   typicalMonthlyDeposit,
+  volatilityModel,
 } from "./what-if";
 export type {
   AdditionResult,
@@ -87,4 +88,5 @@ export type {
   MonthlyPlanResult,
   PlanPoint,
   Underwater,
+  VolatilityModel,
 } from "./what-if";

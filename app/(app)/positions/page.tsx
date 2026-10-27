@@ -3,6 +3,7 @@ import { EmptyPortfolio } from "@/components/app/empty-state";
 import { portfolioContextLine } from "@/components/app/portfolio-context";
 import { ClosedPositionRow, PositionRow } from "@/components/app/position-row";
 import { Pnl } from "@/components/app/pnl";
+import { SortMenu } from "@/components/app/sort-menu";
 import { Notice, PageHeader, Stat } from "@/components/app/stat";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/db/server";
@@ -106,24 +107,15 @@ export default async function PositionsPage({
         </Stat>
       </div>
 
-      <nav aria-label="Ordenar" className="flex gap-1.5 overflow-x-auto pb-1">
-        {POSITION_SORTS.map((option) => (
-          <Link
-            key={option}
-            href={href({ orden: option })}
-            aria-current={option === sort ? "true" : undefined}
-            className={cn(
-              buttonVariants({
-                variant: option === sort ? "default" : "outline",
-                size: "sm",
-              }),
-              "shrink-0",
-            )}
-          >
-            {POSITION_SORT_LABELS[option]}
-          </Link>
-        ))}
-      </nav>
+      <SortMenu
+        label="Ordenar posiciones"
+        current={sort}
+        options={POSITION_SORTS.map((option) => ({
+          id: option,
+          text: POSITION_SORT_LABELS[option],
+          href: href({ orden: option }),
+        }))}
+      />
 
       <ul className="flex flex-col gap-2">
         {sorted.map((position) => (

@@ -24,6 +24,8 @@ import {
   formatChartTick,
 } from "@/lib/portfolio/chart-format";
 import {
+  DAILY_RANGES,
+  DEFAULT_RANGE,
   RANGE_NAME,
   RANGE_OPTIONS,
   type ChartRange,
@@ -65,11 +67,19 @@ function PriceTooltip({
 // Las etiquetas de las líneas de 52 semanas van FUERA de la franja del máximo y el mínimo (arriba
 // del máximo, abajo del mínimo) y del lado donde la curva queda más lejos.
 
+/** El rango con el que abre: 3M; si no alcanza para una línea pero el año sí, el año. */
+function firstRange(
+  initial: Partial<Record<ChartRange, RangeSeries | null>>,
+): ChartRange {
+  return !initial[DEFAULT_RANGE] && initial["1y"] ? "1y" : DEFAULT_RANGE;
+}
+
 /**
- * Precio de un activo con rango variable (1S, 1M, 1A) y el rango de 52 semanas superpuesto. El año
- * llega ya armado desde el servidor; la semana y el mes se piden al tocarlos (barras del día, con
- * caché) y se recuerdan en la pantalla. Solo dibuja: las series, los cambios y las líneas ya vienen
- * calculados (`lib/portfolio/range-chart.ts`). `children` es lo que va debajo (la barra de rango).
+ * Precio de un activo con rango variable (1S, 1M, 3M, 1A) y el rango de 52 semanas superpuesto. 3M
+ * y 1A llegan ya armados desde el servidor (de los mismos cierres diarios) y abre en 3M; la semana
+ * y el mes se piden al tocarlos (barras del día, con caché) y se recuerdan en la pantalla. Solo
+ * dibuja: las series, los cambios y las líneas ya vienen calculados (`lib/portfolio/range-chart.ts`).
+ * `children` es lo que va debajo (la barra de rango).
  */
 export function PriceRangeChart({
   symbol,
@@ -77,17 +87,24 @@ export function PriceRangeChart({
   children,
 }: {
   symbol: string;
-  initial: RangeSeries | null;
+  /** Las series de cierres diarios (3M y 1A); `null` la que no tiene dos puntos. */
+  initial: Partial<Record<ChartRange, RangeSeries | null>>;
   children?: React.ReactNode;
 }) {
-  const [range, setRange] = useState<ChartRange>("1y");
+  const [range, setRange] = useState<ChartRange>(() => firstRange(initial));
   const [loaded, setLoaded] = useState<Partial<Record<ChartRange, Loaded>>>(
-    initial ? { "1y": { series: initial, notice: null } } : {},
+    () =>
+      Object.fromEntries(
+        DAILY_RANGES.flatMap((id) => {
+          const series = initial[id];
+          return series ? [[id, { series, notice: null }]] : [];
+        }),
+      ),
   );
   const [pending, setPending] = useState<ChartRange | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // Si se tocan dos rangos seguidos, gana el último que se tocó, no el que responde último.
-  const wanted = useRef<ChartRange>("1y");
+  const wanted = useRef<ChartRange>(range);
 
   const current = loaded[range] ?? null;
   const series = current?.series ?? null;
@@ -95,7 +112,8 @@ export function PriceRangeChart({
   function select(next: ChartRange) {
     wanted.current = next;
     setProblem(null);
-    if (loaded[next] || next === "1y") {
+    // Los rangos de cierres diarios ya llegaron del servidor: nunca se piden.
+    if (loaded[next] || DAILY_RANGES.includes(next)) {
       setPending(null);
       setRange(next);
       return;
@@ -245,7 +263,7 @@ export function PriceRangeChart({
         </div>
       ) : (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          {range === "1y"
+          {DAILY_RANGES.includes(range) && !loaded["1y"]
             ? `Todavía no hay historial de precios de ${symbol}. Se descarga con el cron diario o al actualizar los precios.`
             : "Todavía no hay datos suficientes para este rango."}
         </p>

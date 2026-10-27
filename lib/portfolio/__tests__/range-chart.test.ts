@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_POINTS,
   buildRangeSeries,
   dailyInput,
   intradayInput,
   sliceDaily,
   type RangeInputPoint,
 } from "../range-chart";
+import {
+  DAILY_RANGES,
+  DEFAULT_RANGE,
+  RANGE_NAME,
+  RANGE_OPTIONS,
+} from "../range-options";
 
 /** ICU usa espacios de no separación: se normalizan para poder escribir el esperado a mano. */
 const plain = (value: string) => value.replace(/[  ]/g, " ");
@@ -151,8 +158,8 @@ describe("buildRangeSeries: rango de 52 semanas superpuesto", () => {
     expect(series.domain[1]).toBeGreaterThan(408.61);
   });
 
-  it("en 1S y 1M una línea fuera de la escala NO se dibuja y la escala no se estira", () => {
-    for (const range of ["1w", "1m"] as const) {
+  it("en 1S, 1M y 3M una línea fuera de la escala NO se dibuja y la escala no se estira", () => {
+    for (const range of ["1w", "1m", "3m"] as const) {
       const series = buildRangeSeries({
         range,
         source: "intraday",
@@ -172,6 +179,17 @@ describe("buildRangeSeries: rango de 52 semanas superpuesto", () => {
       week52,
     })!;
     expect(series.week52).toMatchObject({ showHigh: true, showLow: false });
+  });
+
+  it("en 3M una línea cerca del precio entra (como en 1S y 1M, sin estirar la escala)", () => {
+    const series = buildRangeSeries({
+      range: "3m",
+      source: "daily",
+      points: [pt("2026-07-01", "236"), pt("2026-09-25", "240")],
+      week52,
+    })!;
+    expect(series.week52).toMatchObject({ showLow: true, showHigh: false });
+    expect(series.domain[1]).toBeLessThan(250);
   });
 
   it("solo entra la del lado que corresponde (mínimo cerca, máximo lejos)", () => {
@@ -299,6 +317,23 @@ describe("buildRangeSeries: marcas del eje", () => {
     expect(series.ticks.every((t) => /^\d{2}\/\d{2}$/.test(t.text))).toBe(true);
   });
 
+  it("3M: hasta 5 marcas con día y mes (no mes y año, como 1A)", () => {
+    const points = Array.from({ length: 64 }, (_, i) => {
+      const date = new Date(Date.UTC(2026, 5, 25 + i));
+      return pt(date.toISOString().slice(0, 10), String(100 + i));
+    });
+    const series = buildRangeSeries({
+      range: "3m",
+      source: "daily",
+      points,
+      week52: NO_52,
+    })!;
+    expect(series.points).toHaveLength(64);
+    expect(series.ticks).toHaveLength(5);
+    expect(series.ticks[0]).toEqual({ index: 0, text: "25/06" });
+    expect(series.ticks.at(-1)).toEqual({ index: 63, text: "27/08" });
+  });
+
   it("cierres diarios en 1S o 1M (cuando falla el detalle): marcas por día, no por rueda", () => {
     const series = buildRangeSeries({
       range: "1w",
@@ -369,7 +404,129 @@ describe("armado de puntos", () => {
     expect(month.at(-1)!.day).toBe("2026-09-25");
   });
 
+  it("sliceDaily: los 3 meses son los 92 días corridos del último dato", () => {
+    const days = Array.from({ length: 200 }, (_, i) => {
+      const date = new Date(Date.UTC(2026, 2, 10 + i));
+      return pt(date.toISOString().slice(0, 10), "100");
+    });
+    const quarter = sliceDaily("3m", days);
+    expect(days.at(-1)!.day).toBe("2026-09-25");
+    expect(quarter[0]!.day).toBe("2026-06-26");
+    expect(quarter).toHaveLength(92);
+  });
+
   it("sliceDaily sin datos devuelve vacío", () => {
     expect(sliceDaily("1w", [])).toEqual([]);
+  });
+});
+
+describe("buildRangeSeries: densidad de puntos", () => {
+  /** Barras cada `minutes` desde `from` (UTC), `perDay` por día, durante `days` días seguidos. */
+  function intradayBars(
+    days: number,
+    perDay: number,
+    minutes: number,
+    from = "2026-09-21T13:30:00.000Z",
+  ): RangeInputPoint[] {
+    const start = new Date(from).getTime();
+    return Array.from({ length: days * perDay }, (_, i) => {
+      const day = Math.floor(i / perDay);
+      const at = new Date(
+        start + day * 86_400_000 + (i % perDay) * minutes * 60_000,
+      );
+      const key = at.toISOString().slice(0, 10);
+      return pt(key, String(100 + i), at.toISOString());
+    });
+  }
+
+  it("1S de una acción (5 ruedas de 13 barras + el cierre) queda entera", () => {
+    const points = [
+      ...intradayBars(5, 13, 30),
+      pt("2026-09-25", "200", "2026-09-25T20:00:00.000Z"),
+    ];
+    const series = buildRangeSeries({
+      range: "1w",
+      source: "intraday",
+      points,
+      week52: NO_52,
+    })!;
+    expect(series.points).toHaveLength(66);
+  });
+
+  it("1M de una acción (21 ruedas de 7 barras) queda entera", () => {
+    const series = buildRangeSeries({
+      range: "1m",
+      source: "intraday",
+      points: intradayBars(21, 7, 60),
+      week52: NO_52,
+    })!;
+    expect(series.points).toHaveLength(147);
+  });
+
+  it("la cripto (todo el día) se ralea a 80 puntos en 1S y 180 en 1M, con el primero y el último", () => {
+    const week = intradayBars(5, 48, 30, "2026-09-21T00:00:00.000Z");
+    const shortSeries = buildRangeSeries({
+      range: "1w",
+      source: "intraday",
+      points: week,
+      week52: NO_52,
+    })!;
+    expect(week).toHaveLength(240);
+    expect(shortSeries.points).toHaveLength(MAX_POINTS["1w"]!);
+    expect(shortSeries.points).toHaveLength(80);
+    expect(shortSeries.points[0]!.label).toBe(week[0]!.label);
+    expect(shortSeries.points.at(-1)!.label).toBe(week.at(-1)!.label);
+    // El cambio del período sigue siendo del primer al último punto real.
+    expect(plain(shortSeries.change!.text)).toBe("+US$ 239,00");
+
+    const month = intradayBars(31, 24, 60, "2026-08-26T00:00:00.000Z");
+    const longSeries = buildRangeSeries({
+      range: "1m",
+      source: "intraday",
+      points: month,
+      week52: NO_52,
+    })!;
+    expect(month).toHaveLength(744);
+    expect(longSeries.points).toHaveLength(180);
+    expect(longSeries.points.at(-1)!.close).toBe(843);
+    // Las marcas siguen en el primer punto de cada día y en orden.
+    const indices = longSeries.ticks.map((t) => t.index);
+    expect(indices).toEqual([...indices].sort((a, b) => a - b));
+    expect(longSeries.ticks.length).toBeLessThanOrEqual(5);
+  });
+
+  it("los cierres diarios (3M y 1A) no se ralean", () => {
+    const points = Array.from({ length: 365 }, (_, i) => {
+      const date = new Date(Date.UTC(2025, 8, 26 + i));
+      return pt(date.toISOString().slice(0, 10), String(100 + i));
+    });
+    expect(
+      buildRangeSeries({ range: "1y", source: "daily", points, week52: NO_52 })!
+        .points,
+    ).toHaveLength(365);
+  });
+});
+
+describe("range-options", () => {
+  it("cuatro rangos en orden, con 3M entre 1M y 1A", () => {
+    expect(RANGE_OPTIONS.map((o) => o.text)).toEqual(["1S", "1M", "3M", "1A"]);
+  });
+
+  it("abre en 3M, que (como 1A) sale de los cierres diarios y no se pide", () => {
+    expect(DEFAULT_RANGE).toBe("3m");
+    expect(DAILY_RANGES).toEqual(["3m", "1y"]);
+  });
+
+  it("el cambio del período dice «En 3 meses»", () => {
+    expect(RANGE_NAME["3m"]).toBe("3 meses");
+    const series = buildRangeSeries({
+      range: "3m",
+      source: "daily",
+      points: [pt("2026-07-01", "100"), pt("2026-09-25", "110")],
+      week52: NO_52,
+    })!;
+    expect(plain(series.description)).toMatch(
+      /^Gráfico del precio de 3 meses, de 2026-07-01 a 2026-09-25/,
+    );
   });
 });

@@ -9,15 +9,20 @@ import {
   simulateAddition,
   simulateMonthlyPlan,
   typicalMonthlyDeposit,
+  volatilityModel,
   type DailyClose,
   type Dec,
   type MonthlyPlanResult,
   type Transaction,
   type ValuedPortfolio,
 } from "@/lib/engine";
+import {
+  TYPICAL_AMOUNT_ID,
+  type ImpactModel,
+  type PlanModel,
+} from "./before-buy-amount";
 import { formatDateKey } from "./chart-format";
 import {
-  formatMoney,
   formatMoneyWhole,
   formatMonthYear,
   formatPercent,
@@ -30,11 +35,22 @@ import { toneOf } from "./tone";
 
 // «Antes de comprar» (ficha de un activo): los cálculos son de `lib/engine/what-if.ts`; acá se
 // eligen los montos y los períodos, se escriben las frases y se preparan los números del gráfico.
-// El cliente recibe todo ya formateado (no importa `lib/engine`).
+// El cliente no importa `lib/engine`: recibe los textos ya formateados y, para lo que depende del
+// monto (que la persona puede escribir), lo medido por cada dólar; lo escala y lo formatea
+// `before-buy-amount.ts`.
 
-/** Montos fijos que se ofrecen además del aporte típico. */
-const PRESETS = [500, 1000, 2000, 5000] as const;
-const FALLBACK_AMOUNT = 1000;
+export { TYPICAL_AMOUNT_ID } from "./before-buy-amount";
+export type {
+  ImpactModel,
+  ImpactRowView,
+  PlanModel,
+  PlanView,
+} from "./before-buy-amount";
+
+/** Montos fijos que se ofrecen; el aporte típico, si es otro, va aparte. */
+const PRESETS = [100, 250, 500, 1000] as const;
+/** Sin depósitos en el último año se arranca acá. */
+const FALLBACK_AMOUNT = 500;
 /** Años de los períodos de la simulación de aportes. */
 const WINDOW_YEARS = [1, 3, 5] as const;
 /** Un período cuenta como completo si la historia arranca hasta una semana después de su inicio (feriados). */
@@ -68,14 +84,8 @@ export const sectorLabel = (key: string): string => SECTOR_LABELS[key] ?? key;
 export interface AmountOption {
   id: string;
   text: string;
-  /** Para escalar el gráfico en el cliente (está en dólares por mes). */
+  /** Dólares por mes: el cliente escala con esto el gráfico, el plan y las filas de la cartera. */
   value: number;
-}
-
-export interface ImpactRowView {
-  label: string;
-  before: string;
-  after: string;
 }
 
 export interface FitView {
@@ -86,17 +96,10 @@ export interface FitView {
 }
 
 export interface ImpactView {
-  byAmount: Record<string, ImpactRowView[]>;
+  /** Para armar las filas de antes y después con cualquier monto (`impactRows`). */
+  model: ImpactModel;
   fit: FitView | null;
   notes: string[];
-}
-
-export interface PlanView {
-  heading: string;
-  invested: string;
-  value: string;
-  gain: MetricView;
-  benchmark: { text: string; gain: MetricView } | null;
 }
 
 export interface ChartPointView {
@@ -112,7 +115,8 @@ export type WindowId = "1A" | "3A" | "5A" | "ALL";
 export interface WindowView {
   id: WindowId;
   label: string;
-  plans: Record<string, PlanView>;
+  /** Por cada dólar al mes: los textos con el monto elegido los arma `planView`. */
+  plan: PlanModel;
   worst: string;
   question: boolean;
   priceDrawdown: string | null;
@@ -124,6 +128,7 @@ export interface BeforeBuyView {
   benchmarkLabel: string | null;
   amounts: AmountOption[];
   defaultAmountId: string;
+  /** Debajo de los montos: de dónde sale el monto con el que arranca. */
   typicalNote: string;
   /** `null` si todavía no hay cartera con la que comparar. */
   impact: ImpactView | null;
@@ -154,7 +159,11 @@ const metric = (value: Dec | null): MetricView => ({
   tone: toneOf(value, 4),
 });
 
-/** Los montos que se ofrecen: el aporte típico de la persona (si lo hay) y los fijos. */
+/**
+ * Los montos que se ofrecen: los fijos y, aparte, el aporte típico de la persona (redondeado al
+ * dólar), que es con el que arranca. Si coincide con un fijo no se repite: arranca en ese. «Otro»
+ * (cualquier monto) lo agrega la tarjeta.
+ */
 export function amountOptions(typical: Dec | null): {
   options: AmountOption[];
   defaultId: string;
@@ -162,31 +171,31 @@ export function amountOptions(typical: Dec | null): {
 } {
   const rounded =
     typical !== null && typical.round().gte(1) ? typical.round() : null;
-  const chosen = rounded ?? d(String(FALLBACK_AMOUNT));
-  const values = [...PRESETS.map((v) => d(String(v)))];
-  if (!values.some((v) => v.eq(chosen))) {
-    // Reemplaza al fijo más cercano, así siguen siendo cuatro.
-    let nearest = 0;
-    for (let i = 1; i < values.length; i++) {
-      if (
-        values[i]!.minus(chosen).abs().lt(values[nearest]!.minus(chosen).abs())
-      )
-        nearest = i;
-    }
-    values[nearest] = chosen;
+  const options: AmountOption[] = PRESETS.map((value) => ({
+    id: String(value),
+    text: formatMoneyWhole(d(String(value))),
+    value,
+  }));
+  const other = " Con «Otro» probás cualquier monto.";
+  if (rounded === null) {
+    return {
+      options,
+      defaultId: String(FALLBACK_AMOUNT),
+      note: `Sin depósitos en los últimos 12 meses: arranca en ${formatMoneyWhole(d(String(FALLBACK_AMOUNT)))}.${other}`,
+    };
   }
-  values.sort((a, b) => a.comparedTo(b));
+  const preset = options.find((option) => rounded.eq(option.id));
+  if (!preset) {
+    options.push({
+      id: TYPICAL_AMOUNT_ID,
+      text: `Tu aporte: ${formatMoneyWhole(rounded)}`,
+      value: rounded.toNumber(),
+    });
+  }
   return {
-    options: values.map((v) => ({
-      id: v.toFixed(0),
-      text: formatMoneyWhole(v),
-      value: v.toNumber(),
-    })),
-    defaultId: chosen.toFixed(0),
-    note:
-      rounded === null
-        ? `Sin depósitos en los últimos 12 meses: arranca en ${formatMoneyWhole(chosen)}.`
-        : `Arranca en tu aporte típico, ${formatMoneyWhole(chosen)}: lo que depositás en un mes (mediana de los últimos 12).`,
+    options,
+    defaultId: preset?.id ?? TYPICAL_AMOUNT_ID,
+    note: `Arranca en tu aporte, ${formatMoneyWhole(rounded)}: lo que depositás en un mes (mediana de los últimos 12).${other}`,
   };
 }
 
@@ -210,67 +219,46 @@ export function fitSentence(value: number): string {
   return "Tiende a moverse al revés que tu cartera: diversifica mucho.";
 }
 
-function buildImpact(
-  input: BeforeBuyInput,
-  amounts: AmountOption[],
-  end: string,
-): ImpactView | null {
+function buildImpact(input: BeforeBuyInput, end: string): ImpactView | null {
   const { valued, symbol, groupOf } = input;
   if (valued === null) return null;
+  // Lo que no depende del monto sale de comprar un dólar: los pesos de antes y el grupo.
   const first = simulateAddition(valued, symbol, d("1"), groupOf);
   if (first.before === null) return null;
+  const before = first.before;
 
   const closes = new Map(input.holdingCloses);
   closes.set(symbol, input.candidateCloses);
   const from = addMonths(end, -12);
   const aligned = alignReturns(closes, from, end, symbol);
+  // El parecido no depende del monto (compara con la cartera de antes).
+  const fit = analyzeFit(aligned, symbol, before.weights, first.after.weights);
 
-  const byAmount: Record<string, ImpactRowView[]> = {};
-  let fit: ReturnType<typeof analyzeFit> | null = null;
-  for (const option of amounts) {
-    const result = simulateAddition(valued, symbol, d(option.id), groupOf);
-    const before = result.before!;
-    const after = result.after;
-    const current = analyzeFit(aligned, symbol, before.weights, after.weights);
-    fit ??= current;
-
-    const rows: ImpactRowView[] = [
-      {
-        label: `${symbol} en tu cartera`,
-        before: formatPercent(before.weights.get(symbol) ?? d("0")),
-        after: formatPercent(after.weights.get(symbol) ?? d("0")),
-      },
-    ];
-    if (
-      result.group !== null &&
-      before.groupWeight !== null &&
-      after.groupWeight !== null
-    ) {
-      rows.push({
-        label: sectorLabel(result.group),
-        before: formatPercent(before.groupWeight),
-        after: formatPercent(after.groupWeight),
-      });
-    }
-    if (after.positions > 3) {
-      rows.push({
-        label: "Tus 3 posiciones más grandes",
-        before: formatPercent(before.top3),
-        after: formatPercent(after.top3),
-      });
-    }
-    if (current.volatilityBefore !== null && current.volatilityAfter !== null) {
-      rows.push({
-        label: "Volatilidad (1 año)",
-        before: formatPercent(d(current.volatilityBefore.toFixed(8))),
-        after: formatPercent(d(current.volatilityAfter.toFixed(8))),
-      });
-    }
-    byAmount[option.id] = rows;
+  // Los valores de hoy, para que el cliente arme las filas con cualquier monto (`impactRows`).
+  const valueOf = (weight: Dec) => weight.mul(before.total).toNumber();
+  const others: number[] = [];
+  let candidate = 0;
+  for (const [held, weight] of before.weights) {
+    if (held === symbol) candidate = valueOf(weight);
+    else others.push(valueOf(weight));
   }
+  const model: ImpactModel = {
+    symbol,
+    total: before.total.toNumber(),
+    candidate,
+    group:
+      first.group !== null && before.groupWeight !== null
+        ? {
+            label: sectorLabel(first.group),
+            value: valueOf(before.groupWeight),
+          }
+        : null,
+    others,
+    volatility: volatilityModel(aligned, symbol, before.weights),
+  };
 
   const notes: string[] = [];
-  if (fit && fit.days < MIN_SHARED_DAYS) {
+  if (fit.days < MIN_SHARED_DAYS) {
     notes.push(
       `Para medir el parecido y la volatilidad hacen falta ${MIN_SHARED_DAYS} ruedas en común; hay ${fit.days}.`,
     );
@@ -301,7 +289,7 @@ function buildImpact(
   }
 
   let fitView: FitView | null = null;
-  if (fit?.correlation != null) {
+  if (fit.correlation != null) {
     fitView = {
       value: correlationText(fit.correlation),
       sentence: fitSentence(fit.correlation),
@@ -310,16 +298,16 @@ function buildImpact(
           ? null
           : `Lo que más se le parece: ${fit.closest.symbol} (${correlationText(fit.closest.correlation)}).`,
     };
-  } else if (fit !== null && fit.days >= MIN_SHARED_DAYS) {
+  } else if (fit.days >= MIN_SHARED_DAYS) {
     notes.push(
-      first.before.weights.size === 0 ||
-        [...first.before.weights.keys()].every((s) => s === symbol)
+      before.weights.size === 0 ||
+        [...before.weights.keys()].every((s) => s === symbol)
         ? "No hay otra posición con la que compararlo."
         : `Sin historia de ${symbol} en el último año para compararlo.`,
     );
   }
 
-  return { byAmount, fit: fitView, notes };
+  return { model, fit: fitView, notes };
 }
 
 /** Del plan por cada dólar al mes a los puntos del gráfico (con el benchmark alineado por fecha). */
@@ -381,7 +369,6 @@ function drawdownText(
 
 function buildWindows(
   input: BeforeBuyInput,
-  amounts: AmountOption[],
   first: string,
   end: string,
 ): WindowView[] {
@@ -414,47 +401,47 @@ function buildWindows(
   const one = d("1");
 
   return ranges.flatMap((range) => {
-    const plan = simulateMonthlyPlan(
+    const simulated = simulateMonthlyPlan(
       input.candidateCloses,
       one,
       range.from,
       end,
     );
-    if (plan === null) return [];
+    if (simulated === null) return [];
     const bench = benchmark
-      ? simulateMonthlyPlan(benchmark.closes, one, plan.start, end)
+      ? simulateMonthlyPlan(benchmark.closes, one, simulated.start, end)
       : null;
 
-    const plans: Record<string, PlanView> = {};
-    for (const option of amounts) {
-      const amount = d(option.id);
-      const invested = plan.invested.mul(amount);
-      const value = plan.value.mul(amount);
-      const gain = plan.value.div(plan.invested).minus(1);
-      plans[option.id] = {
-        heading: `${formatMoneyWhole(amount)} por mes desde ${formatMonthYear(plan.start)} (${plan.contributions} ${plural(plan.contributions, "aporte", "aportes")})`,
-        invested: formatMoney(invested),
-        value: formatMoney(value),
-        gain: metric(gain),
-        benchmark:
-          bench === null || label === null
-            ? null
-            : {
-                text: `Lo mismo en ${label}: ${formatMoney(bench.value.mul(amount))}`,
-                gain: metric(bench.value.div(bench.invested).minus(1)),
-              },
-      };
-    }
+    // Por cada dólar al mes: lo aportado es la cantidad de aportes y el porcentaje no depende del monto.
+    const plan: PlanModel = {
+      since: `desde ${formatMonthYear(simulated.start)} (${simulated.contributions} ${plural(simulated.contributions, "aporte", "aportes")})`,
+      invested: simulated.invested.toNumber(),
+      value: simulated.value.toNumber(),
+      gain: metric(simulated.value.div(simulated.invested).minus(1)),
+      benchmark:
+        bench === null || label === null
+          ? null
+          : {
+              label,
+              value: bench.value.toNumber(),
+              gain: metric(bench.value.div(bench.invested).minus(1)),
+            },
+    };
 
     return [
       {
         id: range.id,
         label: range.label,
-        plans,
-        worst: worstText(plan),
-        question: plan.worst !== null && plan.worst.depth.lte(QUESTION_DEPTH),
-        priceDrawdown: drawdownText(input.candidateCloses, plan.start, end),
-        chart: chartPoints(plan, bench),
+        plan,
+        worst: worstText(simulated),
+        question:
+          simulated.worst !== null && simulated.worst.depth.lte(QUESTION_DEPTH),
+        priceDrawdown: drawdownText(
+          input.candidateCloses,
+          simulated.start,
+          end,
+        ),
+        chart: chartPoints(simulated, bench),
       },
     ];
   });
@@ -478,7 +465,7 @@ export function buildBeforeBuyView(
   const { options, defaultId, note } = amountOptions(
     typicalMonthlyDeposit(input.transactions, input.today),
   );
-  const windows = buildWindows(input, options, first, end);
+  const windows = buildWindows(input, first, end);
 
   return {
     symbol: input.symbol,
@@ -489,7 +476,7 @@ export function buildBeforeBuyView(
     amounts: options,
     defaultAmountId: defaultId,
     typicalNote: note,
-    impact: buildImpact(input, options, end),
+    impact: buildImpact(input, end),
     windows,
     defaultWindowId: windows.at(-1)?.id ?? null,
     asOf: formatDateKey(end),

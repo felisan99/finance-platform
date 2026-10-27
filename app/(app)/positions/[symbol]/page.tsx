@@ -12,12 +12,13 @@ import { EarningsCard } from "@/components/app/earnings-card";
 import { FollowButton } from "@/components/app/follow-button";
 import { Pnl } from "@/components/app/pnl";
 import { portfolioNameLine } from "@/components/app/portfolio-context";
+import { PriceCard, type PriceCardData } from "@/components/app/price-card";
 import { PriceChart } from "@/components/app/price-chart";
 import {
   PriceRangeSection,
   PriceRangeSkeleton,
 } from "@/components/app/price-range-section";
-import { Notice, PageHeader, Stat } from "@/components/app/stat";
+import { PageHeader, Stat } from "@/components/app/stat";
 import { TxRow } from "@/components/app/tx-row";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,7 +31,6 @@ import {
   providerSymbolOf,
 } from "@/lib/portfolio/company-data";
 import {
-  formatDayMonth,
   formatExact,
   formatMoney,
   formatPercent,
@@ -45,6 +45,7 @@ import {
   loadScopeSnapshot,
 } from "@/lib/portfolio/queries";
 import { describeTransaction } from "@/lib/portfolio/tx-view";
+import { loadSymbolView } from "@/lib/portfolio/watchlist-data";
 import { SYMBOL_PATTERN, normalizeSymbol } from "@/lib/validation/transaction";
 import { FollowedSymbolView } from "./followed-view";
 import { typeLabelOf } from "@/lib/portfolio/instrument-type";
@@ -141,7 +142,12 @@ export default async function PositionDetailPage({
         b.executedAt.getTime() - a.executedAt.getTime() || b.seq - a.seq,
     );
 
-  const priced = position.price !== null;
+  // Una posición cerrada no se valúa (el motor no le pone precio): el precio de hoy sale de la
+  // misma lectura que la de un símbolo seguido. Así la ficha siempre muestra el precio.
+  const symbolView = position.isOpen
+    ? null
+    : await loadSymbolView(supabase, instrument, new Date());
+  const priceData: PriceCardData = symbolView ?? position;
 
   return (
     <div className="flex flex-col gap-3">
@@ -166,49 +172,28 @@ export default async function PositionDetailPage({
         }
       />
 
-      <Card>
-        <CardContent className="flex flex-col gap-1">
-          {position.isOpen && priced ? (
-            <>
-              <p className="text-sm text-muted-foreground">Precio</p>
-              <p className="text-3xl font-semibold tabular-nums">
-                {formatPrice(position.price)}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted-foreground">Hoy </span>
-                <Pnl value={position.dayChange} kind="money" />{" "}
-                <span className="text-muted-foreground">(</span>
-                <Pnl value={position.dayChangePct} kind="percent" />
-                <span className="text-muted-foreground">)</span>
-              </p>
-              {position.priceAsOf && (
-                <p className="text-xs text-muted-foreground">
-                  {position.priceSource === "close"
-                    ? "Último cierre"
-                    : "Precio"}{" "}
-                  al {formatDayMonth(position.priceAsOf)}
-                </p>
-              )}
-            </>
-          ) : position.isOpen ? (
-            <Notice tone="warning">
-              Todavía no hay precio de {symbol}. Se muestra el costo base;
-              actualizá los precios desde Inicio.
-            </Notice>
-          ) : (
-            <p className="text-sm text-muted-foreground">Posición cerrada</p>
-          )}
-        </CardContent>
-      </Card>
+      <PriceCard
+        data={priceData}
+        missing={
+          position.isOpen
+            ? `Todavía no hay precio de ${symbol}. Se muestra el costo base; actualizá los precios desde Inicio.`
+            : `Todavía no hay precio de ${symbol}: se descarga con la actualización diaria.`
+        }
+        status={
+          position.isOpen ? undefined : (
+            <Badge variant="secondary">Posición cerrada</Badge>
+          )
+        }
+      />
 
       <Suspense fallback={<PriceRangeSkeleton />}>
         <PriceRangeSection
           client={supabase}
           instrument={instrument}
           price={{
-            price: position.price,
-            asOf: position.priceAsOf,
-            source: position.priceSource,
+            price: priceData.price,
+            asOf: priceData.priceAsOf,
+            source: priceData.priceSource,
           }}
         />
       </Suspense>

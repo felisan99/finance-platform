@@ -10,28 +10,26 @@ import {
 } from "@/components/app/company-stats-card";
 import { EarningsCard } from "@/components/app/earnings-card";
 import { FollowButton } from "@/components/app/follow-button";
-import { Pnl } from "@/components/app/pnl";
+import { PriceCard } from "@/components/app/price-card";
 import {
   PriceRangeSection,
   PriceRangeSkeleton,
 } from "@/components/app/price-range-section";
-import { Notice, PageHeader } from "@/components/app/stat";
+import { PageHeader } from "@/components/app/stat";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import type { Database } from "@/lib/db/database.types";
 import {
   companyTitle,
   kindOf,
   providerSymbolOf,
 } from "@/lib/portfolio/company-data";
-import { formatDayMonth, formatPrice } from "@/lib/portfolio/format";
 import type { InstrumentRow } from "@/lib/portfolio/rows";
 import type { PortfolioSnapshot } from "@/lib/portfolio/snapshot";
 import { loadSymbolView } from "@/lib/portfolio/watchlist-data";
 
 /**
  * Detalle de un símbolo que se sigue pero no se tiene (spec §10.4): precio, cambio del día, el
- * gráfico con rango (1S/1M/1A) y el rango de 52 semanas, «Antes de comprar» y los datos de la
+ * gráfico con rango (1S/1M/3M/1A) y el rango de 52 semanas, «Antes de comprar» y los datos de la
  * empresa. Sin costos ni operaciones: no hay posición.
  */
 export async function FollowedSymbolView({
@@ -73,36 +71,10 @@ export async function FollowedSymbolView({
         }
       />
 
-      <Card>
-        <CardContent className="flex flex-col gap-1">
-          {view.price !== null ? (
-            <>
-              <p className="text-sm text-muted-foreground">Precio</p>
-              <p className="text-3xl font-semibold tabular-nums">
-                {formatPrice(view.price)}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted-foreground">Hoy </span>
-                <Pnl value={view.dayChange} kind="money" />{" "}
-                <span className="text-muted-foreground">(</span>
-                <Pnl value={view.dayChangePct} kind="percent" />
-                <span className="text-muted-foreground">)</span>
-              </p>
-              {view.priceAsOf && (
-                <p className="text-xs text-muted-foreground">
-                  {view.priceSource === "close" ? "Último cierre" : "Precio"} al{" "}
-                  {formatDayMonth(view.priceAsOf)}
-                </p>
-              )}
-            </>
-          ) : (
-            <Notice tone="warning">
-              Todavía no hay precio de {instrument.symbol}. Se descarga solo en
-              unos segundos: actualizá la página.
-            </Notice>
-          )}
-        </CardContent>
-      </Card>
+      <PriceCard
+        data={view}
+        missing={`Todavía no hay precio de ${instrument.symbol}. Se descarga solo en unos segundos: actualizá la página.`}
+      />
 
       {view.price !== null && (
         <Suspense fallback={<PriceRangeSkeleton />}>
