@@ -36,8 +36,9 @@ function background<T>(promise: Promise<T>): Promise<T> {
  * - Los dos límites se toman en serie y en el mismo orden que antes: `assistant_daily` solo se
  *   cuenta si pasó `assistant_message`. Deciden primero: si rechazan, el resultado es
  *   `rate_limited` aunque una lectura haya fallado, y no devuelve ningún dato.
- * - Mientras tanto corren las lecturas (solo `select` bajo RLS, sin efectos): conversación,
- *   portafolio, memoria y, en cuanto llega la conversación, sus mensajes.
+ * - Mientras tanto corren solo dos lecturas baratas y acotadas (`select` bajo RLS, sin efectos):
+ *   la conversación (una fila por id) y los portafolios (hasta 5). Los mensajes (hasta 200) y la
+ *   memoria esperan a que pasen los límites: un pedido rechazado no los lee.
  * - Los rechazos se evalúan en el orden de siempre: límites, conversación (`no_conversation`),
  *   portafolio (`no_portfolio`). Un error de lectura lanza, como antes, salvo que un rechazo
  *   anterior ya decida la respuesta.
@@ -45,18 +46,15 @@ function background<T>(promise: Promise<T>): Promise<T> {
 export async function loadTurnContext<Scope>(
   deps: TurnContextDeps<Scope>,
 ): Promise<TurnContext<Scope>> {
-  const limits = (async () =>
-    (await deps.takeLimit("assistant_message")) &&
-    (await deps.takeLimit("assistant_daily")))();
-
   const conversation = background(deps.getConversation());
   const scope = background(deps.getScope());
-  const stored = background(
-    conversation.then((found) => (found ? deps.loadMessages(found) : [])),
-  );
-  const memories = background(deps.listMemories());
 
-  if (!(await limits)) return { ok: false, reason: "rate_limited" };
+  if (
+    !(await deps.takeLimit("assistant_message")) ||
+    !(await deps.takeLimit("assistant_daily"))
+  ) {
+    return { ok: false, reason: "rate_limited" };
+  }
 
   const [foundConversation, foundScope] = await Promise.all([
     conversation,
@@ -65,12 +63,15 @@ export async function loadTurnContext<Scope>(
   if (!foundConversation) return { ok: false, reason: "no_conversation" };
   if (!foundScope) return { ok: false, reason: "no_portfolio" };
 
-  const [storedMessages, memoryItems] = await Promise.all([stored, memories]);
+  const [stored, memories] = await Promise.all([
+    deps.loadMessages(foundConversation),
+    deps.listMemories(),
+  ]);
   return {
     ok: true,
     conversation: foundConversation,
     scope: foundScope,
-    stored: storedMessages,
-    memories: memoryItems,
+    stored,
+    memories,
   };
 }

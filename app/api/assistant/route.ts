@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 
   const started = performance.now();
   try {
-    // Los límites deciden primero; las lecturas (solo `select`, RLS) corren mientras tanto.
+    // Los límites deciden primero; conversación y portafolios (lecturas chicas) corren mientras tanto.
     const loaded = await loadTurnContext({
       takeLimit: (key) => takeRateLimit(supabase, key),
       getConversation: () => getConversation(supabase, conversationId),
