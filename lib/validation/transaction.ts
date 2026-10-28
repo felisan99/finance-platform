@@ -214,17 +214,7 @@ export type TransactionInput =
       amount: Dec;
     });
 
-export const TRANSACTION_TYPE_LABELS = {
-  BUY: "Compra",
-  SELL: "Venta",
-  DIVIDEND: "Dividendo",
-  DEPOSIT: "Depósito",
-  WITHDRAWAL: "Retiro",
-  INTEREST: "Interés",
-  FEE: "Comisión",
-  TAX: "Impuesto",
-  SPLIT: "Split",
-} as const;
+export { TRANSACTION_TYPE_LABELS } from "@/lib/portfolio/transaction-type-labels";
 
 const typeField = z.enum(
   [
