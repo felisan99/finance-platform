@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Notice } from "@/components/app/stat";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -10,6 +10,10 @@ import {
   setWithholdingRate,
   type DividendActionState,
 } from "@/app/(app)/activity/dividends/actions";
+import {
+  addAllConfirmationText,
+  DISMISS_CONFIRMATION_TEXT,
+} from "@/lib/portfolio/dividends-confirm";
 import type { PendingDividendView } from "@/lib/portfolio/dividends-view";
 
 const idle: DividendActionState = { status: "idle" };
@@ -66,6 +70,7 @@ function DividendRow({ item }: { item: PendingDividendView }) {
     dismissDividend,
     idle,
   );
+  const [confirmingDismiss, setConfirmingDismiss] = useState(false);
   const busy = adding || dismissing;
   return (
     <li className="flex flex-col gap-2 rounded-lg border px-3 py-2">
@@ -94,15 +99,55 @@ function DividendRow({ item }: { item: PendingDividendView }) {
       <div className="flex gap-2">
         <form action={add} className="flex-1">
           <input type="hidden" name="key" value={item.key} />
-          <Button type="submit" size="sm" className="w-full" disabled={busy}>
+          <Button
+            type="submit"
+            size="sm"
+            className="min-h-11 w-full"
+            disabled={busy}
+          >
             {adding ? "Agregando…" : "Agregar"}
           </Button>
         </form>
-        <form action={dismiss}>
+        <form action={dismiss} className="flex flex-col gap-2">
           <input type="hidden" name="key" value={item.key} />
-          <Button type="submit" size="sm" variant="outline" disabled={busy}>
-            {dismissing ? "Descartando…" : "Descartar"}
-          </Button>
+          {!confirmingDismiss ? (
+            <Button
+              key="dismiss-ask"
+              type="button"
+              size="sm"
+              variant="outline"
+              className="min-h-11"
+              disabled={busy}
+              onClick={() => setConfirmingDismiss(true)}
+            >
+              Descartar
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm">{DISMISS_CONFIRMATION_TEXT}</p>
+              <div className="flex gap-2">
+                <Button
+                  key="dismiss-confirm"
+                  type="submit"
+                  size="sm"
+                  variant="destructive"
+                  className="min-h-11 flex-1"
+                  disabled={busy}
+                >
+                  {dismissing ? "Descartando…" : "Sí, descartar"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => setConfirmingDismiss(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
         </form>
       </div>
       <StateNotice
@@ -112,7 +157,14 @@ function DividendRow({ item }: { item: PendingDividendView }) {
   );
 }
 
-export function DividendList({ items }: { items: PendingDividendView[] }) {
+export function DividendList({
+  items,
+  totalNet,
+}: {
+  items: PendingDividendView[];
+  totalNet: string;
+}) {
+  const [confirmingAll, setConfirmingAll] = useState(false);
   const [state, addAll, pending] = useActionState(confirmDividends, idle);
   return (
     <div className="flex flex-col gap-3">
@@ -121,9 +173,44 @@ export function DividendList({ items }: { items: PendingDividendView[] }) {
           {items.map((item) => (
             <input key={item.key} type="hidden" name="key" value={item.key} />
           ))}
-          <Button type="submit" disabled={pending}>
-            {pending ? "Agregando…" : `Agregar los ${items.length}`}
-          </Button>
+          {!confirmingAll ? (
+            <Button
+              key="add-all-ask"
+              type="button"
+              className="min-h-11"
+              disabled={pending}
+              onClick={() => setConfirmingAll(true)}
+            >
+              {`Agregar los ${items.length}`}
+            </Button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm">
+                {addAllConfirmationText(items.length, totalNet)}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  key="add-all-confirm"
+                  type="submit"
+                  className="min-h-11 flex-1"
+                  disabled={pending}
+                >
+                  {pending
+                    ? "Agregando…"
+                    : `Confirmar: agregar los ${items.length}`}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={pending}
+                  onClick={() => setConfirmingAll(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
         </form>
       )}
       <StateNotice state={state} />

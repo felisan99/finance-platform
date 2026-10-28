@@ -64,3 +64,12 @@ export function buildPendingDividendsView(
 }
 
 export const withholdingText = (rate: Dec): string => formatPercent(rate);
+
+/** Suma neta de lo propuesto, ya formateada: la confirmación de "Agregar los N" la muestra. */
+export function pendingDividendsTotalNet(
+  items: readonly PendingDividend[],
+): string {
+  return formatMoney(
+    items.reduce((sum, { suggestion }) => sum.plus(suggestion.net), d("0")),
+  );
+}

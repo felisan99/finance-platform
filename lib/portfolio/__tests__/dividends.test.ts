@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { computeEngine, d, type Transaction } from "@/lib/engine";
 import {
   buildPendingDividendsView,
+  pendingDividendsTotalNet,
   withholdingValueOf,
 } from "../dividends-view";
+import { addAllConfirmationText } from "../dividends-confirm";
 import { dividendToInsertRows, dividendToTransactions } from "../mappers";
 import type { PortfolioRef } from "../portfolio-scope";
 
@@ -133,5 +135,31 @@ describe("vista de dividendos", () => {
     expect(withholdingValueOf(d("0.15"))).toBe("0.15");
     expect(withholdingValueOf(d("0"))).toBe("0");
     expect(withholdingValueOf(d("0.27"))).toBe("0.30");
+  });
+});
+
+describe("confirmación de dividendos", () => {
+  const pending = (net: string) =>
+    ({
+      key: "k",
+      portfolio,
+      suggestion: { ...suggestion, net: d(net) },
+    }) as never;
+
+  it("suma lo neto de todas las propuestas, formateado", () => {
+    const total = pendingDividendsTotalNet([pending("35.7"), pending("10.05")]);
+    expect(total).toBe(pendingDividendsTotalNet([pending("45.75")]));
+    expect(total).toContain("45,75");
+  });
+
+  it("sin propuestas la suma es cero", () => {
+    expect(pendingDividendsTotalNet([])).toContain("0,00");
+  });
+
+  it("el texto concuerda en número y muestra el total recibido", () => {
+    expect(addAllConfirmationText(1, "US$ 5,00")).toContain("1 dividendo ");
+    const many = addAllConfirmationText(3, "US$ 5,00");
+    expect(many).toContain("3 dividendos");
+    expect(many).toContain("US$ 5,00");
   });
 });
