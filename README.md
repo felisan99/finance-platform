@@ -1,297 +1,325 @@
 <div align="center">
 
-<img src="public/icons/icon-192.png" alt="" width="96" height="96" />
-
 # Portfolio Tracker
 
-**Seguimiento personal de inversiones: acciones, ETFs y cripto, con métricas serias y costo de operación cero.**
-
-Instalable en el iPhone como app, con widget en la pantalla de inicio.
+**A personal investment tracker for stocks, ETFs and crypto. Every number is derived from a ledger of transactions with exact decimal math, returns are measured time- and money-weighted against a benchmark, and it runs at zero cost. It installs on the iPhone as an app and comes with a home-screen widget.**
 
 [![CI](https://github.com/felisan99/finance-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/felisan99/finance-platform/actions/workflows/ci.yml)
-[![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
-[![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ecf8e?logo=supabase&logoColor=white)](https://supabase.com)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![Vitest](https://img.shields.io/badge/tests-1779%20unitarios-6e9f18?logo=vitest&logoColor=white)](#tests)
-[![PWA](https://img.shields.io/badge/PWA-instalable-5a0fc8?logo=pwa&logoColor=white)](#pwa-y-widget)
-[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-yellow)](LICENSE)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ECF8E?logo=supabase&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-1779%20unit-2EA44F?logo=vitest&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
+  <img src="docs/images/hero.png" alt="Asset detail, home dashboard and positions screens of the app on a phone" width="100%">
+</picture>
+
+<sub>Screenshots from a demo account. The interface is in Spanish because it was built for users in Uruguay.</sub>
 
 </div>
 
----
+## At a glance
 
-## Contenido
+|                        |                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Source of truth**    | One ledger of transactions per account. Positions, cash, gains and returns are recomputed from it, never stored.                                                         |
+| **Calculation engine** | Pure TypeScript (`lib/engine`) with no database, network or clock: average cost, splits, cash, daily value series, TWR, XIRR, drawdown, volatility and what-if analysis. |
+| **Money**              | `decimal.js` end to end. Postgres `numeric` values are read as text, so no amount ever passes through a float.                                                           |
+| **Tests**              | 1,779 unit tests in CI, including property-based tests with fast-check, plus integration tests for row-level security and live tests against real market data.           |
+| **Running cost**       | US$ 0 per month: Vercel Hobby, Supabase Free and Yahoo Finance, with one daily cron.                                                                                     |
+| **Access**             | Invite-only sign-in with 6-digit email codes. No passwords anywhere.                                                                                                     |
 
-- [Qué hace](#qué-hace)
-- [Cómo está hecho](#cómo-está-hecho)
-- [Stack](#stack)
-- [Estructura del repo](#estructura-del-repo)
-- [Empezar](#empezar)
-- [Comandos](#comandos)
-- [Tests](#tests)
-- [Despliegue](#despliegue)
-- [Seguridad y privacidad](#seguridad-y-privacidad)
-- [Documentación](#documentación)
-- [Estado](#estado)
-- [Licencia](#licencia)
+## Features
 
-## Qué hace
+<table>
+<tr>
+<td width="50%" valign="top">
 
-Las **transacciones son la única fuente de verdad**. Posiciones, efectivo, ganancias y rendimientos se derivan de ellas cada vez, con aritmética decimal exacta.
+**Performance against a benchmark.** Cumulative gain, portfolio value and a normalized comparison with the S&P 500 (or Bitcoin for a crypto portfolio), from one week to all time. Shows the time-weighted return (TWR), the money-weighted return (XIRR) and the difference in percentage points.
 
-### 📊 Inicio
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/perf-dark.png">
+  <img src="docs/images/perf.png" alt="Performance card comparing the portfolio with the S&P 500">
+</picture>
 
-- **Valor total** (posiciones + efectivo), cambio del día, **ganancia total** sobre lo aportado y aportado neto.
-- **Rendimiento:** ganancia acumulada, **TWR** (ponderado por tiempo), **XIRR** (ponderado por dinero) y comparación contra un benchmark (S&P 500 o Bitcoin), en rangos de 1S a «Todo».
-- **Ganancia por posición** (abiertas y cerradas), **composición** por activo y por tipo, **rendimiento por mes** y **riesgo** (caída máxima, volatilidad, mejor y peor día).
-- **Actualizar precios:** trae la cotización del momento y la suma como último punto de cada serie.
+</td>
+<td width="50%" valign="top">
 
-### 💼 Posiciones y ficha de cada activo
+**Monthly returns.** Each calendar month of the portfolio next to the benchmark with dividends reinvested. The first and current months are partial, and the card says so.
 
-- Cantidad, costo promedio (las comisiones van al costo), valor, ganancia no realizada y realizada.
-- Ficha por símbolo: **evolución del precio** (1S, 1M, 3M, 1A) con el rango de 52 semanas, **datos de la empresa** y **ganancias contra el consenso**.
-- **«Antes de comprar»:** cómo cambiarían el riesgo y la composición de la cartera si sumás ese activo. No es una recomendación de compra, y la tarjeta lo dice.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/monthly-dark.png">
+  <img src="docs/images/monthly.png" alt="Monthly returns bar chart against the S&P 500">
+</picture>
 
-### 🧾 Actividad e importación
+**Gain by position.** Realized and unrealized, for open and closed positions, in total or for today.
 
-- Alta, edición y baja de compras, ventas, dividendos, depósitos, retiros y splits. Cada cambio pasa por una validación del libro completo antes de guardarse.
-- Al elegir el símbolo, el formulario deja escrita la cotización actual.
-- **Importar CSV** con detección automática del formato:
-  - el **formato simple** propio, con plantilla descargable y el mismo que escribe «Exportar CSV» (sirve de backup);
-  - el **export de Delta**.
-- Vista previa con lo que se va a cargar, lo ignorado y cómo quedaría la cartera. Detecta operaciones repetidas y permite **deshacer una importación entera**.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/gain-dark.png">
+  <img src="docs/images/gain.png" alt="Gain by position as horizontal bars">
+</picture>
 
-### 👀 Watchlist
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
-Símbolos seguidos con su precio y cambio del día, hasta 50 por persona.
+**Allocation.** By position or by asset type, with cash as its own slice.
 
-### 🗂️ Varios portafolios y cripto
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/alloc-dark.png">
+  <img src="docs/images/alloc.png" alt="Allocation donut chart">
+</picture>
 
-- De 1 a 5 portafolios por persona (por ejemplo, uno de acciones y otro de cripto), con la vista **«Todo junto»** que los suma sin mezclar sus cálculos.
-- Cripto como pares `-USD` (`BTC-USD`, `ETH-USD`…).
+</td>
+<td width="50%" valign="top">
 
-### 📱 PWA y widget
+**Asset detail.** Price history (1W, 1M, 3M, 1Y) with the 52-week range, company data and quarterly earnings against the analyst consensus.
 
-- **Instalable** en el iPhone, con modo oscuro según el sistema y pantalla sin conexión. El service worker **no guarda datos financieros en caché**.
-- **Widget de iPhone** (con [Scriptable](https://scriptable.app)) con el valor y la ganancia del día, protegido por un código personal de solo lectura. Guía: [`docs/widget-iphone.md`](docs/widget-iphone.md).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/price-dark.png">
+  <img src="docs/images/price.png" alt="Price history chart with the 52-week range">
+</picture>
 
-### 🔐 Acceso por invitación
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/earn-dark.png">
+  <img src="docs/images/earn.png" alt="Quarterly earnings against consensus">
+</picture>
 
-Se entra con un **código de 6 dígitos por email**, sin contraseñas, y solo pueden registrarse los emails habilitados.
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
-## Cómo está hecho
+**Before you buy.** For any asset you hold or follow, the card shows:
+
+- how a monthly contribution would change the portfolio's sector exposure, concentration and volatility;
+- how similar the asset is to what you already own;
+- what dollar-cost averaging into it would have looked like over 1, 3 or 5 years, including its worst drawdown.
+
+It describes the past and never says "buy".
+
+</td>
+<td width="50%" valign="top">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/before-dark.png">
+  <img src="docs/images/before.png" alt="Before-you-buy analysis card" width="85%">
+</picture>
+
+</td>
+</tr>
+</table>
+
+Also included:
+
+- **Activity and import.** Add, edit and delete buys, sells, dividends, deposits, withdrawals and splits. CSV import recognizes the format from the headers: either the app's own format (the one its CSV export writes, so a backup can be restored) or a Delta export. A preview shows what will be loaded and flags likely duplicates, and a whole import can be undone.
+- **Watchlist** of up to 50 symbols with each one's change for the day.
+- **Multiple portfolios**, up to five (for example, one for stocks and one for crypto), plus an "all together" view that adds them up without mixing their ledgers.
+- **Installable PWA** with an offline screen and dark mode that follows the system setting.
+- **iPhone widget** built on [Scriptable](https://scriptable.app), showing value and today's gain, authenticated by a personal read-only code.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Cliente["📱 Navegador / PWA"]
-        UI["Componentes React<br/>(textos ya formateados)"]
-        W["Widget Scriptable"]
+    subgraph Phone["iPhone / browser"]
+        UI["React UI<br/>(receives preformatted text)"]
+        W["Scriptable widget"]
     end
 
-    subgraph Vercel["▲ Vercel (Next.js 16)"]
-        RSC["Server Components<br/>y Server Actions"]
+    subgraph Vercel["Vercel: Next.js 16"]
+        RSC["Server Components<br/>+ Server Actions"]
         API["/api/widget"]
         CRON["/api/cron/*"]
-        ENG["lib/engine<br/>motor puro"]
+        ENG["lib/engine<br/>pure calculation"]
     end
 
-    subgraph Supabase["🟢 Supabase"]
-        AUTH["Auth (OTP)"]
-        DB[("Postgres + RLS")]
+    subgraph Supabase
+        AUTH["Auth<br/>email OTP"]
+        DB[("Postgres<br/>row-level security")]
     end
 
     Y["Yahoo Finance"]
 
     UI <--> RSC
-    W -- "Bearer token" --> API
+    W -- "Bearer code" --> API
     RSC --> ENG
     API --> ENG
     RSC <--> AUTH
-    RSC <-- "sesión del usuario (RLS)" --> DB
-    API -- "widget_ledger" --> DB
-    CRON -- "precios diarios" --> DB
+    RSC <-- "user session, RLS" --> DB
+    API -- "widget_ledger()" --> DB
+    CRON -- "daily closes" --> DB
     CRON --> Y
-    RSC -- "cotización del momento" --> Y
+    RSC -- "on-demand quotes, rate-limited" --> Y
 ```
 
-**Principios:**
+On each page request the server reads the user's ledger and the stored prices under row-level security, runs the engine, and sends the client text that is already formatted. The client never receives raw amounts or the calculation code.
 
-- **Motor puro (`lib/engine`).** Sin base, sin red y sin `Date.now()`: recibe transacciones, precios y la fecha de hoy, y devuelve posiciones, efectivo, series y rendimientos. ESLint lo hace cumplir.
-- **Dinero con `decimal.js`.** Los `numeric` de Postgres se leen como texto y entran al motor sin pasar por floats.
-- **Datos de mercado en la base.** Un cron diario guarda los cierres (al menos 5 años por instrumento). Ninguna visita consulta al proveedor salvo «Actualizar precios», con límite de uso.
-- **Todo lo externo es no confiable.** Lo que llega del usuario, de un CSV o de Yahoo se valida con Zod en el borde.
-- **El servidor formatea.** Los componentes de cliente reciben textos y números listos (formato es-UY, hora de Montevideo). Así `decimal.js` no viaja al navegador.
+## Why it is built this way
+
+Each decision below answers a concrete constraint. The full log, with the alternatives that were considered, is in [`docs/decisions.md`](docs/decisions.md) (in Spanish).
+
+**1. The ledger is the only source of truth.** No stored positions or balances can drift out of sync. Editing a trade from a year ago, undoing an import or adding a split replays the ledger, and every number updates. The cost is recomputing on every request. The full dashboard renders in about a second with no cache, and the first bytes stream in around 10 ms, so there is nothing to invalidate. Every add, edit or delete is first checked against the whole ledger (`validateLedgerChange`), so a change can't leave a position below zero.
+
+**2. The engine is pure.** `lib/engine` takes transactions, prices and "today" as arguments and returns results. It never imports the database client or the network and never calls `Date.now()`, and ESLint enforces this. The same code serves:
+
+- the dashboard;
+- the import preview ("how your portfolio would look");
+- the widget;
+- the what-if card.
+
+Because it is pure, it can be tested exhaustively with fixed dates and property-based tests.
+
+**3. Money never touches a float.** Amounts stay `decimal.js` values from the database to the formatter. Postgres `numeric` columns are read as text, and provider prices arrive as decimal strings. The only deliberate `number` is XIRR, because it is a rate shown to the user, not an amount. An acceptance test imports a full Delta export and must reproduce the expected cost basis, realized gain and cash to the last decimal.
+
+**4. Portfolios are never merged.** Average cost is tracked per account. Merging ledgers would mix average costs and apply a split once for each account that holds the stock. Instead, the "all together" view computes each portfolio on its own and adds the results (`combineEngineResults`, `combineSeries`).
+
+**5. Market data is stored, not fetched per visit.** Free providers rate-limit, and Vercel Hobby allows one daily cron. A cron stores daily closes, with at least five years per instrument so the five-year what-if works, and pages read only the database.
+
+- Stored closes are already split-adjusted by the provider, so historical values are un-adjusted using the `SPLIT` entries in the ledger.
+- "Refresh prices" fetches live quotes, with a per-user limit, and appends them as the last point of each series. It updates every series and the benchmark together, or none of them.
+
+**6. The server formats, the client renders.** Client components never import the engine or the formatter, which keeps `decimal.js` out of the browser bundle. Every amount is formatted in one place (es-UY locale, Montevideo time), so the same value never looks different on two screens.
+
+**7. Authorization lives in the database.** Every user table has row-level security, and the default privileges for `anon` and `authenticated` are revoked: each migration that creates a table declares its own `GRANT` and policies. The proxy only redirects. Every page and action verifies the session again with `getClaims()`, and RLS decides what it can read. The secret key is used only by:
+
+- crons;
+- instrument creation;
+- the widget, which may call only one SQL function (`widget_ledger`, executable by nothing but the service role). That function works out from the code whose data to return.
+
+**8. Codes instead of passwords or links.** On iOS a magic link opens in Safari instead of the installed app, so sign-in uses a 6-digit code, limited to 5 attempts per 15 minutes per email. Supabase's public API would let a user set a password and skip that limit, so a trigger deletes any password hash as soon as Auth writes one. Sign-up is restricted to an allowlist by a "before user created" hook.
+
+**9. Nothing in the browser can read the session.** Session cookies are `HttpOnly`, and there is no Supabase client in the browser at all. That allows a Content Security Policy of `connect-src 'self'`: the page can only talk to its own origin.
+
+**10. Provider data is untrusted input.** Every Yahoo response is validated with Zod, field by field. A broken field in company data leaves that field empty instead of failing the page, and failures are never cached.
+
+**11. The widget is long-lived code on someone's phone.** The script is updated by hand, so the endpoint only adds fields and never removes or renames them. The code travels in a header, never in a URL, and only its SHA-256 is stored. If refreshing quotes takes longer than 5 seconds, the widget shows the stored values.
+
+**12. Offline means "last known", never cached financial data.** The service worker caches only the offline screen. The last snapshot shown is kept in `localStorage` as preformatted text and is cleared on the sign-in page.
 
 ## Stack
 
-| Capa             | Tecnología                                                               |
-| ---------------- | ------------------------------------------------------------------------ |
-| Framework        | Next.js 16 (App Router, Server Components, Server Actions), React 19     |
-| Lenguaje         | TypeScript en modo estricto                                              |
-| Base y auth      | Supabase: Postgres con Row Level Security y Auth con código OTP          |
-| UI               | Tailwind CSS 4, componentes de shadcn/ui sobre Base UI, Recharts, Lucide |
-| Cálculo          | decimal.js, date-fns / date-fns-tz                                       |
-| Validación       | Zod 4                                                                    |
-| Datos de mercado | `yahoo-finance2` (detrás de una interfaz intercambiable)                 |
-| CSV              | PapaParse                                                                |
-| Tests            | Vitest y fast-check (propiedades)                                        |
-| Hosting          | Vercel (plan Hobby) con Vercel Cron                                      |
-| CI               | GitHub Actions: lint, typecheck y tests                                  |
+| Layer         | Choice                                                               |
+| ------------- | -------------------------------------------------------------------- |
+| Framework     | Next.js 16 (App Router, Server Components, Server Actions), React 19 |
+| Language      | TypeScript, strict mode                                              |
+| Data and auth | Supabase: Postgres with row-level security, Auth with email OTP      |
+| UI            | Tailwind CSS 4, shadcn/ui on Base UI, Recharts, Lucide               |
+| Math          | decimal.js, date-fns / date-fns-tz                                   |
+| Validation    | Zod 4 at every boundary: forms, CSV, provider responses              |
+| Market data   | `yahoo-finance2` behind a swappable provider interface               |
+| Tests         | Vitest, fast-check                                                   |
+| Hosting       | Vercel Hobby with Vercel Cron                                        |
+| CI            | GitHub Actions: lint, typecheck, unit tests                          |
 
-## Estructura del repo
+## Quickstart
 
-```text
-app/
-  (app)/              Pantallas con sesión: Inicio, Posiciones, Actividad, Watchlist, Más
-  (auth)/login/       Ingreso con código
-  api/cron/           Jobs de precios (protegidos con CRON_SECRET)
-  api/widget/         Endpoint del widget de iPhone
-components/
-  app/                Componentes de la app
-  ui/                 Primitivas de shadcn/ui
-lib/
-  engine/             Motor de cálculo puro: posiciones, efectivo, series, TWR, XIRR, riesgo…
-  importers/          Parsers de CSV (formato simple y Delta)
-  portfolio/          Lectura de la base, armado de vistas y formato
-  market-data/        Proveedor de precios (validación y saneo de Yahoo)
-  market-jobs/        Lógica de los crons de precios
-  db/                 Clientes de Supabase, sesión y tipos generados
-  widget/             Respuesta y script del widget
-  security/           CSP y cabeceras
-  validation/         Esquemas Zod de entrada
-supabase/
-  migrations/         Esquema, RLS y funciones SQL (18 migraciones)
-  templates/          Correos de Auth
-  config.toml         Configuración de Auth versionada
-docs/                 Guías y bitácora de decisiones
-public/               Íconos, service worker y pantalla sin conexión
-```
-
-## Empezar
-
-**Requisitos:** Node 22 o superior, pnpm 11 y una cuenta gratuita de [Supabase](https://supabase.com). No hace falta Docker: Supabase se usa solo en la nube.
-
-### 1. Instalar
+Requires Node 22+, pnpm 11 and a free [Supabase](https://supabase.com) project. Supabase runs only in the cloud, so Docker isn't needed.
 
 ```bash
 pnpm install
-cp .env.example .env.local
+cp .env.example .env.local          # fill in your Supabase URL and keys, and a CRON_SECRET
+
+# point the scripts at your development project:
+# put its ref under "dev" in supabase/projects.json, then
+pnpm supabase login
+pnpm supabase link --project-ref <your-ref>
+pnpm db:push                        # apply the migrations
+pnpm db:config-diff                 # review the Auth config diff before applying it
+pnpm supabase config push
+
+pnpm dev                            # http://localhost:3000
 ```
 
-### 2. Crear la base
+Next, set up your own SMTP server in the Supabase dashboard so sign-in codes get delivered (the SMTP settings never go in the repo), and add your email to the allowlist:
 
-1. Creá un proyecto en Supabase (el de desarrollo de este repo se llama `finance-dev`).
-2. Poné su ref en `supabase/projects.json` (clave `dev`). Los scripts `pnpm db:*` y los tests de integración se niegan a operar sobre cualquier otro proyecto.
-3. Vinculá el proyecto y aplicá las migraciones:
-
-   ```bash
-   pnpm supabase login
-   pnpm supabase link --project-ref <tu-ref>
-   pnpm db:push
-   pnpm db:config-diff   # revisá el diff antes de aplicarlo
-   pnpm supabase config push
-   ```
-
-4. Para que lleguen los códigos, cargá un SMTP propio en el panel de Supabase (Authentication → SMTP). Nunca va en el repo.
-5. Habilitá tu email:
-
-   ```sql
-   insert into public.allowed_emails (email) values ('vos@ejemplo.com');
-   ```
-
-El detalle (claves, hook de registro, límites del plan gratuito, pausa por inactividad) está en [`docs/supabase-setup.md`](docs/supabase-setup.md).
-
-### 3. Variables de entorno
-
-| Variable                               | Para qué                                                                             |
-| -------------------------------------- | ------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_SUPABASE_URL`             | URL del proyecto de Supabase                                                         |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Clave publicable (`sb_publishable_…`): pública por diseño, los datos los protege RLS |
-| `SUPABASE_SECRET_KEY`                  | Clave secreta (`sb_secret_…`): **solo servidor**, salta RLS                          |
-| `CRON_SECRET`                          | Protege `/api/cron/*`. Generala con `openssl rand -hex 32` (mínimo 32 caracteres)    |
-| `MARKET_DATA_PROVIDER`                 | `yahoo` (el único implementado)                                                      |
-| `APP_TIMEZONE`                         | `America/Montevideo`                                                                 |
-
-`.env.local` está en el `.gitignore`. La plantilla comentada es [`.env.example`](.env.example).
-
-### 4. Levantar
-
-```bash
-pnpm dev   # http://localhost:3000
+```sql
+insert into public.allowed_emails (email) values ('you@example.com');
 ```
 
-Para probar con datos, importá [`lib/engine/__fixtures__/delta_export.csv`](lib/engine/__fixtures__/delta_export.csv) desde **Más → Importar operaciones**. Es un export de Delta de ejemplo.
+To try the app with data, import the sample Delta export [`lib/engine/__fixtures__/delta_export.csv`](lib/engine/__fixtures__/delta_export.csv) from **Más → Importar operaciones**.
 
-## Comandos
+### Environment variables
 
-| Comando                 | Qué hace                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------- |
-| `pnpm dev`              | Servidor de desarrollo                                                                            |
-| `pnpm build`            | Build de producción                                                                               |
-| `pnpm test`             | Tests unitarios (motor, importadores, vistas, seguridad)                                          |
-| `pnpm test:coverage`    | Los mismos tests, con cobertura                                                                   |
-| `pnpm test:integration` | RLS, registro por invitación y funciones SQL contra la base de desarrollo (necesita `.env.local`) |
-| `pnpm test:live`        | Cron contra Yahoo real y la app por HTTP con sesión real (a mano; antes, `pnpm build`)            |
-| `pnpm lint`             | ESLint, incluidas las reglas que mantienen puro a `lib/engine`                                    |
-| `pnpm typecheck`        | `next typegen` + `tsc --noEmit`                                                                   |
-| `pnpm format`           | Prettier                                                                                          |
-| `pnpm db:push`          | Aplica las migraciones a la base de desarrollo                                                    |
-| `pnpm db:types`         | Regenera `lib/db/database.types.ts`                                                               |
-| `pnpm db:config-diff`   | Diferencias de Auth entre `supabase/config.toml` y la base (antes de un `config push`)            |
+| Variable                               | Purpose                                                                                                           |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Supabase project URL                                                                                              |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key. Public by design: the data is protected by RLS                                                   |
+| `SUPABASE_SECRET_KEY`                  | Secret key, server only. Bypasses RLS                                                                             |
+| `CRON_SECRET`                          | Bearer token for `/api/cron/*`, at least 32 characters (`openssl rand -hex 32`). Without it the crons fail closed |
+| `MARKET_DATA_PROVIDER`                 | `yahoo`                                                                                                           |
+| `APP_TIMEZONE`                         | `America/Montevideo`                                                                                              |
 
-## Tests
+## Commands
 
-| Suite           | Qué cubre                                                                                                                                            | Dónde corre                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| **Unitarios**   | Motor (costo promedio, efectivo, splits, TWR, XIRR, riesgo), importadores, vistas, formato, CSP, widget. Incluye tests de propiedades con fast-check | Local y CI                          |
-| **Aceptación**  | El export de Delta del fixture, importado y calculado, tiene que dar exactamente los números del spec (§8.3)                                         | Local y CI                          |
-| **Integración** | Aislamiento entre usuarios (RLS), registro por invitación, importación atómica, límites de uso                                                       | Local, contra la base de desarrollo |
-| **En vivo**     | El cron real contra Yahoo real y cada pantalla por HTTP con una sesión real                                                                          | A mano                              |
+| Command                          | What it does                                                                                        |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `pnpm dev` / `pnpm build`        | Development server / production build                                                               |
+| `pnpm test`                      | Unit tests: engine, importers, views, formatting, security headers, widget                          |
+| `pnpm test:integration`          | RLS isolation, invite-only sign-up, atomic imports and rate limits, against the development project |
+| `pnpm test:live`                 | Runs the real cron against Yahoo and loads every screen over HTTP with a real session (manual)      |
+| `pnpm lint`                      | ESLint, including the rules that keep `lib/engine` pure                                             |
+| `pnpm typecheck`                 | `next typegen` + `tsc --noEmit`                                                                     |
+| `pnpm db:push` / `pnpm db:types` | Apply migrations / regenerate database types (development project only)                             |
 
-> El fixture `lib/engine/__fixtures__/delta_export.csv` es un export de Delta con sus casos borde: filas, patas de efectivo automáticas, comisiones faltantes y un efectivo negativo transitorio.
+The `db:*` scripts and the integration tests refuse to run against any project other than the one listed as `dev` in `supabase/projects.json`.
 
-## Despliegue
+## Repository layout
 
-- **Vercel** (plan Hobby), funciones en Dublín (`vercel.json`), cerca de la base.
-- **Cron:** `/api/cron/daily-prices` corre de lunes a viernes a las 22:00 UTC, con `Authorization: Bearer ${CRON_SECRET}`.
-- Variables de Production: las cuatro de Supabase y el cron. Las `NEXT_PUBLIC_*` se incorporan al compilar, así que hay que cargarlas antes del deploy.
-- **`.vercelignore`** deja afuera fixtures, docs, tests y `supabase/`. La CLI de Vercel no respeta todo el `.gitignore`: revisá qué sube antes de correr `vercel`.
+```
+app/
+  (app)/            Home, Positions, Activity, Watchlist, More
+  (auth)/login/     Sign-in with an email code
+  api/cron/         Daily prices and backfill (Bearer CRON_SECRET)
+  api/widget/       iPhone widget endpoint
+lib/
+  engine/           Pure calculation: positions, cash, series, TWR, XIRR, risk, what-if
+  importers/        CSV parsers (app format and Delta) with format detection
+  portfolio/        Database reads, view models and formatting for the UI
+  market-data/      Provider interface, Yahoo client, validation and sanitizing
+  market-jobs/      Cron jobs: backfill, daily closes, split and dividend re-adjustments
+  db/               Supabase clients, session, cookie options, generated types
+  widget/           Widget response and the Scriptable script
+  security/         Content Security Policy
+  validation/       Zod schemas for every input
+supabase/
+  migrations/       Schema, RLS policies and SQL functions (18 migrations)
+  templates/        Auth email templates
+docs/               Design log, operations and user guides (in Spanish)
+```
 
-## Seguridad y privacidad
+## Documentation
 
-- **Row Level Security** en todas las tablas de usuario, con los privilegios por defecto revocados. Cada migración que crea una tabla declara sus `GRANT` y su RLS.
-- **Sin contraseñas:** se entra solo con el código del correo, con 5 intentos por 15 minutos por email. Un trigger borra cualquier hash de contraseña que Auth llegue a escribir.
-- **Sesión en cookies `HttpOnly`** (y `Secure` con HTTPS). No hay cliente de Supabase en el navegador.
-- **La clave secreta nunca llega al cliente.** Se usa solo en crons, en el alta de instrumentos y en el widget, siempre a través de una función SQL que fija de quién son los datos.
-- **CSP** (`connect-src 'self'`) y cabeceras de seguridad en producción.
-- **Crons** con comparación del secreto en tiempo constante. Si el secreto falta o es corto, fallan cerrados.
-- **Widget:** el código personal se guarda solo como SHA-256 y viaja en el header, nunca en la URL.
+The project was built in phases from a written spec, with a decision log kept along the way. The spec is in English and the rest of the documentation is in Spanish.
 
-Los riesgos residuales aceptados están en [`docs/decisions.md`](docs/decisions.md), en «Revisión de seguridad».
+| Document                                                   | Covers                                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [PROJECT_SPEC.md](PROJECT_SPEC.md)                         | Full specification: data model, engine rules, market data, import, phases      |
+| [docs/decisions.md](docs/decisions.md)                     | Decision log: deviations from the spec, trade-offs, incidents, security review |
+| [docs/supabase-setup.md](docs/supabase-setup.md)           | Environments, keys, invitations, SMTP, crons                                   |
+| [docs/limits.md](docs/limits.md)                           | Free-tier limits that shaped the design                                        |
+| [docs/importar-csv.md](docs/importar-csv.md)               | CSV import guide for users                                                     |
+| [docs/widget-iphone.md](docs/widget-iphone.md)             | Widget setup guide                                                             |
+| [docs/comprobacion-manual.md](docs/comprobacion-manual.md) | Manual acceptance checklist                                                    |
+| [CLAUDE.md](CLAUDE.md)                                     | Project rules for contributors and coding agents                               |
 
-## Documentación
+## Status
 
-| Documento                                                    | Contenido                                              |
-| ------------------------------------------------------------ | ------------------------------------------------------ |
-| [`PROJECT_SPEC.md`](PROJECT_SPEC.md)                         | Especificación completa: modelo de datos, motor, fases |
-| [`docs/decisions.md`](docs/decisions.md)                     | Bitácora de decisiones y desvíos respecto del spec     |
-| [`docs/supabase-setup.md`](docs/supabase-setup.md)           | Entornos, claves, invitaciones, SMTP, crons            |
-| [`docs/importar-csv.md`](docs/importar-csv.md)               | Guía de importación para quien usa la app              |
-| [`docs/widget-iphone.md`](docs/widget-iphone.md)             | Cómo instalar el widget                                |
-| [`docs/comprobacion-manual.md`](docs/comprobacion-manual.md) | Lista de comprobación manual                           |
-| [`docs/limits.md`](docs/limits.md)                           | Límites de los planes gratuitos                        |
-| [`CLAUDE.md`](CLAUDE.md)                                     | Reglas del proyecto (también las sigue Claude Code)    |
+Phases 0 to 6 are done:
 
-## Estado
+- calculation engine and Delta importer;
+- database with RLS and invite-only access;
+- market data and crons;
+- the full interface, watchlist and asset detail;
+- PWA and widget;
+- multiple portfolios and crypto.
 
-- [x] **Fases 0 a 6:** motor, importador de Delta, base con RLS e ingreso por invitación, datos de mercado y crons, interfaz completa, Watchlist, ficha de cada activo, PWA, widget, varios portafolios y cripto.
-- [ ] **Fase 7:** producción (base `finance`, CSP estricta con nonces).
-- [ ] Importar desde IBKR Flex Query.
+The app runs on Vercel against the development database. Next up are the production environment, a strict nonce-based CSP, and import from IBKR Flex Queries.
 
-Es un proyecto personal sin fines comerciales. Los datos de mercado vienen de Yahoo Finance y se muestran solo a personas invitadas.
+## License
 
-## Licencia
-
-[MIT](LICENSE) © 2026 Felipe Santisteban.
+[MIT](LICENSE). Market data comes from Yahoo Finance and is shown only to invited users. This project is not affiliated with Yahoo.
