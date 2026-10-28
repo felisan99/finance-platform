@@ -8,6 +8,7 @@
 
 Instalable en el iPhone como app, con widget en la pantalla de inicio.
 
+[![CI](https://github.com/felisan99/finance-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/felisan99/finance-platform/actions/workflows/ci.yml)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
