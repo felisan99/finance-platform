@@ -7,6 +7,7 @@ import { formatDayHeader } from "@/lib/portfolio/format";
 import type { PortfolioScope } from "@/lib/portfolio/portfolio-scope";
 import { localDateKey } from "@/lib/portfolio/time";
 import type { AssistantConfig } from "./config";
+import type { MemoryItem } from "./memory";
 import { supabaseMemoryStore } from "./memory-store";
 import { createTavilySearch } from "./news/tavily";
 import { buildSystemPrompt } from "./prompt";
@@ -15,20 +16,21 @@ import { buildTools, type ToolTiming } from "./tools";
 
 /**
  * Todo lo que necesita un turno del asistente para quien está en la sesión: tools sobre sus datos
- * (cliente RLS), su memoria y el prompt. Nada de esto usa la clave secreta.
+ * (cliente RLS), su memoria y el prompt. Nada de esto usa la clave secreta. La memoria llega ya
+ * leída (`loadTurnContext`, en paralelo con las otras lecturas del turno).
  */
-export async function prepareTurn(args: {
+export function prepareTurn(args: {
   client: SupabaseClient<Database>;
   userId: string;
   scope: PortfolioScope;
   config: AssistantConfig;
   summary: string | null;
+  memories: readonly MemoryItem[];
   now: Date;
 }) {
-  const { client, scope, config, now } = args;
+  const { client, scope, config, now, memories } = args;
   const ds = supabaseDataSource(client, scope, now);
   const memory = supabaseMemoryStore(client, args.userId);
-  const memories = await memory.list();
   const timings: ToolTiming[] = [];
 
   const tavily = config.tavilyKey ? createTavilySearch(config.tavilyKey) : null;
