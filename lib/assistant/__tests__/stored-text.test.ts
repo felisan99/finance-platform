@@ -3,6 +3,7 @@ import { memoryTextSchema } from "../memory";
 import {
   containsLink,
   looksLikeInstruction,
+  MAX_SCAN_CHARS,
   quoteStoredItem,
   stripLinks,
 } from "../stored-text";
@@ -64,6 +65,40 @@ describe("stripLinks", () => {
   it("no toca un texto sin links", () => {
     const text = "- Preguntó por su rendimiento\n- Quedó pendiente ver EE.UU.";
     expect(stripLinks(text)).toBe(text);
+  });
+});
+
+describe("tickers y datos que no son links", () => {
+  it.each([
+    "Tiene SHOP.TO y RY.TO",
+    "Compró BRK.B y BTC-USD",
+    "Rinde 3.5 por ciento",
+    "Vive en EE.UU.",
+    "Sigue el S&P 500",
+    "Compró el 12.03.2024 y el 2024-03-12",
+  ])("sobrevive %s", (text) => {
+    expect(stripLinks(text)).toBe(text);
+    expect(containsLink(text)).toBe(false);
+  });
+
+  it.each(["example.com", "www.x.org", "https://a.b/c", "foo.io/x"])(
+    "sigue sacando %s",
+    (link) => {
+      expect(containsLink(`ver ${link}`)).toBe(true);
+      expect(stripLinks(`ver ${link} hoy`)).not.toContain(link);
+    },
+  );
+});
+
+describe("tope de largo", () => {
+  it("un texto larguísimo y adversarial termina rápido y queda acotado", () => {
+    const hostile = "a.".repeat(50_000) + "-".repeat(50_000);
+    const start = performance.now();
+    const out = stripLinks(hostile);
+    containsLink(hostile);
+    looksLikeInstruction(hostile);
+    expect(performance.now() - start).toBeLessThan(2000);
+    expect(out.length).toBeLessThanOrEqual(MAX_SCAN_CHARS);
   });
 });
 
