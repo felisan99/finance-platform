@@ -24,6 +24,7 @@ import {
   saveRun,
   saveSummary,
 } from "@/lib/assistant/conversation-store";
+import { supabaseMemoryStore } from "@/lib/assistant/memory-store";
 import { createAssistantModel } from "@/lib/assistant/provider";
 import { prepareTurn } from "@/lib/assistant/session";
 import {
@@ -31,6 +32,7 @@ import {
   summarizeRun,
   type RunMetrics,
 } from "@/lib/assistant/telemetry";
+import { loadTurnContext } from "@/lib/assistant/turn-context";
 import { getSessionUser } from "@/lib/db/auth";
 import { takeRateLimit } from "@/lib/db/rate-limit";
 import { createClient } from "@/lib/db/server";
@@ -79,37 +81,38 @@ export async function POST(request: Request) {
 
   const started = performance.now();
   try {
-    if (
-      !(await takeRateLimit(supabase, "assistant_message")) ||
-      !(await takeRateLimit(supabase, "assistant_daily"))
-    ) {
-      return json(
-        { error: "Hiciste muchas preguntas seguidas. Esperá un rato." },
-        429,
-      );
-    }
-
-    const [conversation, context] = await Promise.all([
-      getConversation(supabase, conversationId),
-      getPortfolioContext(supabase),
-    ]);
-    if (!conversation) return json({ error: GENERIC }, 404);
-    if (!context.scope) {
+    // Los límites deciden primero; las lecturas (solo `select`, RLS) corren mientras tanto.
+    const loaded = await loadTurnContext({
+      takeLimit: (key) => takeRateLimit(supabase, key),
+      getConversation: () => getConversation(supabase, conversationId),
+      getScope: async () => (await getPortfolioContext(supabase)).scope,
+      loadMessages: (found) => loadMessages(supabase, found),
+      listMemories: () => supabaseMemoryStore(supabase, user.id).list(),
+    });
+    if (!loaded.ok) {
+      if (loaded.reason === "rate_limited") {
+        return json(
+          { error: "Hiciste muchas preguntas seguidas. Esperá un rato." },
+          429,
+        );
+      }
+      if (loaded.reason === "no_conversation") {
+        return json({ error: GENERIC }, 404);
+      }
       return json({ error: "Todavía no tenés un portafolio." }, 409);
     }
+    const { conversation, stored } = loaded;
 
     const now = new Date();
-    const [stored, turn] = await Promise.all([
-      loadMessages(supabase, conversation),
-      prepareTurn({
-        client: supabase,
-        userId: user.id,
-        scope: context.scope,
-        config,
-        summary: conversation.summary,
-        now,
-      }),
-    ]);
+    const turn = prepareTurn({
+      client: supabase,
+      userId: user.id,
+      scope: loaded.scope,
+      config,
+      summary: conversation.summary,
+      memories: loaded.memories,
+      now,
+    });
 
     const question: UIMessage = {
       id: message.id,
