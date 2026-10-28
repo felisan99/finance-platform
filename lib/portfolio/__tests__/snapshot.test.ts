@@ -107,7 +107,7 @@ describe("buildSnapshot con el CSV de Delta", () => {
         ],
       }),
     );
-    // VOO 8.95 × 700 = 6265 · SOXX 3 × 500 = 1500 · FSLY 20 × 30 = 600 · ILF 10 × 35 = 350 · NFLX 3 × 100 = 300
+    // VOO 8.95 × 700 = 6265 · SOXX 4 × 500 = 2000 · FSLY 30 × 30 = 900 · ILF 12 × 35 = 420 · NFLX 2 × 100 = 200
     expect(snap.valued.marketValue.toFixed()).toBe("9785");
     expect(snap.valued.totalValue.toFixed()).toBe("10667.745"); // + efectivo 882.745
     expect(snap.valued.unrealizedPnl.toFixed()).toBe("1120.73"); // 9785 − 8664.27
@@ -160,9 +160,9 @@ describe("buildSnapshot con el CSV de Delta", () => {
     expect(snap.prices.get("SOXX")).toMatchObject({ source: "close" });
     expect(num(snap.prices.get("SOXX")?.price ?? null)).toBe("562.69");
     expect(snap.prices.get("ILF")).toMatchObject({ source: "close" });
-    // Cambio del día de SOXX: (562.69 − 560) × 3 = 8.07
+    // Cambio del día de SOXX: (562.69 − 560) × 4 = 10.76
     const soxx = snap.valued.positions.find((p) => p.symbol === "SOXX");
-    expect(num(soxx?.dayChange ?? null)).toBe("8.07");
+    expect(num(soxx?.dayChange ?? null)).toBe("10.76");
   });
 
   it("guarda las filas, las transacciones del motor y los índices de instrumentos", () => {
@@ -266,7 +266,7 @@ describe("buildSnapshot con «Todo junto»", () => {
     expect(
       snap.parts[1]!.transactions.every((tx) => tx.accountId === "acc-2"),
     ).toBe(true);
-    // Efectivo: 882,745 del primero + 999 del segundo (2000 − 1000 − 1).
+    // Efectivo: 882.745 del primero + 999 del segundo (2000 − 1000 − 1).
     expect(snap.engine.cash.toFixed()).toBe("1881.745");
     expect(snap.engine.totals.openCostBasis.toFixed()).toBe(
       one.engine.totals.openCostBasis.plus(1001).toFixed(),

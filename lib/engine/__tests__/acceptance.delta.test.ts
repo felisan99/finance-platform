@@ -39,7 +39,7 @@ describe("importador: CSV de Delta", () => {
     );
   });
 
-  it("mapea 20 BUY, 5 SELL y 3 DEPOSIT reales (9300 en total)", () => {
+  it("mapea 20 BUY, 5 SELL y 3 DEPOSIT (9300 en total)", () => {
     const count = (type: string) =>
       parsed.transactions.filter((t) => t.type === type).length;
     expect([
@@ -112,7 +112,7 @@ describe("importador: CSV de Delta", () => {
     expect(parseDeltaCsv(csv).transactions.map((t) => t.externalId)).toEqual(
       ids,
     );
-    expect(ids.every((id) => !id.includes("#"))).toBe(true); // ninguna fila idéntica en el archivo real
+    expect(ids.every((id) => !id.includes("#"))).toBe(true); // ninguna fila idéntica en el archivo
   });
 
   it("las transacciones quedan en orden cronológico", () => {
@@ -125,10 +125,10 @@ describe("Aceptación §8.3: motor sobre el CSV de Delta (costo promedio, comisi
   it("posiciones abiertas: cantidad y costo base", () => {
     const expected: [symbol: string, quantity: string, costBasis: string][] = [
       ["VOO", "8.95", "5724.77"],
-      ["SOXX", "3", "2069.5"],
-      ["FSLY", "20", "346.80"],
-      ["ILF", "10", "331.60"],
-      ["NFLX", "3", "191.60"],
+      ["SOXX", "4", "2069.5"],
+      ["FSLY", "30", "346.80"],
+      ["ILF", "12", "331.60"],
+      ["NFLX", "2", "191.60"],
     ];
     const open = result.positions.filter((p) => p.isOpen);
     expect(open.map((p) => p.symbol).sort()).toEqual(

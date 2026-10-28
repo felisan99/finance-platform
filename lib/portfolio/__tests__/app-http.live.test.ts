@@ -342,10 +342,10 @@ describe("la app por HTTP con sesión real (aceptación de la Fase 4)", () => {
     // Las cinco abiertas, con su cantidad y costo base.
     for (const [symbol, quantity, cost] of [
       ["VOO", "8,95", "US$ 5.724,77"],
-      ["SOXX", "3", "US$ 2.069,50"],
-      ["FSLY", "20", "US$ 346,80"],
-      ["ILF", "10", "US$ 331,60"],
-      ["NFLX", "3", "US$ 191,60"],
+      ["SOXX", "4", "US$ 2.069,50"],
+      ["FSLY", "30", "US$ 346,80"],
+      ["ILF", "12", "US$ 331,60"],
+      ["NFLX", "2", "US$ 191,60"],
     ] as const) {
       expect(html, symbol).toContain(symbol);
       expect(html, `${symbol} costo`).toContain(`(costo ${cost})`);

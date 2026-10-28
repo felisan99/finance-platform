@@ -110,8 +110,8 @@ describe("costo promedio (spec §6.1)", () => {
   });
 
   it("las cantidades fraccionarias suman exactas (sin error de float)", () => {
-    let p = applyBuy(emptyPosition, buy(T, "VOO", "0.7", "655.2", "1"));
-    p = applyBuy(p, buy(T, "VOO", "1.3", "661.1", "1"));
+    let p = applyBuy(emptyPosition, buy(T, "VOO", "0.4", "655.2", "1"));
+    p = applyBuy(p, buy(T, "VOO", "1.2", "661.1", "1"));
     p = applyBuy(p, buy(T, "VOO", "0.35", "677", "1"));
     expectDec(p.quantity, "1.95");
   });

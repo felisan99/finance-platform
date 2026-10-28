@@ -384,17 +384,17 @@ Guardar un export de Delta como `lib/engine/__fixtures__/delta_export.csv`. Con 
 | Símbolo | Cantidad | Costo base (USD) |
 |---|---|---|
 | VOO | 8.95 | 5724.77 |
-| SOXX | 3 | 2069.5 |
-| FSLY | 20 | 346.80 |
-| ILF | 10 | 331.60 |
-| NFLX | 3 | 191.60 |
+| SOXX | 4 | 2069.50 |
+| FSLY | 30 | 346.80 |
+| ILF | 12 | 331.60 |
+| NFLX | 2 | 191.60 |
 | **Total** | | **8664.27** |
 
 **Posiciones cerradas — ganancia realizada:**
 | Símbolo | Realizado (USD) |
 |---|---|
 | MELI | 180.55 |
-| URTH | 42.7 |
+| URTH | 42.70 |
 | KOS | 11.135 |
 | QCOM | 7.52 |
 | TTWO | 5.11 |

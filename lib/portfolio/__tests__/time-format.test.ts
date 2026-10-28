@@ -45,7 +45,7 @@ describe("formatMoney", () => {
       "+US$ 429,83",
     );
     expect(plain(formatMoney(d("-38.76194"), { signed: true }))).toBe(
-      "-US$ 49,31",
+      "-US$ 38,76",
     );
     expect(plain(formatMoney(d("0"), { signed: true }))).toBe("US$ 0,00");
   });

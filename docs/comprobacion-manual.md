@@ -15,14 +15,14 @@ Ingresá con tu email: te llega un **código de 6 dígitos** al correo (puede ta
 ## 1. Importar operaciones
 
 1. **Más → Importar operaciones (CSV)** (o **Actividad → Importar CSV**). Arriba está la guía del formato, con la plantilla para descargar.
-2. **Delta:** elegí `delta_PORTAFOLIO PRINCIPAL_230902026_1.csv` y tocá **Ver vista previa**.
+2. **Delta:** elegí un export de Delta (para probar, `lib/engine/__fixtures__/delta_export.csv`) y tocá **Ver vista previa**.
 3. La vista previa tiene que decir: **Formato: Delta**, **operaciones nuevas** (las compras, ventas y depósitos), **filas ignoradas** por ser "patas de efectivo automáticas de Delta" (es a propósito), **0 con error**, y 10 **instrumentos nuevos** (o menos si ya existían) y "Cómo quedaría tu portafolio":
 
    | Dato                       | Valor esperado |
    | -------------------------- | -------------- |
-   | Efectivo                   | 882,745      |
-   | Costo base de las abiertas | 8.664,27    |
-   | Ganancia realizada         | 247,015       |
+   | Efectivo                   | 882,745        |
+   | Costo base de las abiertas | 8.664,27       |
+   | Ganancia realizada         | 247,015        |
    | Posiciones abiertas        | 5              |
 
    Abrí **Ver las N operaciones que se van a cargar**: fechas día/mes/año, tipo, símbolo, cantidad y precio.
@@ -44,11 +44,11 @@ En **Posiciones**, debajo de cada tarjeta dice "Exacto: …" con el valor sin re
 
 | Posición | Cantidad | Costo base (exacto) |
 | -------- | -------- | ------------------- |
-| VOO      | 8,95    | 5.724,77         |
-| SOXX     | 3        | 2.069,50            |
-| FSLY     | 20       | 346,8               |
-| ILF      | 10       | 331,6               |
-| NFLX     | 3        | 191,6               |
+| VOO      | 8,95     | 5.724,77            |
+| SOXX     | 4        | 2.069,5             |
+| FSLY     | 30       | 346,8               |
+| ILF      | 12       | 331,6               |
+| NFLX     | 2        | 191,6               |
 
 - **Costo base (abiertas):** 8.664,27 · **Efectivo:** 882,745 · **Realizado (todas):** 247,015.
 - **Mostrar posiciones cerradas (5):** MELI +180,55 · URTH +42,70 · KOS +11,14 · QCOM +7,52 · TTWO +5,11.
@@ -119,7 +119,7 @@ Tocá una posición (por ejemplo **AAPL**) o un símbolo de la Watchlist:
 
 ## 7. La app instalada en el iPhone (Fase 6)
 
-Dirección: **https://finance-platform-jade.vercel.app** (apunta a la base de desarrollo `finance-dev` hasta la Fase 7). Hacelo con **Safari** (no Chrome) en el iPhone:
+Dirección: **la URL del proyecto en Vercel** (`vercel project ls`; apunta a la base de desarrollo `finance-dev` hasta la Fase 7). Hacelo con **Safari** (no Chrome) en el iPhone:
 
 1. Abrí la dirección y pedí el código con tu email. **Fijate en el correo:** que llegue (mirá también en spam), cómo se ve (remitente, asunto "Tu código de ingreso a Portfolio Tracker", el código grande) y cuánto tarda. Escribí el código y entrá.
 2. **Compartir → Agregar a pantalla de inicio.** El ícono es un fondo casi negro con un trazo de gráfico blanco y el nombre "Portfolio".

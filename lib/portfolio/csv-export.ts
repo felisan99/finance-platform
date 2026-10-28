@@ -37,7 +37,7 @@ export function csvText(value: string | null | undefined): string {
     : safe;
 }
 
-/** Celda numérica: decimal canónico sin ceros de relleno (`8.9500000` → `8.95`). */
+/** Celda numérica: decimal canónico sin ceros de relleno (`8.95000000` → `8.95`). */
 function csvNumber(value: string | null): string {
   return value === null ? "" : d(value).toFixed();
 }

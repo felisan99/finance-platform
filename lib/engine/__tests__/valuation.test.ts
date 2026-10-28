@@ -243,13 +243,13 @@ describe("valuePortfolio: bordes", () => {
   });
 
   it("cantidades fraccionarias: sin errores de float", () => {
-    const result = computeEngine([buy(T2, "VOO", "8.95", "662.40")]);
+    const result = computeEngine([buy(T2, "VOO", "7.483", "662.40")]);
     const voo = bySymbol(
       valuePortfolio(result, new Map([["VOO", price("707.6", "712.78")]])),
       "VOO",
     );
-    exact(voo.marketValue, "5294.9708"); // 8.95 × 707.6
-    exact(voo.dayChange, "-38.76194"); // (707.6 − 712.78) × 8.95 = −5.18 × 8.95
+    exact(voo.marketValue, "5294.9708"); // 7.483 × 707.6
+    exact(voo.dayChange, "-38.76194"); // (707.6 − 712.78) × 7.483 = −5.18 × 7.483
   });
 
   it("no muta el resultado del motor ni los precios", () => {

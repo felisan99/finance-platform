@@ -139,7 +139,7 @@ describe("delimitadores y formato del archivo", () => {
   it("tabulaciones (filas copiadas de Google Sheets o Excel)", () => {
     const tsv = [
       "fecha\ttipo\tsimbolo\tcantidad\tprecio\tmonto\tcomision\tnotas",
-      "09/03/2026\tcompra\tVOO\t3\t612,76\t\t1\t",
+      "09/03/2026\tcompra\tVOO\t3\t575,24\t\t1\t",
     ].join("\n");
     const tx = only(parse(tsv));
     expect("price" in tx && tx.price.toFixed()).toBe("575.24");

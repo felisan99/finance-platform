@@ -579,9 +579,7 @@ describe("RPCs de la Fase 4 (integración, finance-dev)", () => {
         const snapshot = await loadPortfolioSnapshot(fresh.client, portfolio!);
         expect(snapshot.parts[0]!.portfolio.account.id).toBe(account);
         expect(snapshot!.engine.cash.toFixed()).toBe("882.745");
-        expect(snapshot!.engine.totals.openCostBasis.toFixed()).toBe(
-          "8664.27",
-        );
+        expect(snapshot!.engine.totals.openCostBasis.toFixed()).toBe("8664.27");
         expect(snapshot!.engine.totals.realizedPnl.toFixed()).toBe("247.015");
         const cost = (s: string) =>
           snapshot!.engine.positions

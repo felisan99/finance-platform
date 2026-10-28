@@ -78,10 +78,10 @@ describe("buildImportPreview: el CSV de Delta en una cuenta vacía", () => {
     expect(
       view.after?.openPositions.map((p) => [p.symbol, p.quantity, p.costBasis]),
     ).toEqual([
-      ["FSLY", "20", "346.8"],
-      ["ILF", "10", "331.6"],
-      ["NFLX", "3", "191.6"],
-      ["SOXX", "3", "2069.5"],
+      ["FSLY", "30", "346.8"],
+      ["ILF", "12", "331.6"],
+      ["NFLX", "2", "191.6"],
+      ["SOXX", "4", "2069.5"],
       ["VOO", "8.95", "5724.77"],
     ]);
   });
