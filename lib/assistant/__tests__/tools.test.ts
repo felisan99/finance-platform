@@ -202,14 +202,14 @@ describe("get_price_history, what_if y get_risk", () => {
     expect(unknown.missing[0]).toContain("no está en la base");
   });
 
-  it("what_if usa el mismo cálculo que «Antes de comprar» y avisa que no es una recomendación", async () => {
+  it("what_if usa el mismo cálculo que «Antes de comprar» y avisa que no predice nada", async () => {
     const result = expectOk(
       await whatIf(demoDataSource(), { simbolo: "KO", monto: 1000 }),
     );
     expect(
       (result.data.compra_unica_con_plata_nueva as Data[])[0]?.concepto,
     ).toBe("KO en tu cartera");
-    expect(result.notes.join(" ")).toContain("no es una recomendación");
+    expect(result.notes.join(" ")).toContain("no predice nada");
     expect(
       (await whatIf(demoDataSource(), { simbolo: "KO", monto: 0 })).ok,
     ).toBe(false);

@@ -19,7 +19,7 @@ const SUGGESTIONS = [
   "¿Cuánto vale hoy mi cartera?",
   "¿Cómo rindió en el último año contra el S&P 500?",
   "¿Qué posiciones movieron la cartera el mes pasado?",
-  "¿Qué tan concentrada está mi cartera?",
+  "¿Qué cambiarías de mi cartera?",
 ];
 
 /** El cuerpo de error de la ruta es `{ error }`; si no, un mensaje genérico. */

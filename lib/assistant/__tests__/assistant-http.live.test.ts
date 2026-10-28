@@ -147,7 +147,7 @@ describe.skipIf(!getAssistantConfig())(
         headers: { cookie: a.jar.header() },
       });
       expect(page.status).toBe(200);
-      expect(await page.text()).toContain("No es asesoramiento financiero");
+      expect(await page.text()).toContain("pueden estar");
 
       const { data: conversation } = await a.client
         .from("assistant_conversations")

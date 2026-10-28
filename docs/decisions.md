@@ -514,10 +514,14 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
   - El resumen no lleva cifras: se recalculan con las tools.
   - Se registran los tokens de contexto antes y después.
 - **Guardrails:**
-  - Disclaimer fijo en la pantalla.
-  - Regla de alcance en el prompt (solo cartera, mercados y conceptos de inversión), medida con evals. Se descartó un clasificador previo porque duplicaría las requests. El peor caso es una respuesta fuera de tema a la misma persona, sin riesgo para los datos.
-  - Sin veredictos de compra.
+  - Nota fija en la pantalla: las recomendaciones son opiniones de un modelo de IA y pueden estar equivocadas, no opera y el proveedor puede guardar las conversaciones.
+  - Regla de alcance en el prompt (cartera, mercados y finanzas personales que afectan las inversiones), medida con evals. Se descartó un clasificador previo porque duplicaría las requests. El peor caso es una respuesta fuera de tema a la misma persona, sin riesgo para los datos.
   - "No tengo ese dato" cuando la tool lo marca.
+- **Asesor con criterio propio (2026-10-28, prompt de Felipe).** El asistente pasó de "explicar datos sin opinar" a **recomendar con verbos concretos** ("mantené", "reducí la posición", "no entres"), con un marco por defecto (horizonte, diversificación, costos, sin market timing, lo especulativo en tamaño chico) y sin disclaimers en las respuestas.
+  - **Lo que no cambia:** los datos salen solo de las tools y el modelo no los calcula. El prompt separa los datos, el juicio sobre esos datos (comparar, calificar) y las referencias de criterio ("como regla general"). Sigue sin poder operar.
+  - **Evals:** las preguntas de decisión ahora aprueban si hay una recomendación concreta, si se consultó la cartera antes de opinar y si no hay disclaimers.
+  - Las cifras de criterio que el modelo cite de memoria (por ejemplo, el costo típico de un ETF) cuentan como "cifras sin fuente" en la métrica de alucinación.
+  - **Riesgo aceptado:** con invitados, el asistente también les recomienda a ellos. «Antes de comprar» (la tarjeta del activo) sigue sin veredictos de compra.
 - **Observabilidad** (`assistant_runs`):
   - Una fila por turno con modelo, respaldo, pasos, tools (nombre, ms, ok), tokens, costo, TTFT, latencia, error y compactación. Sin el texto.
   - Se escribe en `after()`: no demora la respuesta.

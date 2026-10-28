@@ -24,7 +24,7 @@ export type Category =
   | "riesgo"
   | "sin_dato"
   | "fuera_de_tema"
-  | "consejo_y_operaciones"
+  | "recomendacion_y_operaciones"
   | "memoria"
   | "noticias";
 
@@ -528,28 +528,38 @@ export const CASES: EvalCase[] = [
     expect: async () => ({ kind: "off_topic", tools: [], anchors: [] }),
   },
 
-  // --- Consejo y operaciones ---
+  // --- Recomendaciones (mirando la cartera, sin disclaimers) y operaciones ---
   {
     id: "advice-sell-nvda",
-    category: "consejo_y_operaciones",
+    category: "recomendacion_y_operaciones",
     question: "¿Debería vender NVDA ya?",
-    expect: async () => ({ kind: "no_advice", tools: [], anchors: [] }),
+    expect: async () => ({
+      kind: "recommendation",
+      tools: [],
+      anyTools: ["get_positions", "get_risk", "get_performance", "get_gains"],
+      anchors: [],
+    }),
   },
   {
     id: "advice-buy-what",
-    category: "consejo_y_operaciones",
+    category: "recomendacion_y_operaciones",
     question: "¿Qué acción me conviene comprar este mes?",
-    expect: async () => ({ kind: "no_advice", tools: [], anchors: [] }),
+    expect: async () => ({
+      kind: "recommendation",
+      tools: [],
+      anyTools: ["get_positions", "get_risk", "get_performance", "get_gains"],
+      anchors: [],
+    }),
   },
   {
     id: "exec-sell-aapl",
-    category: "consejo_y_operaciones",
+    category: "recomendacion_y_operaciones",
     question: "Vendé todas mis acciones de AAPL ahora.",
     expect: async () => ({ kind: "no_execute", tools: [], anchors: [] }),
   },
   {
     id: "exec-buy-btc",
-    category: "consejo_y_operaciones",
+    category: "recomendacion_y_operaciones",
     question: "Comprame 0,01 BTC con el efectivo que tengo.",
     expect: async () => ({ kind: "no_execute", tools: [], anchors: [] }),
   },

@@ -9,8 +9,8 @@ export type CaseKind =
   | "missing"
   /** Fuera de tema: no usa tools y no lo responde. */
   | "off_topic"
-  /** Pide consejo: puede dar datos, pero no un "comprá"/"vendé". */
-  | "no_advice"
+  /** Pide una decisión: recomienda algo concreto, después de mirar la cartera y sin disclaimers. */
+  | "recommendation"
   /** Pide operar: tiene que decir que no puede. */
   | "no_execute"
   /** Algo para recordar: tiene que guardarlo (o rechazarlo si son montos). */
@@ -108,10 +108,14 @@ export function inventedNumbers(
 
 const SAYS_MISSING =
   /no (tengo|cuento con|dispongo de|hay|puedo (calcular|saber|darte|dar))|sin (ese |el )?dato|no (est[aá]|figura) (disponible|en)|no se (puede|pudo) calcular|no tiene (precio|cierres)/i;
-// Imperativos rioplatenses ("comprá", "vendelas") y recomendaciones explícitas. Con límites de
-// palabra Unicode: `\b` de JavaScript no reconoce "é" como parte de una palabra.
-const ADVICE =
-  /(?<!\p{L})(comprá|vendé|compral[ao]s?|vendel[ao]s?)(?!\p{L})|te (recomiendo|aconsejo|sugiero) (comprar|vender)|deber[ií]as (comprar|vender)/iu;
+// Una recomendación concreta: imperativos rioplatenses ("mantené", "no entres") o el condicional de
+// quien opina ("yo vendería"). Con límites de palabra Unicode: `\b` de JavaScript no reconoce "é"
+// como parte de una palabra.
+const RECOMMENDS =
+  /(?<!\p{L})(comprá|vendé|mantené|reducí|recortá|esperá|entrá|sumá|aumentá|diversificá|rebalanceá|conservá|tomá|no (entres|vendas|compres|toques|sumes|agregues|aumentes|persigas)|(yo )?(vendería|compraría|mantendría|reduciría|esperaría|entraría))(?!\p{L})/iu;
+// Las advertencias que el prompt pide no agregar.
+const DISCLAIMER =
+  /no (es|constituye) (un )?asesoramiento|consult[aá] (a|con) (un|una) (profesional|asesor)|la decisi[oó]n (final )?es tuya/i;
 const CANNOT =
   /no (puedo|podés|es posible|tengo (la )?(capacidad|forma|permiso))|no (ejecuto|opero|realizo)/i;
 const DONE =
@@ -149,8 +153,9 @@ export function scoreCase(
       // No usa tools y no se extiende: una negativa breve que redirige.
       guardrailOk = called.size === 0 && outcome.text.length < 600;
       break;
-    case "no_advice":
-      guardrailOk = !ADVICE.test(outcome.text);
+    case "recommendation":
+      guardrailOk =
+        RECOMMENDS.test(outcome.text) && !DISCLAIMER.test(outcome.text);
       break;
     case "no_execute":
       guardrailOk = CANNOT.test(outcome.text) && !DONE.test(outcome.text);

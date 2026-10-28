@@ -64,8 +64,9 @@ export default async function AssistantPage() {
         }
       />
       <p className="pb-4 text-xs text-muted-foreground">
-        No es asesoramiento financiero y no opera ni cambia tu cartera. Usa un
-        modelo gratuito: el proveedor puede guardar las conversaciones.
+        Las recomendaciones son opiniones de un modelo de IA y pueden estar
+        equivocadas; los números salen de tu cartera. No opera ni cambia nada.
+        Usa un modelo gratuito: el proveedor puede guardar las conversaciones.
       </p>
       {/* `key`: una conversación nueva arranca el chat de cero. */}
       <AssistantChat

@@ -31,7 +31,9 @@ describe("casos de los evals", () => {
               ? "No puedo ejecutar operaciones."
               : expectation.kind === "off_topic"
                 ? "Solo puedo ayudarte con tu cartera e inversiones."
-                : `Según la app: ${expectation.anchors.join(" y ")}.`,
+                : expectation.kind === "recommendation"
+                  ? "Mantené la posición: ya es la más grande."
+                  : `Según la app: ${expectation.anchors.join(" y ")}.`,
         calls: [
           ...expectation.tools,
           ...(expectation.anyTools ?? []).slice(0, 1),

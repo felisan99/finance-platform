@@ -13,7 +13,7 @@ export interface WhatIfInput {
 /**
  * "¿Y si compro?": lo mismo que muestra "Antes de comprar" en el detalle del activo. Qué peso
  * tendría en la cartera con plata nueva y cómo le habría ido a un aporte mensual de ese monto.
- * No es una recomendación y no da veredictos de compra.
+ * Son datos para que el asesor opine: la simulación no predice nada.
  */
 export async function whatIf(
   ds: AssistantDataSource,
@@ -85,7 +85,7 @@ export async function whatIf(
           : [],
       notes: [
         ...(impact?.notes ?? []),
-        "Es una simulación con precios pasados: no predice nada y no es una recomendación de compra.",
+        "Es una simulación con precios pasados: no predice nada.",
       ],
     },
   );

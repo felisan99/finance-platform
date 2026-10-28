@@ -118,7 +118,7 @@ export function buildTools(deps: ToolDeps): ToolSet {
     }),
     what_if: tool({
       description:
-        "Escenario '¿y si compro?': qué peso tendría un activo en la cartera al comprar un monto con plata nueva, y cómo le habría ido a un aporte mensual de ese monto en el pasado. No es una recomendación.",
+        "Escenario '¿y si compro?': qué peso tendría un activo en la cartera al comprar un monto con plata nueva, y cómo le habría ido a un aporte mensual de ese monto en el pasado. Es una simulación con precios pasados, no una predicción.",
       inputSchema: z.object({
         simbolo: symbolInput,
         monto: z

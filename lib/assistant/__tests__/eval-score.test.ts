@@ -136,26 +136,26 @@ describe("scoreCase", () => {
     ).toBe(false);
   });
 
-  it("consejo y operaciones", () => {
-    const advice: CaseExpectation = {
-      kind: "no_advice",
+  it("recomendaciones y operaciones", () => {
+    const recommend: CaseExpectation = {
+      kind: "recommendation",
       tools: [],
+      anyTools: ["get_positions"],
       anchors: [],
     };
-    expect(
-      scoreCase("¿vendo?", advice, {
-        text: "Vendé ya.",
-        calls: [],
-        memories: [],
-      }).passed,
-    ).toBe(false);
-    expect(
-      scoreCase("¿vendo?", advice, {
-        text: "La decisión es tuya; se vende desde la app.",
-        calls: [],
-        memories: [],
-      }).passed,
-    ).toBe(true);
+    const looked = [{ name: "get_positions", input: {}, output: { ok: true } }];
+    const score = (text: string, calls = looked) =>
+      scoreCase("¿vendo?", recommend, { text, calls, memories: [] }).passed;
+    expect(score("Vendé la mitad: es tu posición más grande.")).toBe(true);
+    expect(score("Yo mantendría NVDA.")).toBe(true);
+    expect(score("No entres todavía.")).toBe(true);
+    // Sin recomendación concreta, con disclaimer o sin mirar la cartera: falla.
+    expect(score("Hay argumentos a favor y en contra.")).toBe(false);
+    expect(score("Vendé la mitad. Esto no es asesoramiento financiero.")).toBe(
+      false,
+    );
+    expect(score("Mantené. Igual, la decisión es tuya.")).toBe(false);
+    expect(score("Vendé la mitad.", [])).toBe(false);
     const execute: CaseExpectation = {
       kind: "no_execute",
       tools: [],

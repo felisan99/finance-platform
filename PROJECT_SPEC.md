@@ -519,7 +519,7 @@ A streaming chat ("Asistente") that answers questions about the portfolio being 
 - **Agent:** a ReAct tool-calling loop (Vercel AI SDK + OpenRouter free models, with a fallback model), capped at 6 steps per question.
 - **Tools (read-only, over `lib/engine`):** positions and cash; realized and unrealized gain by asset and period; performance (TWR, XIRR, gain, benchmark); what moved the portfolio between two dates (per-position contribution); an asset's price history; the "what if I buy" scenario; risk (concentration, drawdown, volatility); news (Tavily); and long-term memory. The model never computes: tools return preformatted text, the source and the missing data.
 - **Memory:** conversation history, an automatic summary of old messages, and up to 30 stable facts per person (risk profile, goals), never portfolio figures.
-- **Guardrails:** not financial advice; it cannot trade; it says "no tengo ese dato" instead of guessing; it only sees the signed-in person's data (RLS); it declines off-topic requests; news is untrusted content.
+- **Guardrails:** it acts as an opinionated advisor that recommends concrete actions (a change requested on 2026-10-28), but every portfolio figure comes from a tool and it never computes one; it cannot trade; it says "no tengo ese dato" instead of guessing; it only sees the signed-in person's data (RLS); it declines off-topic requests; news is untrusted content.
 - **Observability and evals:** per-turn metrics (tools, tokens, latency, errors) and an eval suite of ~40 questions over a fictitious demo portfolio whose correct answers are computed by the engine.
 
 ---

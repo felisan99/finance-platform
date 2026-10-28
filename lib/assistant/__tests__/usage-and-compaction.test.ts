@@ -159,13 +159,24 @@ describe("buildSystemPrompt", () => {
     hasMemory: false,
   };
 
-  it("lleva las reglas de no inventar y de no asesorar", () => {
+  it("recomienda, pero no inventa ni calcula datos ni opera", () => {
     const prompt = buildSystemPrompt(input);
+    expect(prompt).toContain("## Recomendaciones");
     expect(prompt).toContain("no tengo ese dato");
-    expect(prompt).toContain("No es asesoramiento financiero");
+    expect(prompt).toContain("No los calcules vos");
+    expect(prompt).toContain("no podés operar");
     expect(prompt).toContain("## Alcance");
-    expect(prompt).toContain("2026-09-30");
+    expect(prompt).toContain('portafolio "Portafolio demo"');
     expect(prompt).not.toContain("search_news");
+    expect(prompt).not.toContain("## Memoria");
+    expect(prompt).not.toContain("## Resumen");
+    expect(prompt).not.toContain("{{");
+  });
+
+  it("el ejemplo de cita usa el último año hasta hoy", () => {
+    expect(buildSystemPrompt(input)).toContain(
+      "(computeTwr, 1A: 30/09/2025 – 30/09/2026)",
+    );
   });
 
   it("agrega noticias, memoria y resumen solo si corresponden", () => {
@@ -178,7 +189,7 @@ describe("buildSystemPrompt", () => {
       ],
       summary: "- Preguntó por su rendimiento",
     });
-    expect(prompt).toContain("contenido externo");
+    expect(prompt).toContain("contenido de terceros");
     expect(prompt).toContain("[id-1] Objetivo: Jubilarse");
     expect(prompt).toContain("Preguntó por su rendimiento");
   });
