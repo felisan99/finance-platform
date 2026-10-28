@@ -23,14 +23,12 @@
 
 ## At a glance
 
-|                        |                                                                                                                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Source of truth**    | One ledger of transactions per account. Positions, cash, gains and returns are recomputed from it, never stored.                                                         |
-| **Calculation engine** | Pure TypeScript (`lib/engine`) with no database, network or clock: average cost, splits, cash, daily value series, TWR, XIRR, drawdown, volatility and what-if analysis. |
-| **Money**              | `decimal.js` end to end. Postgres `numeric` values are read as text, so no amount ever passes through a float.                                                           |
-| **Tests**              | 1,779 unit tests in CI, including property-based tests with fast-check, plus integration tests for row-level security and live tests against real market data.           |
-| **Running cost**       | US$ 0 per month: Vercel Hobby, Supabase Free and Yahoo Finance, with one daily cron.                                                                                     |
-| **Access**             | Invite-only sign-in with 6-digit email codes. No passwords anywhere.                                                                                                     |
+- **Source of truth:** one ledger of transactions per account. Positions, cash, gains and returns are recomputed from it, never stored.
+- **Calculation engine:** pure TypeScript (`lib/engine`) with no database, network or clock: average cost, splits, cash, daily value series, TWR, XIRR, drawdown, volatility and what-if analysis.
+- **Money:** `decimal.js` end to end. Postgres `numeric` values are read as text, so no amount ever passes through a float.
+- **Tests:** 1,779 unit tests in CI, including property-based tests with fast-check, plus integration tests for row-level security and live tests against real market data.
+- **Running cost:** US$ 0 per month: Vercel Hobby, Supabase Free and Yahoo Finance, with one daily cron.
+- **Access:** invite-only sign-in with 6-digit email codes. No passwords anywhere.
 
 ## Features
 
@@ -116,7 +114,7 @@ It describes the past and never says "buy".
 
 Also included:
 
-- **Activity and import.** Add, edit and delete buys, sells, dividends, deposits, withdrawals and splits. CSV import recognizes the format from the headers: either the app's own format (the one its CSV export writes, so a backup can be restored) or a Delta export. A preview shows what will be loaded and flags likely duplicates, and a whole import can be undone.
+- **Activity and import.** Add, edit and delete buys, sells, dividends, deposits, withdrawals and splits. CSV import recognizes the format from the headers: either the app's own format (the one its CSV export writes, so a backup can be restored) or an export from [Delta](https://delta.app), a popular portfolio-tracking app. A preview shows what will be loaded and flags likely duplicates, and a whole import can be undone.
 - **Watchlist** of up to 50 symbols with each one's change for the day.
 - **Multiple portfolios**, up to five (for example, one for stocks and one for crypto), plus an "all together" view that adds them up without mixing their ledgers.
 - **Installable PWA** with an offline screen and dark mode that follows the system setting.
@@ -174,7 +172,7 @@ Each decision below answers a concrete constraint. The full log, with the altern
 
 Because it is pure, it can be tested exhaustively with fixed dates and property-based tests.
 
-**3. Money never touches a float.** Amounts stay `decimal.js` values from the database to the formatter. Postgres `numeric` columns are read as text, and provider prices arrive as decimal strings. The only deliberate `number` is XIRR, because it is a rate shown to the user, not an amount. An acceptance test imports a full Delta export and must reproduce the expected cost basis, realized gain and cash to the last decimal.
+**3. Money never touches a float.** Amounts stay `decimal.js` values from the database to the formatter. Postgres `numeric` columns are read as text, and provider prices arrive as decimal strings. The only deliberate `number` is XIRR, because it is a rate shown to the user, not an amount. An acceptance test imports a full export from the Delta tracking app and must reproduce the expected cost basis, realized gain and cash to the last decimal.
 
 **4. Portfolios are never merged.** Average cost is tracked per account. Merging ledgers would mix average costs and apply a split once for each account that holds the stock. Instead, the "all together" view computes each portfolio on its own and adds the results (`combineEngineResults`, `combineSeries`).
 
