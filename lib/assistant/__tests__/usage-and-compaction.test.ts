@@ -165,6 +165,9 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("no tengo ese dato");
     expect(prompt).toContain("No los calcules vos");
     expect(prompt).toContain("no podés operar");
+    expect(prompt).toContain("tu primera frase dice que no podés operar");
+    expect(prompt).toContain("No uses aproximaciones");
+    expect(prompt).toContain("simulate_trade");
     expect(prompt).toContain("## Alcance");
     expect(prompt).toContain('portafolio "Portafolio demo"');
     expect(prompt).not.toContain("search_news");
@@ -173,10 +176,11 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toContain("{{");
   });
 
-  it("el ejemplo de cita usa el último año hasta hoy", () => {
-    expect(buildSystemPrompt(input)).toContain(
-      "(computeTwr, 1A: 30/09/2025 – 30/09/2026)",
-    );
+  it("el ejemplo de cita usa el último año hasta hoy y el formato de la app", () => {
+    const prompt = buildSystemPrompt(input);
+    // `formatPercent` escribe el % pegado al número.
+    expect(prompt).not.toMatch(/\d %/);
+    expect(prompt).toContain("(computeTwr, 1A: 30/09/2025 – 30/09/2026)");
   });
 
   it("agrega noticias, memoria y resumen solo si corresponden", () => {

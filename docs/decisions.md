@@ -525,7 +525,7 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
     - `simulate_trade` (`simulateTrades` en el motor): compras y ventas hipotéticas a precios de hoy. Devuelve pesos, efectivo y total antes y después, y la ganancia estimada de una venta. Usa el último cierre para lo que no está en la cartera, no cobra comisiones y paga las compras con el efectivo o con plata nueva.
     - `get_allocation`: el peso conjunto de un grupo de símbolos, o el reparto por tipo o por sector (`computeAllocation`).
 
-    Sus descripciones le piden al modelo usarlas en vez de calcular. El prompt no se tocó. Las preguntas de recomendación no se volvieron a correr.
+    Sus descripciones le piden al modelo usarlas en vez de calcular, y el prompt suma dos reglas: nada de aproximaciones ni proyecciones propias (cuantificar con `simulate_trade`, `what_if` o `get_allocation`), y si piden operar, la primera frase dice que no puede. El ejemplo de formato del prompt pasó a "12,40%", como escribe `formatPercent`. Las preguntas de recomendación no se volvieron a correr.
   - **Riesgo aceptado:** con invitados, el asistente también les recomienda a ellos. «Antes de comprar» (la tarjeta del activo) sigue sin veredictos de compra.
 - **Observabilidad** (`assistant_runs`):
   - Una fila por turno con modelo, respaldo, pasos, tools (nombre, ms, ok), tokens, costo, TTFT, latencia, error y compactación. Sin el texto.
