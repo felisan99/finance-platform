@@ -36,10 +36,12 @@ export async function PriceRangeSection({
   client,
   instrument,
   price,
+  closes,
 }: {
   client: SupabaseClient<Database>;
   instrument: InstrumentRow;
   price: LivePrice;
+  closes?: Promise<Array<{ date: string; close: string }>>;
 }) {
   const now = new Date();
   const company = await companyForChart(instrument);
@@ -50,6 +52,7 @@ export async function PriceRangeSection({
     price,
     week52,
     now,
+    closes,
   });
 
   // La marca de la barra es el precio de hoy; sin precio, sin marca.
