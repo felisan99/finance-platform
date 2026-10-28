@@ -526,6 +526,12 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
     - `get_allocation`: el peso conjunto de un grupo de símbolos, o el reparto por tipo o por sector (`computeAllocation`).
 
     Sus descripciones le piden al modelo usarlas en vez de calcular, y el prompt suma dos reglas: nada de aproximaciones ni proyecciones propias (cuantificar con `simulate_trade`, `what_if` o `get_allocation`), y si piden operar, la primera frase dice que no puede. El ejemplo de formato del prompt pasó a "12,40%", como escribe `formatPercent`. Las preguntas de recomendación no se volvieron a correr.
+  - **Descripciones de las tools reescritas como prompts para un agente (2026-10-28).**
+    - **Problema:** describían qué datos devolvían, pero no cuándo usar cada una frente a las que se solapan (pesos en tres tools, compras en `what_if` y `simulate_trade`), ni cuándo no usar `search_news`. En la segunda prueba el modelo llamó noticias para opinar y le pidió a la persona que "use `simulate_trade` en la app".
+    - **Estructura nueva de cada descripción:** qué hace, cuándo usarla, cuándo no y qué usar en cambio, y qué devuelve. Las tools con parámetros compuestos llevan ejemplos de entrada. Todos los parámetros están descritos: fechas inclusivas, modos que no se mezclan, de dónde sale el `id`.
+    - **Regla de los números:** las tools de datos repiten "copialos tal cual, sin redondear", junto al resultado.
+    - **`simulate_trade`:** pasó de tres campos opcionales (`cantidad`/`monto`/`fraccion`, de los que había que usar uno) a `medida` + `valor`, así no se puede armar una entrada ambigua.
+    - Un test fija la estructura. No se volvió a correr contra el modelo.
   - **Riesgo aceptado:** con invitados, el asistente también les recomienda a ellos. «Antes de comprar» (la tarjeta del activo) sigue sin veredictos de compra.
 - **Observabilidad** (`assistant_runs`):
   - Una fila por turno con modelo, respaldo, pasos, tools (nombre, ms, ok), tokens, costo, TTFT, latencia, error y compactación. Sin el texto.

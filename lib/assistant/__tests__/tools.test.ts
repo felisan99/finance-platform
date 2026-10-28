@@ -7,6 +7,7 @@ import {
 } from "@/lib/engine";
 import { formatMoney, formatPercent } from "@/lib/portfolio/format";
 import { demoDataSource } from "../fixture/demo-data-source";
+import { demoNews, inMemoryStore } from "../fixture/demo-deps";
 import { DEMO_NOW } from "../fixture/demo-portfolio";
 import type { MemoryItem, MemoryStore } from "../memory";
 import type { ToolResult } from "../tool-result";
@@ -241,7 +242,9 @@ describe("simulate_trade", () => {
     )!;
     const result = expectOk(
       await simulateTrade(ds, {
-        operaciones: [{ simbolo: "nvda", lado: "vender", fraccion: 0.5 }],
+        operaciones: [
+          { simbolo: "nvda", lado: "vender", medida: "fraccion", valor: 0.5 },
+        ],
       }),
     );
     const [trade] = result.data.operaciones as Data[];
@@ -261,7 +264,9 @@ describe("simulate_trade", () => {
   it("comprar algo que no está en la cartera usa su último cierre; con plata nueva sube el total", async () => {
     const result = expectOk(
       await simulateTrade(demoDataSource(), {
-        operaciones: [{ simbolo: "SPY", lado: "comprar", monto: 1000 }],
+        operaciones: [
+          { simbolo: "SPY", lado: "comprar", medida: "dolares", valor: 1000 },
+        ],
         fondeo: "plata_nueva",
       }),
     );
@@ -274,21 +279,32 @@ describe("simulate_trade", () => {
     expect(
       (
         await simulateTrade(ds, {
-          operaciones: [{ simbolo: "NVDA", lado: "vender", cantidad: 1000 }],
+          operaciones: [
+            {
+              simbolo: "NVDA",
+              lado: "vender",
+              medida: "acciones",
+              valor: 1000,
+            },
+          ],
         })
       ).ok,
     ).toBe(false);
     expect(
       (
         await simulateTrade(ds, {
-          operaciones: [{ simbolo: "XNEW", lado: "vender", fraccion: 0.5 }],
+          operaciones: [
+            { simbolo: "XNEW", lado: "vender", medida: "fraccion", valor: 0.5 },
+          ],
         })
       ).ok,
     ).toBe(false);
     expect(
       (
         await simulateTrade(ds, {
-          operaciones: [{ simbolo: "TSLA", lado: "comprar", monto: 100 }],
+          operaciones: [
+            { simbolo: "TSLA", lado: "comprar", medida: "dolares", valor: 100 },
+          ],
         })
       ).ok,
     ).toBe(false);
@@ -493,6 +509,26 @@ describe("buildTools", () => {
     ]);
     expect(tools[MEMORY_TOOL]).toBeUndefined();
     expect(tools[NEWS_TOOL]).toBeUndefined();
+  });
+
+  it("cada descripción dice cuándo usar la tool, y las de datos llevan la regla de los números", () => {
+    const tools = buildTools({
+      ds: demoDataSource(),
+      memory: inMemoryStore(),
+      news: {
+        search: demoNews,
+        takeLimit: async () => true,
+        holds: async () => false,
+      },
+      timings: [],
+    });
+    for (const [name, definition] of Object.entries(tools)) {
+      expect(definition.description, name).toMatch(/Usala/);
+      if (name !== NEWS_TOOL && name !== MEMORY_TOOL) {
+        expect(definition.description, name).toContain("copialos tal cual");
+      }
+    }
+    expect(tools.simulate_trade!.description).toContain("medida: 'fraccion'");
   });
 
   it("registra cada llamada y convierte una excepción en un error genérico", async () => {

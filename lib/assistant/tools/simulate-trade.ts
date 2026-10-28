@@ -23,22 +23,22 @@ const PRICE_LOOKBACK_DAYS = 14;
 /** Posiciones que se listan además de las que se operan. */
 const TOP_HOLDINGS = 6;
 
+export const TRADE_MEASURES = ["acciones", "dolares", "fraccion"] as const;
+
 export interface SimulateTradeInput {
   operaciones: Array<{
     simbolo: string;
     lado: "comprar" | "vender";
-    cantidad?: number;
-    monto?: number;
-    fraccion?: number;
+    /** Cómo se expresa `valor`: cantidad de unidades, monto en dólares o fracción de la posición. */
+    medida: (typeof TRADE_MEASURES)[number];
+    valor: number;
   }>;
   fondeo?: "efectivo" | "plata_nueva";
 }
 
 // Los `number` del modelo pasan a decimal por texto, con un tope de dígitos (como los formularios).
-const toDec = (value: number | undefined): Dec | undefined =>
-  value === undefined || !Number.isFinite(value)
-    ? undefined
-    : d(value.toFixed(8));
+const toDec = (value: number): Dec | null =>
+  Number.isFinite(value) ? d(value.toFixed(8)) : null;
 
 /**
  * Cómo quedaría la cartera después de comprar o vender, a los precios de hoy: pesos, efectivo y
@@ -59,12 +59,17 @@ export async function simulateTrade(
   for (const op of input.operaciones) {
     const symbol = checkSymbol(op.simbolo);
     if (!symbol.ok) return fail(symbol.error);
+    const value = toDec(op.valor);
+    if (value === null)
+      return fail(`${symbol.symbol}: el valor no es un número.`);
     trades.push({
       symbol: symbol.symbol,
       side: op.lado === "vender" ? "SELL" : "BUY",
-      quantity: toDec(op.cantidad),
-      amount: toDec(op.monto),
-      fraction: toDec(op.fraccion),
+      ...(op.medida === "acciones"
+        ? { quantity: value }
+        : op.medida === "dolares"
+          ? { amount: value }
+          : { fraction: value }),
     });
   }
 

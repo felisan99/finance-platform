@@ -444,7 +444,9 @@ export const CASES: EvalCase[] = [
     expect: async (ds) => {
       const sim = await data(
         simulateTrade(ds, {
-          operaciones: [{ simbolo: "NVDA", lado: "vender", fraccion: 0.5 }],
+          operaciones: [
+            { simbolo: "NVDA", lado: "vender", medida: "fraccion", valor: 0.5 },
+          ],
         }),
       );
       const [trade] = sim.operaciones as Rows;
