@@ -11,6 +11,7 @@ import { loadPendingDividends } from "@/lib/portfolio/dividends-data";
 import {
   WITHHOLDING_OPTIONS,
   buildPendingDividendsView,
+  pendingDividendsTotalNet,
   withholdingText,
   withholdingValueOf,
 } from "@/lib/portfolio/dividends-view";
@@ -73,7 +74,7 @@ export default async function DividendsPage() {
           </CardContent>
         </Card>
       ) : (
-        <DividendList items={view} />
+        <DividendList items={view} totalNet={pendingDividendsTotalNet(items)} />
       )}
     </div>
   );
