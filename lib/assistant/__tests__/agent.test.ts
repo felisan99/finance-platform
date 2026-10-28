@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { activeToolsAfter } from "../agent";
-import { MEMORY_TOOL, NEWS_TOOL, WEB_TOOL } from "../tools";
+import { ASSET_TOOL, MEMORY_TOOL, NEWS_TOOL, WEB_TOOL } from "../tools";
 
 const ALL = [
   "get_positions",
@@ -16,9 +16,7 @@ const step = (...names: string[]) => ({
 describe("activeToolsAfter", () => {
   it("sin contenido externo leído, todas las tools siguen activas", () => {
     expect(activeToolsAfter([], ALL)).toBeNull();
-    expect(
-      activeToolsAfter([step("get_positions", "get_asset_info")], ALL),
-    ).toBeNull();
+    expect(activeToolsAfter([step("get_positions")], ALL)).toBeNull();
   });
 
   it("después de search_news o web_search, la memoria queda afuera por el resto del turno", () => {
@@ -33,6 +31,12 @@ describe("activeToolsAfter", () => {
         ALL,
       ),
     ).toEqual(withoutMemory);
+  });
+
+  it("después de get_asset_info (texto de la empresa del proveedor), la memoria queda afuera", () => {
+    expect(activeToolsAfter([step(ASSET_TOOL)], ALL)).toEqual(
+      ALL.filter((name) => name !== MEMORY_TOOL),
+    );
   });
 
   it("sin memoria ofrecida no hay nada que sacar", () => {

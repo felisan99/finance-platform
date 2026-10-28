@@ -8,8 +8,17 @@ const URL_LIKE = /\bhttps?:\/\/\S+|\bwww\.\S+/gi;
 const MARKDOWN_LINK = /\[([^\]]*)\]\([^)]*\)/g;
 const EMAIL = /[^\s@<>()[\]]+@[^\s@<>()[\]]+\.[a-z]{2,}/gi;
 // `foo.com`, `foo.io/algo`: dominio con un TLD conocido, o cualquier `algo.xx/ruta`.
+// El TLD se busca solo en minúsculas (sin la bandera `i`): los tickers con sufijo de bolsa
+// (SHOP.TO, RY.TO) y "EE.UU." van en mayúsculas y no son dominios.
 const DOMAIN_LIKE =
-  /\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(com|net|org|io|co|ai|app|dev|xyz|info|biz|me|ly|gg|uy|ar|es|us|uk|ru|cn|tk|top|site|online|link|click|sh|to)\b(\/\S*)?|\b[a-z0-9-]+\.[a-z]{2,}\/\S*/gi;
+  /\b[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.(com|net|org|io|co|ai|app|dev|xyz|info|biz|me|ly|gg|uy|ar|es|us|uk|ru|cn|tk|top|site|online|link|click|sh|to)\b(\/\S*)?|\b[A-Za-z0-9-]+\.[A-Za-z]{2,}\/\S*/g;
+
+/**
+ * Tope de texto que pasa por las expresiones de arriba: son cuadráticas en entradas largas
+ * (~100 ms con 8.000 caracteres, segundos con 100.000). Lo guardado es siempre más corto.
+ */
+export const MAX_SCAN_CHARS = 5000;
+const capped = (text: string): string => text.slice(0, MAX_SCAN_CHARS);
 
 const LINK_PATTERNS = [URL_LIKE, MARKDOWN_LINK, EMAIL, DOMAIN_LIKE];
 
@@ -31,16 +40,21 @@ const matches = (pattern: RegExp, text: string): boolean => {
 };
 
 export function containsLink(text: string): boolean {
-  return LINK_PATTERNS.some((pattern) => matches(pattern, text));
+  const input = capped(text);
+  return LINK_PATTERNS.some((pattern) => matches(pattern, input));
 }
 
 export function looksLikeInstruction(text: string): boolean {
-  return INSTRUCTION_PATTERNS.some((pattern) => matches(pattern, text));
+  const input = capped(text);
+  return INSTRUCTION_PATTERNS.some((pattern) => matches(pattern, input));
 }
 
-/** Saca links, direcciones web y emails; un link en markdown deja solo su texto. */
+/**
+ * Saca links, direcciones web y emails; un link en markdown deja solo su texto. Corta el texto
+ * a `MAX_SCAN_CHARS` antes de analizarlo.
+ */
 export function stripLinks(text: string): string {
-  return text
+  return capped(text)
     .replace(MARKDOWN_LINK, "$1")
     .replace(URL_LIKE, "")
     .replace(EMAIL, "")
