@@ -20,7 +20,7 @@ import {
   type FormState,
   type ReferencePriceResponse,
 } from "@/app/(app)/activity/actions";
-import { TRANSACTION_TYPE_LABELS } from "@/lib/validation/transaction";
+import { TRANSACTION_TYPE_LABELS } from "@/lib/portfolio/transaction-type-labels";
 import { cn } from "@/lib/utils";
 
 export interface TransactionFormValues {
