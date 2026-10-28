@@ -135,16 +135,17 @@ describe("canRetry", () => {
 
 describe("announcementOf", () => {
   it("anuncia al empezar y al terminar", () => {
-    expect(announcementOf(false, true, null)).toBe(ANNOUNCE_BUSY);
-    expect(announcementOf(true, false, null)).toBe(ANNOUNCE_DONE);
+    expect(announcementOf(false, true, false)).toBe(ANNOUNCE_BUSY);
+    expect(announcementOf(true, false, false)).toBe(ANNOUNCE_DONE);
   });
 
-  it("si falló, anuncia el error en lugar de 'lista'", () => {
-    expect(announcementOf(true, false, "Límite de uso")).toBe("Límite de uso");
+  it("si terminó en error no anuncia 'lista' ni repite el error: limpia la región", () => {
+    expect(announcementOf(true, false, true)).toBe("");
   });
 
   it("sin transición (tokens llegando o en reposo) no anuncia nada", () => {
-    expect(announcementOf(true, true, null)).toBeNull();
-    expect(announcementOf(false, false, "x")).toBeNull();
+    expect(announcementOf(true, true, false)).toBeNull();
+    expect(announcementOf(false, false, true)).toBeNull();
+    expect(announcementOf(false, false, false)).toBeNull();
   });
 });

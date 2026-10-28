@@ -309,7 +309,7 @@ export function AssistantChat({
   const [announcement, setAnnouncement] = useState("");
   if (wasBusy !== busy) {
     setWasBusy(busy);
-    const next = announcementOf(wasBusy, busy, failure);
+    const next = announcementOf(wasBusy, busy, status === "error");
     if (next !== null) setAnnouncement(next);
   }
 
