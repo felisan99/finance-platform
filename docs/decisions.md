@@ -555,6 +555,20 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
   - Integración (`assistant.integration.test.ts`): RLS entre dos personas, mensajes que no se editan, tope de memoria, métricas que no se editan, anon sin acceso y límites.
   - En vivo: una pregunta real contra OpenRouter y Tavily (`agent.live.test.ts`), y la ruta por HTTP con `next start` y sesión real (`assistant-http.live.test.ts`: streaming, persistencia, métricas, 404 con la conversación de otra persona).
 - **Desplegado el 2026-10-28** (commit `1756ef4`, `vercel deploy --prod`, el proyecto que apunta a `finance-dev`, donde la migración ya estaba). Se cargaron en Production `OPENROUTER_API_KEY` y `TAVILY_API_KEY` (sensibles), `ASSISTANT_MODEL` y `ASSISTANT_FALLBACK_MODEL`, desde `.env.local` por stdin. Se revisó lo subido: 345 archivos, ninguno de `.env`, evals, fixtures, tests, `docs/` ni `supabase/`. Sin sesión, `/assistant`, `/more/assistant` y `POST /api/assistant` redirigen a `/login`. Falta probarlo en el iPhone.
+- **Correcciones tras la primera prueba en el iPhone (2026-10-28):**
+  - **Indicador de trabajo:**
+    - Antes, "Pensando…" solo aparecía mientras la request estaba en `submitted`, que dura milisegundos porque el stream arranca enseguida. Después de una tool no había nada mientras el modelo razonaba (el razonamiento no se muestra).
+    - Ahora `activityOf` (`chat-status.ts`, puro y probado) muestra tres puntos animados con lo que está pasando: "Pensando", "Revisando tus posiciones" (cada tool tiene su frase en `TOOL_ACTIVITY`) o "Analizando los datos". Se oculta mientras llega texto.
+  - **Sin chips técnicos:** las fuentes van plegadas al pie de la respuesta ("De dónde salen los números"), con el nombre de la tool en palabras y el período, sin la función.
+  - **Scroll:** solo sigue la respuesta si la persona está abajo de todo. Si subió a leer, no la arrastra, y aparece "Ir al final".
+  - **Caja de texto:** crece con lo escrito hasta unas 7 líneas. Con el foco puesto se oculta la barra inferior (`body:has(#assistant-question:focus)`) y la caja baja al borde.
+  - **Tablas y separadores:** `markdown.ts` ahora los entiende. Hasta 3 columnas se muestra una tabla con scroll horizontal; con más, una tarjeta por fila (la primera columna es el título), que en 390 px se lee mejor.
+  - **Difuminado arriba:** con `viewport-fit=cover`, iOS desenfoca lo que pasa bajo la barra de estado. Una franja opaca del color de fondo de altura `env(safe-area-inset-top)` lo tapa. Fuera de la app instalada mide 0.
+  - **Velocidad, medida y no supuesta** (`assistant_runs` de las dos preguntas del teléfono y una request corta por modelo):
+    - Las tools tardan unos 370 ms. Las respuestas tardaron 75 y 129 s: unos 1800–2100 tokens de salida a 17–39 tok/s, según el momento del pool gratuito.
+    - La causa es el largo de las respuestas del prompt de asesor sobre un modelo gratuito lento. Bajar el razonamiento de Nemotron a "low" no ayudó (18 tok/s).
+    - `gemma-4-31b-it:free` devolvió 429 por saturación del pool compartido de Google. `inkling:free` devuelve 403: solo sirve para "agentic harnesses", así que sale de los evals.
+    - `ASSISTANT_FALLBACK_MODEL` ahora acepta hasta 2 ids separados por comas: OpenRouter los prueba en orden.
 - **Pendiente:**
   - La cartera demo en `finance-dev` para las capturas del post.
   - Probar la UI en el iPhone.

@@ -48,6 +48,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        {/* Franja opaca bajo la barra de estado del iPhone (la app usa `viewport-fit=cover`): el
+            sistema desenfoca lo que pasa por debajo, y el texto se veía borroso ahí arriba. Fuera de
+            la app instalada mide 0. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-x-0 top-0 z-50 h-[env(safe-area-inset-top)] bg-background"
+        />
         {children}
         <ServiceWorkerRegister />
       </body>

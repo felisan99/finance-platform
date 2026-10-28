@@ -162,3 +162,8 @@
     @apply font-sans;
   }
 }
+
+/* Con el teclado abierto en el asistente, la barra inferior ocupa lugar y tapa lo que se escribe. */
+body:has(#assistant-question:focus) nav[aria-label="Principal"] {
+  display: none;
+}

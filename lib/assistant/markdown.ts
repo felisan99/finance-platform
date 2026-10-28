@@ -1,5 +1,5 @@
 // Un subconjunto chico de markdown para las respuestas del asistente: párrafos, listas, títulos,
-// negrita, código en línea y links. Sin imports (lo usa el cliente) y sin HTML: la salida son
+// tablas, separadores, negrita, código en línea y links. Sin imports (lo usa el cliente) y sin HTML: la salida son
 // tokens que React renderiza como texto, así un texto del modelo (o de una noticia que el modelo
 // repita) nunca se interpreta como HTML. Solo se enlazan URLs `https`.
 
@@ -12,11 +12,25 @@ export type Inline =
 export type Block =
   | { kind: "paragraph"; inlines: Inline[] }
   | { kind: "heading"; inlines: Inline[] }
-  | { kind: "list"; ordered: boolean; items: Inline[][] };
+  | { kind: "list"; ordered: boolean; items: Inline[][] }
+  | { kind: "table"; header: Inline[][]; rows: Inline[][][] }
+  | { kind: "rule" };
 
 const BULLET = /^\s*[-*•]\s+(.*)$/;
 const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
 const HEADING = /^\s*#{1,6}\s+(.*)$/;
+const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+const TABLE_SEPARATOR = /^\s*\|?(\s*:?-{2,}:?\s*\|)+\s*(:?-{2,}:?\s*)?\|?\s*$/;
+
+/** `| a | b |` → celdas, sin los bordes. */
+const cellsOf = (line: string): Inline[][] =>
+  line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => parseInline(cell.trim()));
 // Link markdown, negrita, código o URL suelta (en ese orden de prioridad).
 const INLINE =
   /\[([^\]\n]{1,200})\]\((https:\/\/[^\s)]{1,2000})\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|(https:\/\/[^\s)<>\]]{1,2000})/g;
@@ -97,8 +111,43 @@ export function parseMarkdown(source: string): Block[] {
       list = null;
     }
   };
+  let table: string[] = [];
+  const flushTable = () => {
+    if (table.length === 0) return;
+    const [head, ...rest] = table;
+    const body = rest.filter((line) => !TABLE_SEPARATOR.test(line));
+    // Una sola fila suelta con barras no es una tabla: se muestra como texto.
+    if (body.length === 0 && rest.length === 0) {
+      paragraph.push(head!.trim());
+    } else {
+      const header = cellsOf(head!);
+      blocks.push({
+        kind: "table",
+        header,
+        rows: body.map((line) => {
+          const cells = cellsOf(line);
+          // Filas con más o menos celdas que el encabezado: se completan o se recortan.
+          return header.map((_, i) => cells[i] ?? []);
+        }),
+      });
+    }
+    table = [];
+  };
 
   for (const line of source.replace(/\r\n?/g, "\n").split("\n")) {
+    if (TABLE_ROW.test(line)) {
+      flushParagraph();
+      flushList();
+      table.push(line);
+      continue;
+    }
+    flushTable();
+    if (RULE.test(line)) {
+      flushParagraph();
+      flushList();
+      blocks.push({ kind: "rule" });
+      continue;
+    }
     const bullet = BULLET.exec(line);
     const numbered = bullet ? null : NUMBERED.exec(line);
     const heading = HEADING.exec(line);
@@ -123,6 +172,7 @@ export function parseMarkdown(source: string): Block[] {
       paragraph.push(line.trim());
     }
   }
+  flushTable();
   flushParagraph();
   flushList();
   return blocks;

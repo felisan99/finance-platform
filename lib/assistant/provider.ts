@@ -4,20 +4,22 @@ import type { LanguageModel } from "ai";
 export interface ModelChoice {
   apiKey: string;
   model: string;
-  fallbackModel: string | null;
+  fallbackModels: readonly string[];
 }
 
 /**
- * El modelo vía OpenRouter. El respaldo lo resuelve OpenRouter (`models`): si el principal falla
- * o llega a su límite (los gratuitos tienen límite por minuto y por día), prueba con el siguiente
- * en la misma request. `require_parameters` evita que lo atienda un proveedor sin tools.
+ * El modelo vía OpenRouter. Los respaldos los resuelve OpenRouter (`models`): si el principal falla
+ * o llega a su límite (los gratuitos tienen límite por minuto y por día, y comparten cupo con otros
+ * usuarios), prueba con el siguiente en la misma request. `require_parameters` evita que lo atienda
+ * un proveedor sin tools.
  */
 export function createAssistantModel(choice: ModelChoice): LanguageModel {
   const openrouter = createOpenRouter({ apiKey: choice.apiKey });
   return openrouter(choice.model, {
-    models: choice.fallbackModel
-      ? [choice.model, choice.fallbackModel]
-      : undefined,
+    models:
+      choice.fallbackModels.length > 0
+        ? [choice.model, ...choice.fallbackModels]
+        : undefined,
     usage: { include: true },
     provider: { require_parameters: true },
   });

@@ -54,7 +54,7 @@ it.skipIf(!config)("evals del asistente", async () => {
       apiKey: config!.apiKey,
       model: modelId,
       // Sin respaldo: se mide el modelo tal cual.
-      fallbackModel: null,
+      fallbackModels: [],
     });
     const pacer = new RequestPacer(modelId.endsWith(":free") ? 18 : 120);
     for (const evalCase of cases) {

@@ -37,6 +37,21 @@ export const TOOL_LABELS: Record<string, string> = {
   update_memory: "Memoria",
 };
 
+/** Qué está haciendo el asistente mientras corre cada tool, en palabras de la persona. */
+export const TOOL_ACTIVITY: Record<string, string> = {
+  get_positions: "Revisando tus posiciones",
+  get_gains: "Calculando tus ganancias",
+  get_performance: "Calculando el rendimiento",
+  explain_move: "Viendo qué movió la cartera",
+  get_price_history: "Mirando el precio histórico",
+  what_if: "Simulando la compra",
+  get_risk: "Midiendo el riesgo",
+  simulate_trade: "Simulando la operación",
+  get_allocation: "Viendo cómo está repartida tu cartera",
+  search_news: "Buscando noticias",
+  update_memory: "Guardando lo que me contaste",
+};
+
 /** Valida en el cliente que la salida de una tool tiene la forma esperada (viene de la red). */
 export function sourceOf(output: unknown): ToolSource | null {
   if (typeof output !== "object" || output === null) return null;

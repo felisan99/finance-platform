@@ -126,15 +126,15 @@ describe("getAssistantConfig", () => {
     expect(getAssistantConfig(base)).toEqual({
       apiKey: base.OPENROUTER_API_KEY,
       model: base.ASSISTANT_MODEL,
-      fallbackModel: null,
+      fallbackModels: [],
       tavilyKey: null,
     });
     expect(
       getAssistantConfig({
         ...base,
         ASSISTANT_FALLBACK_MODEL: base.ASSISTANT_MODEL,
-      })?.fallbackModel,
-    ).toBeNull();
+      })?.fallbackModels,
+    ).toEqual([]);
     expect(
       getAssistantConfig({
         ...base,
@@ -142,9 +142,28 @@ describe("getAssistantConfig", () => {
         TAVILY_API_KEY: "tvly-0123456789",
       }),
     ).toMatchObject({
-      fallbackModel: "google/gemma-4-31b-it:free",
+      fallbackModels: ["google/gemma-4-31b-it:free"],
       tavilyKey: "tvly-0123456789",
     });
+  });
+
+  it("acepta varios respaldos separados por comas, sin repetir ni pasar el tope", () => {
+    expect(
+      getAssistantConfig({
+        ...base,
+        ASSISTANT_FALLBACK_MODEL:
+          " google/gemma-4-31b-it:free , deepseek/deepseek-v4.1-flash,google/gemma-4-31b-it:free",
+      })?.fallbackModels,
+    ).toEqual(["google/gemma-4-31b-it:free", "deepseek/deepseek-v4.1-flash"]);
+    expect(
+      getAssistantConfig({
+        ...base,
+        ASSISTANT_FALLBACK_MODEL: "a/b,c/d,e/f",
+      }),
+    ).toBeNull();
+    expect(
+      getAssistantConfig({ ...base, ASSISTANT_FALLBACK_MODEL: "a/b,mal" }),
+    ).toBeNull();
   });
 });
 

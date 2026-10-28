@@ -70,6 +70,43 @@ describe("parseMarkdown", () => {
     expect(blocks[3]).toMatchObject({ kind: "list", ordered: true });
   });
 
+  it("tablas: encabezado, filas sin el separador y celdas con formato", () => {
+    const blocks = parseMarkdown(
+      "Plan:\n| Paso | Qué hacer |\n|------|:---------:|\n| 1 | **Vendé** NFLX |\n| 2 | Esperá | extra |\n| 3 |\nFin",
+    );
+    expect(blocks.map((b) => b.kind)).toEqual([
+      "paragraph",
+      "table",
+      "paragraph",
+    ]);
+    const table = blocks[1] as Extract<
+      (typeof blocks)[number],
+      { kind: "table" }
+    >;
+    expect(table.header).toEqual([
+      [{ kind: "text", text: "Paso" }],
+      [{ kind: "text", text: "Qué hacer" }],
+    ]);
+    expect(table.rows).toHaveLength(3);
+    expect(table.rows[0]![1]).toEqual([
+      { kind: "strong", text: "Vendé" },
+      { kind: "text", text: " NFLX" },
+    ]);
+    // Celdas de más se recortan y las que faltan quedan vacías.
+    expect(table.rows[1]).toHaveLength(2);
+    expect(table.rows[2]![1]).toEqual([]);
+  });
+
+  it("una fila suelta con barras queda como texto, y --- es un separador", () => {
+    expect(parseMarkdown("| sola |").map((b) => b.kind)).toEqual(["paragraph"]);
+    expect(parseMarkdown("antes\n---\ndespués").map((b) => b.kind)).toEqual([
+      "paragraph",
+      "rule",
+      "paragraph",
+    ]);
+    expect(parseMarkdown("- - -").map((b) => b.kind)).toEqual(["rule"]);
+  });
+
   it("texto vacío: ningún bloque", () => {
     expect(parseMarkdown("")).toEqual([]);
     expect(parseMarkdown("\n\n")).toEqual([]);

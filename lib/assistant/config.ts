@@ -6,19 +6,33 @@ import { z } from "zod";
 // queda "no disponible" en vez de intentar llamar con una configuración a medias.
 
 const MODEL_ID = /^[a-z0-9][a-z0-9._-]*\/[A-Za-z0-9._:-]+$/;
+/** OpenRouter prueba el principal y los respaldos en orden, en la misma request. */
+export const MAX_FALLBACKS = 2;
 
 const schema = z.object({
   OPENROUTER_API_KEY: z.string().min(20),
   ASSISTANT_MODEL: z.string().regex(MODEL_ID),
-  ASSISTANT_FALLBACK_MODEL: z.string().regex(MODEL_ID).optional(),
+  // Uno o varios ids separados por comas.
+  ASSISTANT_FALLBACK_MODEL: z
+    .string()
+    .transform((value) => [
+      ...new Set(
+        value
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean),
+      ),
+    ])
+    .pipe(z.array(z.string().regex(MODEL_ID)).max(MAX_FALLBACKS))
+    .optional(),
   TAVILY_API_KEY: z.string().min(10).optional(),
 });
 
 export interface AssistantConfig {
   apiKey: string;
   model: string;
-  /** `null` si no se configuró un respaldo. */
-  fallbackModel: string | null;
+  /** Respaldos en orden (vacío si no hay). Los gratuitos comparten cupo y a veces devuelven 429. */
+  fallbackModels: string[];
   /** `null` si no hay clave de Tavily: el asistente no ofrece la búsqueda de noticias. */
   tavilyKey: string | null;
 }
@@ -36,11 +50,13 @@ export function getAssistantConfig(
     TAVILY_API_KEY: blankToUndefined(env.TAVILY_API_KEY),
   });
   if (!parsed.success) return null;
-  const fallback = parsed.data.ASSISTANT_FALLBACK_MODEL ?? null;
+  const model = parsed.data.ASSISTANT_MODEL;
   return {
     apiKey: parsed.data.OPENROUTER_API_KEY,
-    model: parsed.data.ASSISTANT_MODEL,
-    fallbackModel: fallback === parsed.data.ASSISTANT_MODEL ? null : fallback,
+    model,
+    fallbackModels: (parsed.data.ASSISTANT_FALLBACK_MODEL ?? []).filter(
+      (id) => id !== model,
+    ),
     tavilyKey: parsed.data.TAVILY_API_KEY ?? null,
   };
 }
