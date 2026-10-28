@@ -17,7 +17,13 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import type { PositionChartData } from "@/lib/portfolio/chart-data";
-import { axisWidthFor } from "@/lib/portfolio/chart-format";
+import { niceScale } from "@/lib/portfolio/chart-scale";
+import {
+  axisWidthFor,
+  formatChartMoney,
+  formatChartTick,
+  formatDateKey,
+} from "@/lib/portfolio/chart-format";
 import {
   TRADE_RANGE_OPTIONS,
   defaultTradeRange,
@@ -30,9 +36,6 @@ import { cn } from "@/lib/utils";
 const config = {
   close: { label: "Cierre", color: "var(--foreground)" },
 } satisfies ChartConfig;
-
-const longDate = (date: string) =>
-  `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}`;
 
 /**
  * Precio de cierre de una posición con marcadores de compra (verde) y de venta (rojo) y el costo
@@ -76,14 +79,14 @@ export function PriceChart({
   const lows = data.avgCost === null ? closes : [...closes, data.avgCost];
   const min = Math.min(...lows);
   const max = Math.max(...lows);
-  const pad = (max - min) * 0.08 || max * 0.02;
+  const scale = niceScale(min, max);
 
   // Un rango siempre tiene al menos el último cierre; si quedara uno solo, se muestra la serie entera.
   const shown =
     view.points.length >= 2 ? view : { ...view, points: data.points };
   const last = shown.points[shown.points.length - 1]!;
   const first = shown.points[0]!;
-  const description = `Gráfico del precio de cierre de ${symbol} entre el ${longDate(first.date)} y el ${longDate(last.date)}, con ${shown.markers.length} operaciones marcadas.`;
+  const description = `Gráfico del precio de cierre de ${symbol} entre el ${formatDateKey(first.date)} y el ${formatDateKey(last.date)}, con ${shown.markers.length} operaciones marcadas.`;
 
   return (
     <div className="flex flex-col gap-2">
@@ -127,17 +130,26 @@ export function PriceChart({
             tickMargin={6}
           />
           <YAxis
-            domain={[min - pad, max + pad]}
+            domain={scale.domain}
+            ticks={scale.ticks}
+            interval={0}
             width={axisWidthFor(
-              [min - pad, max + pad].map((v) => String(Math.round(v))),
+              scale.ticks.map((tick) => formatChartTick(tick, scale.decimals)),
               46,
             )}
-            tickFormatter={(value: number) => String(Math.round(value))}
+            tickFormatter={(value: number) =>
+              formatChartTick(value, scale.decimals)
+            }
           />
           <ChartTooltip
             content={
               <ChartTooltipContent
-                labelFormatter={(label) => longDate(String(label))}
+                labelFormatter={(label) => formatDateKey(String(label))}
+                formatter={(value) => (
+                  <span className="font-mono font-medium tabular-nums text-foreground">
+                    {formatChartMoney(Number(value))}
+                  </span>
+                )}
               />
             }
           />

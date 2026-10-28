@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { axisWidthFor, formatChartTick } from "../chart-format";
 import { niceScale } from "../chart-scale";
 
 describe("niceScale", () => {
@@ -121,5 +122,21 @@ describe("niceScale", () => {
       ),
       { numRuns: 500 },
     );
+  });
+});
+
+describe("niceScale con formatChartTick (eje de 'Tus operaciones')", () => {
+  it("un activo de menos de 10 dolares conserva los decimales en las marcas", () => {
+    const scale = niceScale(2.1, 3.4);
+    const texts = scale.ticks.map((t) => formatChartTick(t, scale.decimals));
+    expect(new Set(texts).size).toBe(texts.length);
+    expect(scale.decimals).toBeGreaterThan(0);
+  });
+
+  it("un precio de seis cifras no lleva decimales y ensancha el eje", () => {
+    const scale = niceScale(98000, 125000);
+    const texts = scale.ticks.map((t) => formatChartTick(t, scale.decimals));
+    expect(scale.decimals).toBe(0);
+    expect(axisWidthFor(texts, 46)).toBeGreaterThan(46);
   });
 });
