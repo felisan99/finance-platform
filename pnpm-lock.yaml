@@ -62,9 +62,6 @@ importers:
       server-only:
         specifier: ^0.0.1
         version: 0.0.1
-      shadcn:
-        specifier: ^4.21.0
-        version: 4.21.0(typescript@5.9.3)
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
@@ -111,6 +108,9 @@ importers:
       prettier-plugin-tailwindcss:
         specifier: ^0.8.1
         version: 0.8.1(prettier@3.9.8)
+      shadcn:
+        specifier: ^4.21.0
+        version: 4.21.0(typescript@5.9.3)
       supabase:
         specifier: ^2.117.0
         version: 2.117.0
