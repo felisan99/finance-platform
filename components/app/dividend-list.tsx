@@ -55,7 +55,12 @@ export function WithholdingForm({
             </option>
           ))}
         </NativeSelect>
-        <Button type="submit" variant="outline" disabled={pending}>
+        <Button
+          type="submit"
+          variant="outline"
+          className="min-h-11"
+          disabled={pending}
+        >
           {pending ? "Guardando…" : "Guardar"}
         </Button>
       </div>

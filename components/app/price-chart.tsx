@@ -93,7 +93,7 @@ export function PriceChart({
       <div
         role="group"
         aria-label="Rango del gráfico"
-        className="flex flex-wrap gap-1"
+        className="flex flex-wrap gap-x-1 gap-y-3"
       >
         {options.map((option) => (
           <button
@@ -102,7 +102,7 @@ export function PriceChart({
             aria-pressed={range === option.id}
             onClick={() => setRange(option.id)}
             className={cn(
-              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+              "relative min-w-11 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']",
               range === option.id
                 ? "border-foreground bg-foreground text-background"
                 : "text-muted-foreground hover:text-foreground",
