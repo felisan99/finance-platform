@@ -1,6 +1,6 @@
 import type { UIMessage } from "ai";
 import { describe, expect, it } from "vitest";
-import { activityOf, sourcesOf } from "../chat-status";
+import { activityOf, canRetry, sourcesOf } from "../chat-status";
 
 const user: UIMessage = {
   id: "u",
@@ -93,5 +93,35 @@ describe("sourcesOf", () => {
         ]),
       ),
     ).toEqual([{ label: "Posiciones", detail: "precios al 30/09/2026" }]);
+  });
+});
+
+describe("canRetry", () => {
+  const rejected = JSON.stringify({
+    error: "Hiciste muchas preguntas seguidas.",
+  });
+  const streamFailure =
+    "No pude responder en este momento. Probá de nuevo en un rato.";
+
+  it("permite reintentar si la ruta rechazó la pregunta y no hay respuesta", () => {
+    expect(canRetry([user], rejected)).toBe(true);
+  });
+  it("no sin error", () => {
+    expect(canRetry([user], undefined)).toBe(false);
+    expect(canRetry([user], "")).toBe(false);
+  });
+  it("no si el error ocurrió durante la respuesta (la pregunta pudo guardarse)", () => {
+    expect(canRetry([user], streamFailure)).toBe(false);
+    expect(canRetry([user], "Failed to fetch")).toBe(false);
+  });
+  it("no si ya hay una respuesta parcial", () => {
+    expect(
+      canRetry([user, assistant([{ type: "text", text: "Hola" }])], rejected),
+    ).toBe(false);
+  });
+  it("no sin mensajes ni con JSON sin `error` de texto", () => {
+    expect(canRetry([], rejected)).toBe(false);
+    expect(canRetry([user], JSON.stringify({ error: 5 }))).toBe(false);
+    expect(canRetry([user], "null")).toBe(false);
   });
 });
