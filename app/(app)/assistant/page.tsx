@@ -55,7 +55,12 @@ export default async function AssistantPage() {
         actions={
           messages.length > 0 ? (
             <form action={startNewConversation}>
-              <Button type="submit" variant="outline" size="sm">
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+              >
                 <SquarePen aria-hidden="true" />
                 Nueva
               </Button>

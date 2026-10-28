@@ -1,6 +1,13 @@
 import type { UIMessage } from "ai";
 import { describe, expect, it } from "vitest";
-import { activityOf, canRetry, sourcesOf } from "../chat-status";
+import {
+  ANNOUNCE_BUSY,
+  ANNOUNCE_DONE,
+  activityOf,
+  announcementOf,
+  canRetry,
+  sourcesOf,
+} from "../chat-status";
 
 const user: UIMessage = {
   id: "u",
@@ -123,5 +130,22 @@ describe("canRetry", () => {
     expect(canRetry([], rejected)).toBe(false);
     expect(canRetry([user], JSON.stringify({ error: 5 }))).toBe(false);
     expect(canRetry([user], "null")).toBe(false);
+  });
+});
+
+describe("announcementOf", () => {
+  it("anuncia al empezar y al terminar", () => {
+    expect(announcementOf(false, true, false)).toBe(ANNOUNCE_BUSY);
+    expect(announcementOf(true, false, false)).toBe(ANNOUNCE_DONE);
+  });
+
+  it("si terminó en error no anuncia 'lista' ni repite el error: limpia la región", () => {
+    expect(announcementOf(true, false, true)).toBe("");
+  });
+
+  it("sin transición (tokens llegando o en reposo) no anuncia nada", () => {
+    expect(announcementOf(true, true, false)).toBeNull();
+    expect(announcementOf(false, false, true)).toBeNull();
+    expect(announcementOf(false, false, false)).toBeNull();
   });
 });
