@@ -46,6 +46,7 @@ import {
   getWatchlistItems,
   loadScopeSnapshot,
 } from "@/lib/portfolio/queries";
+import { settle } from "@/lib/portfolio/settle";
 import { describeTransaction } from "@/lib/portfolio/tx-view";
 import { loadSymbolView } from "@/lib/portfolio/watchlist-data";
 import { SYMBOL_PATTERN, normalizeSymbol } from "@/lib/validation/transaction";
@@ -111,9 +112,14 @@ export default async function PositionDetailPage({
     : fiveYears;
   // Una sola lectura, compartida por «Evolución del precio» (recorta el último año) y por el
   // gráfico de operaciones; cada una la espera dentro de su propio <Suspense>.
-  const closes = firstTrade
-    ? getPriceSeries(supabase, instrument.id, seriesFrom)
-    : Promise.resolve([]);
+  // `settle` nunca rechaza (resuelve `null` si falla): no hay rechazo sin manejar mientras ninguna
+  // sección la espera, y cada una degrada sola.
+  const closes = settle(
+    firstTrade
+      ? getPriceSeries(supabase, instrument.id, seriesFrom)
+      : Promise.resolve([]),
+    "asset-closes",
+  );
 
   const symbolById = new Map(
     snapshot.instrumentById.entries().map(([id, i]) => [id, i.symbol]),

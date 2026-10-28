@@ -89,11 +89,11 @@ export async function loadDailyRanges(args: {
   week52: Week52Input;
   now: Date;
   /** Cierres ya leídos (de la ficha, que lee más años): se recortan al último año sin otra consulta. */
-  closes?: Promise<Array<{ date: string; close: string }>>;
+  closes?: Promise<Array<{ date: string; close: string }> | null>;
 }): Promise<DailyRanges> {
   const from = addDays(isoDate(args.now), -RANGE_DAYS);
   const closes = args.closes
-    ? (await args.closes).filter((row) => row.date >= from)
+    ? ((await args.closes) ?? []).filter((row) => row.date >= from)
     : await getPriceSeries(args.client, args.instrument.id, from);
   const points = dailyInput(withLiveBar(closes, args.price));
   return {
