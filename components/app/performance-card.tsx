@@ -295,6 +295,30 @@ export function PerformanceCard({ view }: { view: PerformanceView }) {
                   strokeWidth={2}
                   fill={`url(#${gradientId}fill)`}
                   dot={false}
+                  // El punto activo hereda el degradé del trazo y se parte en dos colores:
+                  // se pinta liso según el signo del punto.
+                  activeDot={(props: {
+                    cx?: number;
+                    cy?: number;
+                    payload?: { gain?: number };
+                  }) => {
+                    const color =
+                      flat || (props.payload?.gain ?? 0) >= 0
+                        ? flat
+                          ? "var(--muted-foreground)"
+                          : "var(--gain)"
+                        : "var(--loss)";
+                    return (
+                      <circle
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={4}
+                        fill={color}
+                        stroke="var(--background)"
+                        strokeWidth={2}
+                      />
+                    );
+                  }}
                   isAnimationActive={false}
                 />
               </AreaChart>
