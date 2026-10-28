@@ -41,6 +41,8 @@ export interface ContributionResult {
   endValue: Dec;
   /** Σ depósitos − Σ retiros con fecha en `(from, to]`. */
   externalFlows: Dec;
+  /** Lo que ganó o perdió la cartera en el rango: `endValue − startValue − externalFlows`. */
+  gain: Dec;
   /** Intereses − comisiones − impuestos que no son de ningún símbolo. */
   other: Dec;
   /** De la mayor contribución a la menor (empate: por símbolo). */
@@ -148,12 +150,15 @@ export function contributionBetween(
     };
   });
 
+  const startValue = sum([...startValues.values()]).plus(startCash);
+  const endValue = sum([...endValues.values()]).plus(ledger.cash);
   return {
     from,
     to,
-    startValue: sum([...startValues.values()]).plus(startCash),
-    endValue: sum([...endValues.values()]).plus(ledger.cash),
+    startValue,
+    endValue,
     externalFlows,
+    gain: endValue.minus(startValue).minus(externalFlows),
     other,
     symbols: sortContributions(rows),
     unpriced: [...unpriced].sort(),
@@ -196,6 +201,7 @@ export function combineContributions(
     startValue: sum(list.map((r) => r.startValue)),
     endValue: sum(list.map((r) => r.endValue)),
     externalFlows: sum(list.map((r) => r.externalFlows)),
+    gain: sum(list.map((r) => r.gain)),
     other: sum(list.map((r) => r.other)),
     symbols: sortContributions([...bySymbol.values()]),
     unpriced: [...new Set(list.flatMap((r) => r.unpriced))].sort(),

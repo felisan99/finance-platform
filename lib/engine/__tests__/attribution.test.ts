@@ -43,19 +43,18 @@ const rowOf = (result: ContributionResult, symbol: string) => {
   return row;
 };
 
-/** Σ contribuciones + otros = cambio de valor − flujos externos. */
+/** Σ contribuciones + otros = cambio de valor − flujos externos = `gain`. */
 function expectConservation(result: ContributionResult): void {
   const contributions = result.symbols.reduce(
     (acc, r) => acc.plus(r.contribution),
     ZERO,
   );
-  expectDec(
-    contributions.plus(result.other),
-    result.endValue
-      .minus(result.startValue)
-      .minus(result.externalFlows)
-      .toFixed(),
-  );
+  const gain = result.endValue
+    .minus(result.startValue)
+    .minus(result.externalFlows)
+    .toFixed();
+  expectDec(result.gain, gain);
+  expectDec(contributions.plus(result.other), gain);
 }
 
 describe("contributionBetween", () => {

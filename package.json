@@ -23,9 +23,12 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.158",
     "@base-ui/react": "^1.8.0",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.0",
+    "ai": "^7.0.154",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "date-fns": "^4.4.0",

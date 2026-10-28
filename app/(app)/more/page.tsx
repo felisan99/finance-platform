@@ -17,6 +17,40 @@ export default async function MorePage() {
 
       <Card size="sm">
         <CardHeader>
+          <CardTitle className="text-sm">Actividad</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">
+            Todas tus operaciones: compras, ventas, depósitos y dividendos.
+          </p>
+          <Link
+            href="/activity"
+            className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+          >
+            Ver operaciones
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader>
+          <CardTitle className="text-sm">Asistente</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <p className="text-sm text-muted-foreground">
+            Lo que el asistente recuerda de vos y cómo se está usando.
+          </p>
+          <Link
+            href="/more/assistant"
+            className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+          >
+            Memoria y uso
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardHeader>
           <CardTitle className="text-sm">Tu cuenta</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">

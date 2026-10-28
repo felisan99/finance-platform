@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   graphql_public: {
     Tables: {
@@ -92,6 +92,161 @@ export type Database = {
           created_at?: string
           email?: string
           note?: string | null
+        }
+        Relationships: []
+      }
+      assistant_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          summarized_through: number
+          summary: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          summarized_through?: number
+          summary?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          summarized_through?: number
+          summary?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      assistant_memory: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          kind: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          kind: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      assistant_messages: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          message: Json
+          role: string
+          seq: number
+          ui_id: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          message: Json
+          role: string
+          seq?: never
+          ui_id: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          message?: Json
+          role?: string
+          seq?: never
+          ui_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_messages_conversation_fk"
+            columns: ["conversation_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "assistant_conversations"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      assistant_runs: {
+        Row: {
+          compacted: boolean
+          context_tokens_after: number | null
+          context_tokens_before: number | null
+          conversation_id: string | null
+          cost_usd: number | null
+          created_at: string
+          error_code: string | null
+          fallback_used: boolean
+          finish_reason: string | null
+          id: string
+          input_tokens: number | null
+          latency_ms: number | null
+          model: string | null
+          output_tokens: number | null
+          steps: number
+          tools: Json
+          ttft_ms: number | null
+          user_id: string
+        }
+        Insert: {
+          compacted?: boolean
+          context_tokens_after?: number | null
+          context_tokens_before?: number | null
+          conversation_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          error_code?: string | null
+          fallback_used?: boolean
+          finish_reason?: string | null
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          output_tokens?: number | null
+          steps?: number
+          tools?: Json
+          ttft_ms?: number | null
+          user_id: string
+        }
+        Update: {
+          compacted?: boolean
+          context_tokens_after?: number | null
+          context_tokens_before?: number | null
+          conversation_id?: string | null
+          cost_usd?: number | null
+          created_at?: string
+          error_code?: string | null
+          fallback_used?: boolean
+          finish_reason?: string | null
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          output_tokens?: number | null
+          steps?: number
+          tools?: Json
+          ttft_ms?: number | null
+          user_id?: string
         }
         Relationships: []
       }
