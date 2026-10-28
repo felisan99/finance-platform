@@ -15,6 +15,7 @@ Instalable en el iPhone como app, con widget en la pantalla de inicio.
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Vitest](https://img.shields.io/badge/tests-1779%20unitarios-6e9f18?logo=vitest&logoColor=white)](#tests)
 [![PWA](https://img.shields.io/badge/PWA-instalable-5a0fc8?logo=pwa&logoColor=white)](#pwa-y-widget)
+[![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-yellow)](LICENSE)
 
 </div>
 
@@ -33,6 +34,7 @@ Instalable en el iPhone como app, con widget en la pantalla de inicio.
 - [Seguridad y privacidad](#seguridad-y-privacidad)
 - [Documentación](#documentación)
 - [Estado](#estado)
+- [Licencia](#licencia)
 
 ## Qué hace
 
@@ -288,3 +290,7 @@ Los riesgos residuales aceptados están en [`docs/decisions.md`](docs/decisions.
 - [ ] Importar desde IBKR Flex Query.
 
 Es un proyecto personal sin fines comerciales. Los datos de mercado vienen de Yahoo Finance y se muestran solo a personas invitadas.
+
+## Licencia
+
+[MIT](LICENSE) © 2026 Felipe Santisteban.
