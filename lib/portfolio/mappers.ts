@@ -279,3 +279,98 @@ export function inputToInsertRow(
     source: "manual",
   };
 }
+
+/** Mediodía en Nueva York: el día de mercado de la operación es el del ex-dividendo. */
+const exDateInstant = (exDate: string): Date =>
+  new Date(`${exDate}T16:00:00.000Z`);
+
+/**
+ * Un dividendo propuesto y confirmado → las filas que se guardan: el `DIVIDEND` bruto y, si hay
+ * retención, el `TAX` del mismo símbolo. `external_id` (`div:` / `divtax:` + el id de
+ * `corporate_actions`) hace que la base rechace guardarlo dos veces en la misma cuenta. Los montos
+ * vienen al centavo (`suggestDividends`), así que el número es exacto.
+ */
+export function dividendToInsertRows(
+  suggestion: {
+    eventId: string;
+    exDate: string;
+    gross: Dec;
+    withholding: Dec;
+  },
+  ctx: {
+    userId: string;
+    accountId: string;
+    instrumentId: string;
+    currency: string;
+  },
+): TransactionInsert[] {
+  const common = {
+    user_id: ctx.userId,
+    account_id: ctx.accountId,
+    instrument_id: ctx.instrumentId,
+    executed_at: exDateInstant(suggestion.exDate).toISOString(),
+    currency: ctx.currency,
+    source: "auto_dividend",
+    // Todas las filas con las mismas columnas: al insertar varias juntas, PostgREST completa con
+    // NULL (no con el default) las que falten en alguna, y `fee` es NOT NULL.
+    fee: 0,
+    notes: null,
+  } as const;
+  const rows: TransactionInsert[] = [
+    {
+      ...common,
+      type: "DIVIDEND",
+      amount: num(suggestion.gross),
+      external_id: `div:${suggestion.eventId}`,
+    },
+  ];
+  if (suggestion.withholding.gt(0)) {
+    rows.push({
+      ...common,
+      type: "TAX",
+      amount: num(suggestion.withholding),
+      external_id: `divtax:${suggestion.eventId}`,
+      notes: "Retención de EE. UU. sobre el dividendo",
+    });
+  }
+  return rows;
+}
+
+/** Las mismas operaciones como `Transaction` del motor, para validar el libro antes de guardar. */
+export function dividendToTransactions(
+  suggestion: {
+    eventId: string;
+    symbol: string;
+    exDate: string;
+    gross: Dec;
+    withholding: Dec;
+  },
+  ctx: { accountId: string; currency: string; now: Date },
+): Transaction[] {
+  const executedAt = exDateInstant(suggestion.exDate);
+  const txs: Transaction[] = [
+    {
+      id: `div:${suggestion.eventId}`,
+      accountId: ctx.accountId,
+      type: "DIVIDEND",
+      symbol: suggestion.symbol,
+      amount: suggestion.gross,
+      executedAt,
+      createdAt: ctx.now,
+      currency: ctx.currency,
+    },
+  ];
+  if (suggestion.withholding.gt(0)) {
+    txs.push({
+      id: `divtax:${suggestion.eventId}`,
+      accountId: ctx.accountId,
+      type: "TAX",
+      symbol: suggestion.symbol,
+      amount: suggestion.withholding,
+      executedAt,
+      createdAt: ctx.now,
+      currency: ctx.currency,
+    });
+  }
+  return txs;
+}

@@ -642,6 +642,7 @@ Vercel + Supabase in the cloud: create the `finance` (production) project, `supa
 ✅ Works in production with your account and a friend's.
 
 **Phase 8 (optional) — IBKR Flex Query, automatic dividends, FIFO and notifications.**
+*(2026-10-28: automatic dividends done as suggestions the person confirms, with US withholding for non-residents (30% by default, configurable); see `docs/decisions.md`, "Dividendos automáticos".)*
 
 ### 14.3 Suggested first prompt for Claude Code
 > Read the whole PROJECT_SPEC.md. We start with Phase 0 and Phase 1. Before writing code, propose the file plan for `lib/engine` and the main types (Transaction, Position, EngineResult). Then implement the Delta importer and the calculation of positions, cash and realized gain, with Vitest tests using the fixture from section 8.3. Don't move on to the UI until the acceptance test passes.

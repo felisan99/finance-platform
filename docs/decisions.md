@@ -584,6 +584,33 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
   - Probar la UI en el iPhone.
   - En la Fase 7, la migración y las variables (`OPENROUTER_API_KEY`, `ASSISTANT_MODEL`, `ASSISTANT_FALLBACK_MODEL`, `TAVILY_API_KEY`) van a producción.
 
+## Dividendos automáticos (2026-10-28)
+
+Antes, un dividendo solo existía en la cartera si se cargaba a mano o venía en un CSV. El CSV de Delta no los trae, así que los dividendos quedaban en 0 y el efectivo daba menos que el del broker. El cron ya detectaba los dividendos de cada activo (`corporate_actions`, 290 a esta fecha), pero nada los pasaba a la cartera. Es la parte de "dividendos automáticos" de la Fase 8.
+
+- **Cálculo** (`suggestDividends`, `lib/engine/dividends.ts`, puro y probado):
+  - Cobra lo que la cuenta tenía al cierre del día anterior al ex-dividendo, según su libro.
+  - El monto por acción del proveedor viene ajustado por los splits posteriores, igual que los precios. Se des-ajusta con los `SPLIT` del libro desde el ex-dividendo en adelante.
+  - Bruto = acciones × monto por acción, al centavo. Retención = bruto × tasa, al centavo.
+  - Se calcula cuenta por cuenta; con «Todo junto», cada portafolio por su lado.
+- **No se repite:** si la cuenta ya tiene un `DIVIDEND` del mismo símbolo entre 7 días antes y 60 días después del ex-dividendo (cargado a mano, importado o confirmado), no se propone. Los ex-dividendos futuros tampoco.
+- **Retención de EE. UU. para no residentes:**
+  - `profiles.dividend_withholding_rate`, 30% por defecto: es la tasa sin convenio de doble imposición, como la de Uruguay.
+  - Se elige en la pantalla: 30%, 15% (con convenio), 10% o 0%.
+  - Al confirmar se guardan dos operaciones: el `DIVIDEND` bruto y la retención como `TAX` del mismo símbolo. Así el efectivo sube el neto y la retención queda visible.
+  - **Límite aceptado:** se aplica la misma tasa a todo. Un ADR de una empresa no estadounidense (TSM, ASML) retiene según su país, y ese caso se descarta y se carga a mano.
+- **Confirmar, no cargar solo:**
+  - Los broker cobran unas semanas después del ex-dividendo y a veces con otra retención, así que la app propone y la persona confirma (**Actividad → Dividendos**, **Más → Tus datos**, o el aviso de Inicio).
+  - La fecha guardada es la del ex-dividendo, a mediodía de Nueva York.
+  - "Descartar" lo oculta para esa cuenta (`dividend_dismissals`, RLS).
+- **Seguridad del alta:**
+  - La Server Action no recibe montos del cliente: recalcula las propuestas con el libro y la tasa de la persona, valida el libro (`validateLedgerChange`, `addMany`) y guarda con `source = 'auto_dividend'` y `external_id` `div:` / `divtax:` + id.
+  - `transactions_dedup` impide guardarlo dos veces.
+- **Bug encontrado por el test de integración:** al insertar varias filas juntas, PostgREST completa con `NULL` (no con el default) las columnas que falten en alguna. Como la fila del impuesto traía `notes` y la del dividendo no, `fee` llegaba nulo. Ahora todas llevan las mismas columnas, y un test unitario lo fija.
+- **Verificación:**
+  - Unitarias: el motor (cantidad al día anterior, splits, redondeo, ya cargados, futuros, tasa 0, rango), los mappers (el libro los acepta y el efectivo sube el neto) y la vista.
+  - Integración (`dividends.integration.test.ts`): propuesta de punta a punta, tasa por persona con su rango, descartes con RLS entre dos personas, el duplicado rechazado por la base, y que confirmado no se vuelve a proponer. Integración completa 144/144.
+
 ## Observaciones del spec para fases posteriores
 
 1. **Splits y precios.** Resuelto en la Fase 3 del lado de los datos (ver "Desvíos y decisiones de la Fase 3"); el des-ajuste al valuar es de la Fase 5. El motor aplica solo transacciones `SPLIT`; `corporate_actions` informa o propone splits, pero no se aplican dos veces.

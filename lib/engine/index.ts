@@ -82,6 +82,16 @@ export type {
 } from "./attribution";
 export { summarizeCloses } from "./price-summary";
 export { simulateTrades } from "./trade-sim";
+export {
+  RECORDED_AFTER_DAYS,
+  RECORDED_BEFORE_DAYS,
+  suggestDividends,
+} from "./dividends";
+export type {
+  DividendEvent,
+  DividendInput,
+  DividendSuggestion,
+} from "./dividends";
 export type {
   SimHolding,
   SimInput,

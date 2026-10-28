@@ -81,6 +81,12 @@ export default async function ActivityPage({
         >
           Importar CSV
         </Link>
+        <Link
+          href="/activity/dividends"
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+        >
+          Dividendos
+        </Link>
         {/* Descarga directa: un <a> común, no un Link (no debe pre-cargarse). */}
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- descarga de un archivo: <Link> intentaría navegar */}
         <a

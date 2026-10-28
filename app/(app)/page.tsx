@@ -11,6 +11,7 @@ import {
   RiskSection,
   SectionSkeleton,
 } from "@/components/app/performance-section";
+import { PendingDividendsNotice } from "@/components/app/pending-dividends-notice";
 import { Pnl } from "@/components/app/pnl";
 import { RefreshButton } from "@/components/app/refresh-button";
 import { SnapshotSaver } from "@/components/app/snapshot-saver";
@@ -157,6 +158,10 @@ export default async function HomePage() {
           </Link>
         </Notice>
       )}
+
+      <Suspense fallback={null}>
+        <PendingDividendsNotice snapshot={snapshot} />
+      </Suspense>
 
       <Suspense fallback={<PerformanceSkeleton />}>
         <PerformanceSection outcome={performance} />

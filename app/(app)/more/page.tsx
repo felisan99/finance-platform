@@ -123,6 +123,12 @@ export default async function MorePage() {
           >
             Agregar una operación
           </Link>
+          <Link
+            href="/activity/dividends"
+            className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+          >
+            Dividendos detectados
+          </Link>
         </CardContent>
       </Card>
     </div>

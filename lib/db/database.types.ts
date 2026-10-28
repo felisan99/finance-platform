@@ -285,6 +285,42 @@ export type Database = {
           },
         ]
       }
+      dividend_dismissals: {
+        Row: {
+          account_id: string
+          corporate_action_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          corporate_action_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          corporate_action_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dividend_dismissals_account_fk"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "dividend_dismissals_corporate_action_id_fkey"
+            columns: ["corporate_action_id"]
+            isOneToOne: false
+            referencedRelation: "corporate_actions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       imports: {
         Row: {
           account_id: string | null
@@ -486,18 +522,21 @@ export type Database = {
           base_currency: string
           created_at: string
           display_name: string | null
+          dividend_withholding_rate: number
           id: string
         }
         Insert: {
           base_currency?: string
           created_at?: string
           display_name?: string | null
+          dividend_withholding_rate?: number
           id: string
         }
         Update: {
           base_currency?: string
           created_at?: string
           display_name?: string | null
+          dividend_withholding_rate?: number
           id?: string
         }
         Relationships: []
