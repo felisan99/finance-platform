@@ -9,7 +9,7 @@
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ECF8E?logo=supabase&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1995%20unit-2EA44F?logo=vitest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-2076%20unit-2EA44F?logo=vitest&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 <picture>
@@ -27,7 +27,7 @@
 - **Source of truth:** one ledger of transactions per account. Positions, cash, gains and returns are recomputed from it, never stored.
 - **Calculation engine:** pure TypeScript (`lib/engine`) with no database, network or clock: average cost, splits, cash, daily value series, TWR, XIRR, drawdown, volatility and what-if analysis.
 - **Money:** `decimal.js` end to end. Postgres `numeric` values are read as text, so no amount ever passes through a float.
-- **Tests:** 1,995 unit tests in CI, including property-based tests with fast-check, plus integration tests for row-level security and live tests against real market data.
+- **Tests:** 2,076 unit tests in CI, including property-based tests with fast-check, plus integration tests for row-level security and live tests against real market data.
 - **Running cost:** US$ 0 per month: Vercel Hobby, Supabase Free, Yahoo Finance, free OpenRouter models and the free Tavily plan, with one daily cron.
 - **Access:** invite-only sign-in with 6-digit email codes. No passwords anywhere.
 
