@@ -554,6 +554,7 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
   - Unitarias del motor, de las tools contra la cartera demo y de la puntuación.
   - Integración (`assistant.integration.test.ts`): RLS entre dos personas, mensajes que no se editan, tope de memoria, métricas que no se editan, anon sin acceso y límites.
   - En vivo: una pregunta real contra OpenRouter y Tavily (`agent.live.test.ts`), y la ruta por HTTP con `next start` y sesión real (`assistant-http.live.test.ts`: streaming, persistencia, métricas, 404 con la conversación de otra persona).
+- **Desplegado el 2026-10-28** (commit `1756ef4`, `vercel deploy --prod`, el proyecto que apunta a `finance-dev`, donde la migración ya estaba). Se cargaron en Production `OPENROUTER_API_KEY` y `TAVILY_API_KEY` (sensibles), `ASSISTANT_MODEL` y `ASSISTANT_FALLBACK_MODEL`, desde `.env.local` por stdin. Se revisó lo subido: 345 archivos, ninguno de `.env`, evals, fixtures, tests, `docs/` ni `supabase/`. Sin sesión, `/assistant`, `/more/assistant` y `POST /api/assistant` redirigen a `/login`. Falta probarlo en el iPhone.
 - **Pendiente:**
   - La cartera demo en `finance-dev` para las capturas del post.
   - Probar la UI en el iPhone.
