@@ -28,12 +28,14 @@ export const TOOL_LABELS: Record<string, string> = {
   get_gains: "Ganancias",
   get_performance: "Rendimiento",
   explain_move: "Qué movió la cartera",
+  get_asset_info: "Datos del activo",
   get_price_history: "Precio histórico",
   what_if: "¿Y si…?",
   get_risk: "Riesgo",
   simulate_trade: "Simulación",
   get_allocation: "Reparto",
   search_news: "Noticias",
+  web_search: "Web",
   update_memory: "Memoria",
 };
 
@@ -43,12 +45,14 @@ export const TOOL_ACTIVITY: Record<string, string> = {
   get_gains: "Calculando tus ganancias",
   get_performance: "Calculando el rendimiento",
   explain_move: "Viendo qué movió la cartera",
+  get_asset_info: "Consultando el precio de hoy",
   get_price_history: "Mirando el precio histórico",
   what_if: "Simulando la compra",
   get_risk: "Midiendo el riesgo",
   simulate_trade: "Simulando la operación",
   get_allocation: "Viendo cómo está repartida tu cartera",
   search_news: "Buscando noticias",
+  web_search: "Buscando en la web",
   update_memory: "Guardando lo que me contaste",
 };
 
