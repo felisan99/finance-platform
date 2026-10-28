@@ -181,6 +181,9 @@ describe("buildSystemPrompt", () => {
   it("recomienda, pero no inventa ni calcula datos ni opera", () => {
     const prompt = buildSystemPrompt(input);
     expect(prompt).toContain("## Recomendaciones");
+    expect(prompt).toContain("## Extensión de la respuesta");
+    expect(prompt).toContain("concreta, directa y proporcional a la pregunta");
+    expect(prompt).toContain('"armá un plan"');
     expect(prompt).toContain("no tengo ese dato");
     expect(prompt).toContain("No los calcules vos");
     expect(prompt).toContain("no podés operar");

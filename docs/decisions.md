@@ -569,6 +569,12 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
     - La causa es el largo de las respuestas del prompt de asesor sobre un modelo gratuito lento. Bajar el razonamiento de Nemotron a "low" no ayudó (18 tok/s).
     - `gemma-4-31b-it:free` devolvió 429 por saturación del pool compartido de Google. `inkling:free` devuelve 403: solo sirve para "agentic harnesses", así que sale de los evals.
     - `ASSISTANT_FALLBACK_MODEL` ahora acepta hasta 2 ids separados por comas: OpenRouter los prueba en orden.
+    - **Respaldos, solo gratuitos** (Felipe descartó del todo un respaldo pago): `google/gemma-4-31b-it:free,nvidia/nemotron-3.5-super-vl:free`, en `.env.local` y en Vercel. Nemotron 3.5 Super se probó con una tool: la eligió bien, copió los números tal cual y respondió en 2,4 s.
+  - **Respuestas más acotadas, sin tope de palabras:**
+    - El prompt suma "Extensión de la respuesta": concreta, directa y proporcional a la pregunta.
+    - Por defecto responde solo lo preguntado. Desarrolla a fondo únicamente si piden "en detalle", "armá un plan" o "paso a paso".
+    - No agrega planes, tablas, alternativas ni resúmenes que nadie pidió. Si hay algo importante sin preguntar, lo dice en una línea y ofrece profundizar.
+    - El esquema de decisión (veredicto, razones, riesgo, qué haría cambiar de opinión) pide una línea por razón.
 - **Pendiente:**
   - La cartera demo en `finance-dev` para las capturas del post.
   - Probar la UI en el iPhone.
