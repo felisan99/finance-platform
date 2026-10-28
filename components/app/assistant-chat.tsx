@@ -13,7 +13,12 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { activityOf, canRetry, sourcesOf } from "@/lib/assistant/chat-status";
+import {
+  activityOf,
+  announcementOf,
+  canRetry,
+  sourcesOf,
+} from "@/lib/assistant/chat-status";
 import { stripInternalRefs } from "@/lib/assistant/internal-refs";
 import {
   parseMarkdown,
@@ -194,6 +199,7 @@ function Activity({ label }: { label: string }) {
   return (
     <div
       role="status"
+      aria-live="off"
       className="flex items-center gap-2 self-start text-sm text-muted-foreground"
     >
       <span className="flex gap-1" aria-hidden="true">
@@ -296,6 +302,16 @@ export function AssistantChat({
   });
   const busy = status === "submitted" || status === "streaming";
   const activity = activityOf(messages, busy);
+  const failure = errorText(error);
+
+  // Región viva chica y aparte: solo anuncia cambios de estado, no cada token de la respuesta.
+  const [wasBusy, setWasBusy] = useState(busy);
+  const [announcement, setAnnouncement] = useState("");
+  if (wasBusy !== busy) {
+    setWasBusy(busy);
+    const next = announcementOf(wasBusy, busy, status === "error");
+    if (next !== null) setAnnouncement(next);
+  }
 
   const scrollToBottom = useCallback(() => {
     window.scrollTo({ top: document.documentElement.scrollHeight });
@@ -337,12 +353,14 @@ export function AssistantChat({
     requestAnimationFrame(scrollToBottom);
   };
 
-  const failure = errorText(error);
   const retryable = !busy && canRetry(messages, error?.message);
   const lastId = messages.at(-1)?.id;
 
   return (
     <div className="flex flex-col gap-4">
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
       {messages.length === 0 ? (
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">
@@ -365,7 +383,12 @@ export function AssistantChat({
           </ul>
         </div>
       ) : (
-        <div className="flex flex-col gap-4" aria-live="polite">
+        <div
+          role="log"
+          aria-live="off"
+          aria-label="Conversación"
+          className="flex flex-col gap-4"
+        >
           {messages.map((message) => (
             <MessageView
               key={message.id}
@@ -453,6 +476,7 @@ export function AssistantChat({
               type="button"
               size="icon"
               variant="outline"
+              className="size-11"
               aria-label="Detener"
               onClick={() => void stop()}
             >
@@ -463,6 +487,7 @@ export function AssistantChat({
               key="send"
               type="submit"
               size="icon"
+              className="size-11"
               aria-label="Enviar"
               disabled={!input.trim()}
             >

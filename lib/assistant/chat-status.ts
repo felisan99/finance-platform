@@ -100,3 +100,22 @@ export function canRetry(
   if (!errorMessage || messages.at(-1)?.role !== "user") return false;
   return isRejectedBeforeStreaming(errorMessage);
 }
+
+export const ANNOUNCE_BUSY = "El asistente está respondiendo…";
+export const ANNOUNCE_DONE = "Respuesta lista";
+
+/**
+ * Qué anunciar a lector de pantalla cuando cambia el estado de la request. Solo transiciones, nunca
+ * por token: `null` = no cambiar lo ya anunciado. Si terminó en error no se anuncia nada (`""`
+ * limpia la región): el error visible ya tiene `role="alert"` y se leería dos veces. `errored` viene
+ * del estado de la request, no del objeto de error, que puede llegar un render después.
+ */
+export function announcementOf(
+  wasBusy: boolean,
+  busy: boolean,
+  errored: boolean,
+): string | null {
+  if (!wasBusy && busy) return ANNOUNCE_BUSY;
+  if (wasBusy && !busy) return errored ? "" : ANNOUNCE_DONE;
+  return null;
+}

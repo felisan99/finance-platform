@@ -41,7 +41,7 @@ export async function PriceRangeSection({
   client: SupabaseClient<Database>;
   instrument: InstrumentRow;
   price: LivePrice;
-  closes?: Promise<Array<{ date: string; close: string }>>;
+  closes?: Promise<Array<{ date: string; close: string }> | null>;
 }) {
   const now = new Date();
   const company = await companyForChart(instrument);
