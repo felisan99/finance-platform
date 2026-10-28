@@ -611,6 +611,19 @@ Antes, un dividendo solo existía en la cartera si se cargaba a mano o venía en
   - Unitarias: el motor (cantidad al día anterior, splits, redondeo, ya cargados, futuros, tasa 0, rango), los mappers (el libro los acepta y el efectivo sube el neto) y la vista.
   - Integración (`dividends.integration.test.ts`): propuesta de punta a punta, tasa por persona con su rango, descartes con RLS entre dos personas, el duplicado rechazado por la base, y que confirmado no se vuelve a proponer. Integración completa 144/144.
 
+## Rangos en «Tus operaciones en el gráfico» (2026-10-28)
+
+- **Problema:** el gráfico de la ficha mostraba siempre desde unos días antes de la primera operación hasta hoy. Eso es demasiado ancho para ver compras cercanas (las de junio de VOO quedaban encimadas) y demasiado corto para ver si una entrada fue cara respecto de la historia.
+- **Elegido:** chips de rango *Desde tu compra* (por defecto, lo de siempre), 1M, 3M, 1A y 5A.
+  - El servidor manda una sola vez hasta 5 años de cierres, o desde la primera operación si es más vieja. El cliente recorta cada rango (`trade-chart-range.ts`, sin imports, con tests), así que cambiar de rango es inmediato. Son unos 1260 puntos.
+  - Un rango más corto que la tenencia avisa cuántas operaciones quedaron antes.
+  - Un rango más largo muestra el precio de antes de la primera compra.
+  - Con más de un año a la vista, el eje pasa a mes/año.
+  - Si no hay operaciones (un símbolo que solo se sigue), no aparece "Desde tu compra" y abre en 1A.
+- **Descartado:**
+  - **Scroll lateral o pinch-zoom:** en el teléfono el arrastre horizontal compite con el scroll vertical de la página, no se descubre y Recharts no lo trae. Los chips resuelven lo mismo.
+  - **Fusionar con «Evolución del precio»:** queda como paso siguiente. Los rangos usan el mismo vocabulario (1M, 3M, 1A) para que la fusión sea fácil, pero 1S y 1M de ese gráfico son intradía y habría que ubicar las operaciones dentro del día.
+
 ## Observaciones del spec para fases posteriores
 
 1. **Splits y precios.** Resuelto en la Fase 3 del lado de los datos (ver "Desvíos y decisiones de la Fase 3"); el des-ajuste al valuar es de la Fase 5. El motor aplica solo transacciones `SPLIT`; `corporate_actions` informa o propone splits, pero no se aplican dos veces.

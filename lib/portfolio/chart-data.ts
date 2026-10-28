@@ -1,4 +1,4 @@
-import { marketDay, type Transaction } from "@/lib/engine";
+import { addDays, marketDay, type Transaction } from "@/lib/engine";
 
 // Datos del gráfico de precio de una posición (spec §10.2): la serie de cierres con marcadores de
 // compra y venta. Es SOLO para mostrar: los números salen del decimal a `number` porque el gráfico
@@ -24,7 +24,12 @@ export interface PositionChartData {
   markers: ChartMarker[];
   /** Línea de referencia; `null` si la posición está cerrada. */
   avgCost: number | null;
+  /** Dónde empieza "Desde tu compra": unos días antes de la primera operación; `null` sin operaciones. */
+  sinceStart: string | null;
 }
+
+/** Ruedas antes de la primera operación que muestra "Desde tu compra" (la previa y algún feriado). */
+export const SINCE_MARGIN_DAYS = 7;
 
 /** Fecha de la rueda (YYYY-MM-DD, hora de Nueva York) en la que cae una operación. */
 export const tradeDay = marketDay;
@@ -53,7 +58,12 @@ export function buildPositionChart(
     .filter((p) => Number.isFinite(p.close));
 
   const markers: ChartMarker[] = [];
+  let firstTrade: string | null = null;
   for (const tx of transactions) {
+    if ((tx.type === "BUY" || tx.type === "SELL") && tx.symbol === symbol) {
+      const day = tradeDay(tx.executedAt);
+      if (firstTrade === null || day < firstTrade) firstTrade = day;
+    }
     if ((tx.type !== "BUY" && tx.type !== "SELL") || tx.symbol !== symbol)
       continue;
     const bar = barOnOrBefore(points, tradeDay(tx.executedAt));
@@ -67,9 +77,12 @@ export function buildPositionChart(
     });
   }
 
+  markers.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return {
     points,
     markers,
     avgCost: avgCost === null ? null : Number(avgCost),
+    sinceStart:
+      firstTrade === null ? null : addDays(firstTrade, -SINCE_MARGIN_DAYS),
   };
 }

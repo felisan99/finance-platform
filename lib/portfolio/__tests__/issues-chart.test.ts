@@ -191,7 +191,27 @@ describe("buildPositionChart", () => {
       points: [],
       markers: [],
       avgCost: 610,
+      sinceStart: "2026-03-02",
     });
+  });
+
+  it("'Desde tu compra' arranca 7 días antes de la primera operación del símbolo; sin operaciones, null", () => {
+    const chart = buildPositionChart(
+      series,
+      [
+        buy("2026-03-12T15:00:00Z", "VOO", "1", "620"),
+        buy("2026-03-09T15:00:00Z", "VOO", "1", "610"),
+        buy("2026-01-05T15:00:00Z", "AAPL", "1", "200"),
+      ],
+      "VOO",
+      "615",
+    );
+    expect(chart.sinceStart).toBe("2026-03-02");
+    // Los marcadores quedan en orden de fecha (el gráfico recorta por rango con eso).
+    expect(chart.markers.map((m) => m.date)).toEqual(
+      [...chart.markers.map((m) => m.date)].sort(),
+    );
+    expect(buildPositionChart(series, [], "VOO", null).sinceStart).toBeNull();
   });
 
   it("descarta puntos con cierres que no son números", () => {

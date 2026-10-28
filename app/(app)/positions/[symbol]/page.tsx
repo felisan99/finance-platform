@@ -23,6 +23,7 @@ import { TxRow } from "@/components/app/tx-row";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
+import { addMonths } from "@/lib/engine";
 import { addDays, isoDate } from "@/lib/market-jobs/dates";
 import { buildPositionChart } from "@/lib/portfolio/chart-data";
 import {
@@ -101,13 +102,14 @@ export default async function PositionDetailPage({
       oldest === null || tx.executedAt < oldest ? tx.executedAt : oldest,
     null,
   );
-  // La serie arranca unos días antes de la primera operación (rueda previa y feriados).
+  // Hasta 5 años de cierres (el rango más largo del gráfico) o, si la primera operación es más
+  // vieja, desde unos días antes de ella: el cliente recorta cada rango sin volver a pedir datos.
+  const fiveYears = addMonths(isoDate(new Date()), -60);
+  const seriesFrom = firstTrade
+    ? [addDays(isoDate(firstTrade), -7), fiveYears].sort()[0]!
+    : fiveYears;
   const series = firstTrade
-    ? await getPriceSeries(
-        supabase,
-        instrument.id,
-        addDays(isoDate(firstTrade), -7),
-      )
+    ? await getPriceSeries(supabase, instrument.id, seriesFrom)
     : [];
   // Con la cotización de hoy como último punto mientras no exista el cierre de hoy.
   const chart = buildPositionChart(
