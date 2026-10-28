@@ -13,19 +13,21 @@ import { FollowButton } from "@/components/app/follow-button";
 import { Pnl } from "@/components/app/pnl";
 import { portfolioNameLine } from "@/components/app/portfolio-context";
 import { PriceCard, type PriceCardData } from "@/components/app/price-card";
-import { PriceChart } from "@/components/app/price-chart";
 import {
   PriceRangeSection,
   PriceRangeSkeleton,
 } from "@/components/app/price-range-section";
 import { PageHeader, Stat } from "@/components/app/stat";
+import {
+  TradeChartSection,
+  TradeChartSkeleton,
+} from "@/components/app/trade-chart-section";
 import { TxRow } from "@/components/app/tx-row";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/db/server";
 import { addMonths } from "@/lib/engine";
 import { addDays, isoDate } from "@/lib/market-jobs/dates";
-import { buildPositionChart } from "@/lib/portfolio/chart-data";
 import {
   companyTitle,
   kindOf,
@@ -38,7 +40,6 @@ import {
   formatPrice,
   formatQuantity,
 } from "@/lib/portfolio/format";
-import { withLiveBar } from "@/lib/portfolio/live-series";
 import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
 import {
   getPriceSeries,
@@ -108,20 +109,11 @@ export default async function PositionDetailPage({
   const seriesFrom = firstTrade
     ? [addDays(isoDate(firstTrade), -7), fiveYears].sort()[0]!
     : fiveYears;
-  const series = firstTrade
-    ? await getPriceSeries(supabase, instrument.id, seriesFrom)
-    : [];
-  // Con la cotización de hoy como último punto mientras no exista el cierre de hoy.
-  const chart = buildPositionChart(
-    withLiveBar(series, {
-      price: position.price,
-      asOf: position.priceAsOf,
-      source: position.priceSource,
-    }),
-    own,
-    symbol,
-    position.avgCost?.toFixed() ?? null,
-  );
+  // Una sola lectura, compartida por «Evolución del precio» (recorta el último año) y por el
+  // gráfico de operaciones; cada una la espera dentro de su propio <Suspense>.
+  const closes = firstTrade
+    ? getPriceSeries(supabase, instrument.id, seriesFrom)
+    : Promise.resolve([]);
 
   const symbolById = new Map(
     snapshot.instrumentById.entries().map(([id, i]) => [id, i.symbol]),
@@ -197,6 +189,7 @@ export default async function PositionDetailPage({
             asOf: priceData.priceAsOf,
             source: priceData.priceSource,
           }}
+          closes={closes}
         />
       </Suspense>
 
@@ -258,16 +251,19 @@ export default async function PositionDetailPage({
         />
       </Suspense>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">
-            Tus operaciones en el gráfico
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PriceChart data={chart} symbol={symbol} />
-        </CardContent>
-      </Card>
+      <Suspense fallback={<TradeChartSkeleton />}>
+        <TradeChartSection
+          closes={closes}
+          price={{
+            price: position.price,
+            asOf: position.priceAsOf,
+            source: position.priceSource,
+          }}
+          transactions={own}
+          symbol={symbol}
+          avgCost={position.avgCost?.toFixed() ?? null}
+        />
+      </Suspense>
 
       <Card>
         <CardHeader>

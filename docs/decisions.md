@@ -503,6 +503,10 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
   - Al modelo le llega como `contenido_externo`.
   - **Defensa contra prompt injection:** después de leer noticias, `prepareStep` saca `update_memory` por el resto del turno. Un texto de terceros no puede terminar guardado como "dato de la persona". Los evals lo prueban con una noticia maliciosa.
   - Límite `news_search`: 20 por día.
+- **Datos de hoy de cualquier activo y búsqueda web (2026-10-28).** Ante "¿a cuánto está X?" de un símbolo que no estaba en la base, el asistente respondía que no tenía internet. Se agregaron dos tools de solo lectura:
+  - `get_asset_info` (`tools/asset-info.ts`): cotización, cambio del día y datos de empresa, fondo o moneda de **cualquier** símbolo de Yahoo (acción, ETF o cripto en USD), esté o no en la cartera. Reusa la capa de la ficha del activo: `getQuotes`, `loadCompanyData` (caché de 1 h) y las vistas `buildCompanyRows` y `buildEarningsView`; el nombre y el tipo salen de la base si el símbolo ya está, o de `getProfile`. Pasa por `AssistantDataSource.assetInfo` (cliente de la sesión para leer `instruments`, nunca `admin.ts`; no guarda nada), cuenta contra `search_symbols` (30 por minuto) y tiene un tope de 4 consultas por pregunta. Si el proveedor falla, el símbolo no existe o cotiza en otra moneda, lo dice en `missing`. Yahoo no da el costo anual (TER) de un ETF: la tool lo marca como faltante y la descripción sugiere buscarlo en la web.
+  - `web_search` (`tools/web-search.ts`): búsqueda general en Tavily (`topic: general`) con el mismo saneamiento, el mismo `contenido_externo` y el mismo límite diario `news_search` que las noticias. A Tavily solo le llega la consulta (3 a 120 caracteres, con letras). Después de usarla, `prepareStep` también saca `update_memory` por el resto del turno (`activeToolsAfter`, con test).
+  - El prompt dice que puede consultar datos de hoy y la web en vez de responder de memoria. No se corrió contra un modelo: la cartera demo trae datos fijos para dos símbolos de afuera (`DEMO_EXTERNAL_ASSETS`) y una web simulada.
 - **Memoria de largo plazo** (`assistant_memory`):
   - Perfil de riesgo, objetivos y hechos estables, hasta 30 por persona (trigger, código `AM001`).
   - Va entera en el prompt, sin vector store (son pocos hechos cortos).
@@ -526,6 +530,7 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
     - `get_allocation`: el peso conjunto de un grupo de símbolos, o el reparto por tipo o por sector (`computeAllocation`).
 
     Sus descripciones le piden al modelo usarlas en vez de calcular, y el prompt suma dos reglas: nada de aproximaciones ni proyecciones propias (cuantificar con `simulate_trade`, `what_if` o `get_allocation`), y si piden operar, la primera frase dice que no puede. El ejemplo de formato del prompt pasó a "12,40%", como escribe `formatPercent`. Las preguntas de recomendación no se volvieron a correr.
+
   - **Descripciones de las tools reescritas como prompts para un agente (2026-10-28).**
     - **Problema:** describían qué datos devolvían, pero no cuándo usar cada una frente a las que se solapan (pesos en tres tools, compras en `what_if` y `simulate_trade`), ni cuándo no usar `search_news`. En la segunda prueba el modelo llamó noticias para opinar y le pidió a la persona que "use `simulate_trade` en la app".
     - **Estructura nueva de cada descripción:** qué hace, cuándo usarla, cuándo no y qué usar en cambio, y qué devuelve. Las tools con parámetros compuestos llevan ejemplos de entrada. Todos los parámetros están descritos: fechas inclusivas, modos que no se mezclan, de dónde sale el `id`.
@@ -614,7 +619,7 @@ Antes, un dividendo solo existía en la cartera si se cargaba a mano o venía en
 ## Rangos en «Tus operaciones en el gráfico» (2026-10-28)
 
 - **Problema:** el gráfico de la ficha mostraba siempre desde unos días antes de la primera operación hasta hoy. Eso es demasiado ancho para ver compras cercanas (quedaban encimadas) y demasiado corto para ver si una entrada fue cara respecto de la historia.
-- **Elegido:** chips de rango *Desde tu compra* (por defecto, lo de siempre), 1M, 3M, 1A y 5A.
+- **Elegido:** chips de rango _Desde tu compra_ (por defecto, lo de siempre), 1M, 3M, 1A y 5A.
   - El servidor manda una sola vez hasta 5 años de cierres, o desde la primera operación si es más vieja. El cliente recorta cada rango (`trade-chart-range.ts`, sin imports, con tests), así que cambiar de rango es inmediato. Son unos 1260 puntos.
   - Un rango más corto que la tenencia avisa cuántas operaciones quedaron antes.
   - Un rango más largo muestra el precio de antes de la primera compra.
