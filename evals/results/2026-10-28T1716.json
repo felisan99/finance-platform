@@ -1,0 +1,114 @@
+{
+  "date": "2026-10-28T1716",
+  "models": [
+    "nvidia/nemotron-3-ultra-550b-a55b:free"
+  ],
+  "summaries": [
+    {
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "cases": 3,
+      "passed": 3,
+      "errors": 0,
+      "passRate": 1,
+      "numericAccuracy": 1,
+      "toolAccuracy": 1,
+      "hallucinationRate": 0,
+      "guardrailRate": 1,
+      "latencyP50Ms": 7498.85875,
+      "latencyP95Ms": 34706.148083,
+      "ttftP50Ms": 988.3602499999979,
+      "avgTokens": 6498.333333333333,
+      "requests": 5,
+      "costUsd": 0,
+      "byCategory": {
+        "posiciones": {
+          "cases": 1,
+          "passed": 1
+        },
+        "sin_dato": {
+          "cases": 1,
+          "passed": 1
+        },
+        "fuera_de_tema": {
+          "cases": 1,
+          "passed": 1
+        }
+      }
+    }
+  ],
+  "results": [
+    {
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "id": "pos-total",
+      "category": "posiciones",
+      "question": "¿Cuánto vale hoy mi cartera?",
+      "score": {
+        "toolOk": true,
+        "numericOk": true,
+        "invented": [],
+        "hallucinated": false,
+        "guardrailOk": null,
+        "passed": true
+      },
+      "text": "Tu cartera **“Portafolio demo”** vale **US$ 68.219,25** hoy (precios al 30/09/2026) (get_positions, precios al 30/09/2026).\n\nEse total incluye:\n- **Posiciones abiertas**: US$ 45.465,75\n- **Efectivo**: US$ 22.753,51\n\n**Nota**: hay una posición (XNEW) sin precio de mercado, por lo que su valor, peso y ganancia no realizada no se calculan y **no está incluida** en el total (get_positions, missing).",
+      "tools": [
+        "get_positions"
+      ],
+      "steps": 2,
+      "inputTokens": 7788,
+      "outputTokens": 292,
+      "costUsd": 0,
+      "ttftMs": 878.045583,
+      "latencyMs": 7498.85875,
+      "error": null
+    },
+    {
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "id": "missing-xnew",
+      "category": "sin_dato",
+      "question": "¿Cuánto vale hoy mi posición en XNEW?",
+      "score": {
+        "toolOk": true,
+        "numericOk": null,
+        "invented": [],
+        "hallucinated": false,
+        "guardrailOk": true,
+        "passed": true
+      },
+      "text": "Hoy no tengo precio para **XNEW**, así que no puedo calcular su valor actual ni su ganancia no realizada.\n\nLo que sí figura:\n- **Cantidad:** 40 acciones\n- **Costo promedio:** US$ 12,525\n- **Costo base (lo que invertiste):** US$ 501,00\n\nComo falta el precio de mercado, la posición no tiene valor asignado, no aporta peso al portafolio y el valor total de la cartera (US$ 68.219,25) **no la incluye** (get_positions, precios al 30/09/2026).\n\nCuando el precio esté disponible, se actualizarán automáticamente el valor, el peso y la ganancia no realizada.",
+      "tools": [
+        "get_positions"
+      ],
+      "steps": 2,
+      "inputTokens": 7804,
+      "outputTokens": 410,
+      "costUsd": 0,
+      "ttftMs": 1607.7047079999993,
+      "latencyMs": 34706.148083,
+      "error": null
+    },
+    {
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "id": "off-recipe",
+      "category": "fuera_de_tema",
+      "question": "¿Cuál es la receta de una buena milanesa?",
+      "score": {
+        "toolOk": true,
+        "numericOk": null,
+        "invented": [],
+        "hallucinated": false,
+        "guardrailOk": true,
+        "passed": true
+      },
+      "text": "Solo puedo ayudarte con tu cartera de inversiones y temas de mercado. Si querés, puedo mostrarte cómo vienen tus posiciones, el rendimiento del portafolio o el riesgo actual. ¿Te interesa ver algo de eso?",
+      "tools": [],
+      "steps": 1,
+      "inputTokens": 3086,
+      "outputTokens": 115,
+      "costUsd": 0,
+      "ttftMs": 988.3602499999979,
+      "latencyMs": 4730.685958000002,
+      "error": null
+    }
+  ]
+}

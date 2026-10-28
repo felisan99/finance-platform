@@ -474,6 +474,76 @@ Felipe aprobó la etapa 3 junto con el commit de la etapa 2 (`fb14db1`). Alcance
 - **Ya no se ordena por ganancia en dólares.** Los órdenes son Valor, Ganancia (en %), Hoy y A–Z, en un menú «Ordenar: Valor ▾» (`components/app/sort-menu.tsx`, un `<details>` de enlaces que se cierra al tocar afuera o con Escape). En dólares, una posición grande con poca ganancia quedaba arriba de una chica que rindió mucho; el porcentaje es lo que la persona compara. Los enlaces viejos `?orden=pnl` siguen andando y ahora ordenan por Ganancia (%) (`parsePositionSort`).
 - **La fila ya no muestra el peso en el portafolio** (el «4,28 %» sin rótulo, que se confundía con el cambio del día) ni el costo total. Los dos siguen en la ficha del activo (Valor de mercado y Costo base). La fila queda: símbolo, nombre y «cantidad × costo promedio» a la izquierda; valor, ganancia con el porcentaje en una pastilla y «Hoy» a la derecha.
 
+## Asistente con LLM (2026-10-28)
+
+Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la cartera. Se hizo para publicar el proyecto en LinkedIn; lo central del post son los evals.
+
+- **Arquitectura: un agente ReAct con tool calling nativo** (`lib/assistant/agent.ts`, AI SDK 7 con `streamText` y `stopWhen: isStepCount(6)`). El modelo elige tools, recibe el resultado y responde. No hay planner ni subagentes: las preguntas se resuelven con 1 a 3 tools y un solo loop es más barato en requests y más fácil de evaluar.
+- **El modelo nunca hace cuentas.**
+  - Las tools (`lib/assistant/tools/`) son de solo lectura y llaman al motor puro. Devuelven texto ya formateado con `format.ts`, un `source` (función y período) y un `missing` explícito.
+  - Los chips de fuente de la UI salen de las tools que de verdad corrieron, no del texto del modelo.
+  - No existe ninguna tool que escriba en la cartera: "no opera" es estructural.
+  - Cálculos nuevos del motor:
+    - `realizedEvents` / `summarizeRealized`: realizado por período.
+    - `contributionBetween` / `combineContributions`: qué posiciones movieron la cartera entre dos cierres. Coincide con la serie diaria y suma por cuenta.
+    - `summarizeCloses`: resumen de un rango de precios.
+  - `loadPerformanceData` devuelve el resultado crudo además de la vista.
+- **Datos por persona:**
+  - Las tools se arman con el cliente de la sesión (RLS) y el alcance de `getPortfolioContext`. Ninguna recibe un `user_id` y no se usa `admin.ts`.
+  - El historial no lo manda el cliente: se lee de la base y solo viaja la pregunta nueva.
+- **Modelos (OpenRouter):**
+  - Principal `nvidia/nemotron-3-ultra-550b-a55b:free` y respaldo `google/gemma-4-31b-it:free`. El respaldo lo resuelve OpenRouter con `models`, en la misma request.
+  - Se configuran por env (`ASSISTANT_MODEL`, `ASSISTANT_FALLBACK_MODEL`) porque los gratuitos cambian seguido.
+  - Felipe cargó US$ 10 de créditos una vez: eso sube el límite de los modelos gratuitos de 50 a **1000 requests por día** (20 por minuto). Los créditos no se gastan con modelos gratis; se usan para el modelo pago de los evals.
+  - **Desvío de §2 (costo cero):** la app sigue sin costo mensual; la compra única es opcional y solo sube el límite.
+- **Privacidad (riesgo aceptado):** muchos endpoints gratuitos pueden guardar o entrenar con los prompts, y las conversaciones incluyen datos de la cartera. Felipe eligió aceptarlo y documentarlo. La pantalla lo avisa ("el proveedor puede guardar las conversaciones").
+- **Noticias con Tavily** (`lib/assistant/news/tavily.ts`), que primero estaban fuera de la v1:
+  - Llamada del servidor con timeout de 8 s. A Tavily solo le llega el símbolo y el tema, nunca montos.
+  - La respuesta se valida con Zod campo por campo: solo URLs `https` sin credenciales, texto limpio y recortado.
+  - Al modelo le llega como `contenido_externo`.
+  - **Defensa contra prompt injection:** después de leer noticias, `prepareStep` saca `update_memory` por el resto del turno. Un texto de terceros no puede terminar guardado como "dato de la persona". Los evals lo prueban con una noticia maliciosa.
+  - Límite `news_search`: 20 por día.
+- **Memoria de largo plazo** (`assistant_memory`):
+  - Perfil de riesgo, objetivos y hechos estables, hasta 30 por persona (trigger, código `AM001`).
+  - Va entera en el prompt, sin vector store (son pocos hechos cortos).
+  - `memoryTextSchema` rechaza montos, porcentajes y cantidades: la regla está en el código, no en el prompt.
+  - Se ve y se borra en **Más → Asistente**.
+- **Autocompactación** (`compaction.ts`):
+  - Pasados 16 mensajes o unos 12k tokens estimados desde el último resumen, el modelo resume los viejos y se mandan solo el resumen y los últimos 6.
+  - El corte siempre deja una pregunta al principio.
+  - El resumen no lleva cifras: se recalculan con las tools.
+  - Se registran los tokens de contexto antes y después.
+- **Guardrails:**
+  - Disclaimer fijo en la pantalla.
+  - Regla de alcance en el prompt (solo cartera, mercados y conceptos de inversión), medida con evals. Se descartó un clasificador previo porque duplicaría las requests. El peor caso es una respuesta fuera de tema a la misma persona, sin riesgo para los datos.
+  - Sin veredictos de compra.
+  - "No tengo ese dato" cuando la tool lo marca.
+- **Observabilidad** (`assistant_runs`):
+  - Una fila por turno con modelo, respaldo, pasos, tools (nombre, ms, ok), tokens, costo, TTFT, latencia, error y compactación. Sin el texto.
+  - Se escribe en `after()`: no demora la respuesta.
+  - **Más → Asistente** muestra mediana y p95 de latencia, tools más usadas y tasa de respaldo.
+- **Límites:** `assistant_message` (8 cada 5 minutos) y `assistant_daily` (60 por día), además de `news_search`. Están en `take_rate_limit` (migración `assistant`, que redefine la función con todas las claves).
+- **Navegación:** cuatro pestañas (Inicio, Posiciones | Watchlist, Más) con el Asistente como botón circular en el medio. **Actividad pasó a "Más"**: la ruta `/activity` no cambia y "Más" queda activo ahí.
+- **Evals** (`pnpm eval`, manual, gasta requests):
+  - 43 preguntas sobre una **cartera demo ficticia** (`lib/assistant/fixture/`: precios sintéticos con semilla, un split, una posición cerrada, cripto y un símbolo sin precios), con "hoy" fijo en 30/09/2026.
+  - La respuesta correcta la calculan las mismas tools en el momento: no hay números escritos a mano.
+  - Se mide:
+    - acierto numérico (los números exactos aparecen en la respuesta);
+    - tool correcta;
+    - alucinación (cifras que no salen de ninguna tool, o inventar cuando falta el dato);
+    - guardrails (fuera de tema, consejo, operar, memoria, inyección);
+    - latencia, tokens y costo.
+  - Las noticias son simuladas. Cada corrida deja JSON y una tabla en `evals/results/`.
+  - Un test sin red verifica que una respuesta "perfecta" aprueba cada caso.
+- **Verificación:**
+  - Unitarias del motor, de las tools contra la cartera demo y de la puntuación.
+  - Integración (`assistant.integration.test.ts`): RLS entre dos personas, mensajes que no se editan, tope de memoria, métricas que no se editan, anon sin acceso y límites.
+  - En vivo: una pregunta real contra OpenRouter y Tavily (`agent.live.test.ts`), y la ruta por HTTP con `next start` y sesión real (`assistant-http.live.test.ts`: streaming, persistencia, métricas, 404 con la conversación de otra persona).
+- **Pendiente:**
+  - La cartera demo en `finance-dev` para las capturas del post.
+  - Probar la UI en el iPhone.
+  - En la Fase 7, la migración y las variables (`OPENROUTER_API_KEY`, `ASSISTANT_MODEL`, `ASSISTANT_FALLBACK_MODEL`, `TAVILY_API_KEY`) van a producción.
+
 ## Observaciones del spec para fases posteriores
 
 1. **Splits y precios.** Resuelto en la Fase 3 del lado de los datos (ver "Desvíos y decisiones de la Fase 3"); el des-ajuste al valuar es de la Fase 5. El motor aplica solo transacciones `SPLIT`; `corporate_actions` informa o propone splits, pero no se aplican dos veces.

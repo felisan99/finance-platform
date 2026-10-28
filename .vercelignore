@@ -24,6 +24,9 @@ vitest*.mts
 coverage/
 scripts/
 .github/
+evals/
+lib/assistant/fixture/
+lib/assistant/evals/
 
 # Base de datos: las migraciones se aplican desde la CLI, no desde Vercel
 supabase/

@@ -444,6 +444,7 @@ Almost no user uses Delta, so the main format is our own, simple and documented 
 ## 10. Features and screens
 
 Mobile-first, designed for a 390px width. App-style bottom navigation with: **Home (Inicio), Positions (Posiciones), Watchlist, Activity (Actividad) and More (Más)**.
+*(2026-10-28: four tabs, Home and Positions | Watchlist and More, with the **Assistant** as a round button in the middle. Activity moved under More; its route is unchanged. See §10.7.)*
 
 **Multiple portfolios** (2026-09-28): with more than one, Home, Positions and Activity show a selector above the title (a native `<select>`) with the portfolio being viewed. The choice is stored in the `pt-portfolio` cookie (HttpOnly), which the server always checks against the person's portfolios: if it no longer exists or belongs to someone else, the first one is shown. The asset detail shows the portfolio's name without a selector, and Home, Positions, Activity, the export and "Before you buy" belong to the chosen portfolio. There is a single Watchlist for all of them. "Refresh prices" refreshes the positions of every portfolio. With a single portfolio the app looks as before.
 
@@ -513,6 +514,14 @@ Mobile-first, designed for a 390px width. App-style bottom navigation with: **Ho
 - Minimal service worker (`public/sw.js`): it precaches only the offline screen and its files, and shows it when a navigation fails for lack of network. **It doesn't store pages or financial data.** The offline screen shows the last known state of Home, which the app leaves in the device's `localStorage` (preformatted text; it expires after 30 days and is cleared on reaching `/login`).
 - Dark mode follows the system (`prefers-color-scheme`), with no manual toggle.
 
+### 10.7 Assistant (added 2026-10-28)
+A streaming chat ("Asistente") that answers questions about the portfolio being viewed, in Spanish, citing for every number the function that computed it and the period. Details and rationale: `docs/decisions.md`, "Asistente con LLM".
+- **Agent:** a ReAct tool-calling loop (Vercel AI SDK + OpenRouter free models, with a fallback model), capped at 6 steps per question.
+- **Tools (read-only, over `lib/engine`):** positions and cash; realized and unrealized gain by asset and period; performance (TWR, XIRR, gain, benchmark); what moved the portfolio between two dates (per-position contribution); an asset's price history; the "what if I buy" scenario; risk (concentration, drawdown, volatility); news (Tavily); and long-term memory. The model never computes: tools return preformatted text, the source and the missing data.
+- **Memory:** conversation history, an automatic summary of old messages, and up to 30 stable facts per person (risk profile, goals), never portfolio figures.
+- **Guardrails:** not financial advice; it cannot trade; it says "no tengo ese dato" instead of guessing; it only sees the signed-in person's data (RLS); it declines off-topic requests; news is untrusted content.
+- **Observability and evals:** per-turn metrics (tools, tokens, latency, errors) and an eval suite of ~40 questions over a fictitious demo portfolio whose correct answers are computed by the engine.
+
 ---
 
 ## 11. Security and privacy
@@ -567,6 +576,10 @@ CRON_SECRET=
 MARKET_DATA_PROVIDER=yahoo        # yahoo | finnhub | twelvedata
 FINNHUB_API_KEY=                  # optional
 APP_TIMEZONE=America/Montevideo
+OPENROUTER_API_KEY=               # assistant (server only)
+ASSISTANT_MODEL=                  # OpenRouter model id, e.g. a `:free` one with tool support
+ASSISTANT_FALLBACK_MODEL=         # optional
+TAVILY_API_KEY=                   # optional: news search
 ```
 
 Include `.env.example` in the repo and never commit `.env.local`. `.env.local` points to the `finance-dev` project; the credentials for `finance` (production) live only in Vercel's environment variables. The list of emails with access is no longer a variable: it lives in the `allowed_emails` table.
