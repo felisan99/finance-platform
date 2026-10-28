@@ -13,7 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { activityOf, sourcesOf } from "@/lib/assistant/chat-status";
+import { activityOf, canRetry, sourcesOf } from "@/lib/assistant/chat-status";
 import { stripInternalRefs } from "@/lib/assistant/internal-refs";
 import {
   parseMarkdown,
@@ -273,7 +273,7 @@ export function AssistantChat({
   const stick = useRef(true);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
 
-  const { messages, sendMessage, status, stop, error } = useChat({
+  const { messages, sendMessage, regenerate, status, stop, error } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport: new DefaultChatTransport({
@@ -338,6 +338,7 @@ export function AssistantChat({
   };
 
   const failure = errorText(error);
+  const retryable = !busy && canRetry(messages, error?.message);
   const lastId = messages.at(-1)?.id;
 
   return (
@@ -378,9 +379,24 @@ export function AssistantChat({
       {activity && <Activity label={activity} />}
 
       {failure && (
-        <p role="alert" className="text-sm text-destructive">
-          {failure}
-        </p>
+        <div className="flex flex-col items-start gap-2">
+          <p role="alert" className="text-sm text-destructive">
+            {failure}
+          </p>
+          {retryable && (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              onClick={() => {
+                stick.current = true;
+                void regenerate();
+              }}
+            >
+              Reintentar
+            </Button>
+          )}
+        </div>
       )}
 
       <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] flex flex-col items-center gap-2 focus-within:bottom-2">

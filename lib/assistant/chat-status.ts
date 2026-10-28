@@ -71,3 +71,32 @@ export function sourcesOf(message: UIMessage): SourceLine[] {
   }
   return lines;
 }
+
+/** ¿El error vino de la ruta antes de empezar la respuesta (cuerpo `{ error }` con un status HTTP)? */
+function isRejectedBeforeStreaming(errorMessage: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(errorMessage);
+    return (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as { error?: unknown }).error === "string"
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ¿Se puede mostrar "Reintentar"? Solo si la ruta rechazó la pregunta antes de responder (límite de
+ * uso, sesión, servicio caído) y todavía no hay respuesta: en ese caso el servidor no guardó nada y
+ * reenviar el mismo mensaje no lo duplica. Si falló durante la respuesta (o la conexión se cortó) la
+ * pregunta puede estar guardada, y reenviar el mismo id chocaría con la restricción única de
+ * `assistant_messages`: ahí la persona escribe de nuevo.
+ */
+export function canRetry(
+  messages: readonly UIMessage[],
+  errorMessage: string | undefined,
+): boolean {
+  if (!errorMessage || messages.at(-1)?.role !== "user") return false;
+  return isRejectedBeforeStreaming(errorMessage);
+}
