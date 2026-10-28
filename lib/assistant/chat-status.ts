@@ -72,33 +72,37 @@ export function sourcesOf(message: UIMessage): SourceLine[] {
   return lines;
 }
 
-/** ¿El error vino de la ruta antes de empezar la respuesta (cuerpo `{ error }` con un status HTTP)? */
-function isRejectedBeforeStreaming(errorMessage: string): boolean {
-  try {
-    const parsed: unknown = JSON.parse(errorMessage);
-    return (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      typeof (parsed as { error?: unknown }).error === "string"
-    );
-  } catch {
-    return false;
-  }
-}
+/**
+ * El error genérico de la ruta. También es el texto del error que manda en medio de la respuesta
+ * cuando el modelo falla: en ese caso la ruta guarda solo la pregunta, nunca la respuesta parcial.
+ */
+export const ASSISTANT_GENERIC_ERROR =
+  "No pude responder en este momento. Probá de nuevo en un rato.";
 
 /**
- * ¿Se puede mostrar "Reintentar"? Solo si la ruta rechazó la pregunta antes de responder (límite de
- * uso, sesión, servicio caído) y todavía no hay respuesta: en ese caso el servidor no guardó nada y
- * reenviar el mismo mensaje no lo duplica. Si falló durante la respuesta (o la conexión se cortó) la
- * pregunta puede estar guardada, y reenviar el mismo id chocaría con la restricción única de
- * `assistant_messages`: ahí la persona escribe de nuevo.
+ * ¿Se puede mostrar "Reintentar"? Reintentar reenvía la última pregunta con el mismo id, y la ruta lo
+ * tolera: si la pregunta ya estaba guardada no la repite ni al modelo ni en la base (se ignora el
+ * `ui_id` repetido) y guarda la respuesta nueva una sola vez.
+ *
+ * - Sin respuesta todavía (lo último es la pregunta): con cualquier error. La ruta la rechazó antes
+ *   de responder (límite, sesión, servicio caído), falló, o la conexión se cortó antes de empezar.
+ * - Con una respuesta a medias: solo si la ruta avisó que falló (`ASSISTANT_GENERIC_ERROR`), porque
+ *   entonces no guardó esa respuesta. Si se cortó la conexión, el servidor sigue y guarda la
+ *   respuesta completa: reintentar la duplicaría. Ahí la persona recarga y la ve.
  */
 export function canRetry(
   messages: readonly UIMessage[],
   errorMessage: string | undefined,
 ): boolean {
-  if (!errorMessage || messages.at(-1)?.role !== "user") return false;
-  return isRejectedBeforeStreaming(errorMessage);
+  if (!errorMessage) return false;
+  const last = messages.at(-1);
+  if (!last) return false;
+  if (last.role === "user") return true;
+  return (
+    last.role === "assistant" &&
+    messages.at(-2)?.role === "user" &&
+    errorMessage === ASSISTANT_GENERIC_ERROR
+  );
 }
 
 export const ANNOUNCE_BUSY = "El asistente está respondiendo…";

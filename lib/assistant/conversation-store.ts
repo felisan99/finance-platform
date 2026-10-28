@@ -125,6 +125,13 @@ export async function loadAllMessages(
   });
 }
 
+/**
+ * Guarda mensajes al final de la conversación. Idempotente por `(conversation_id, ui_id)` (la
+ * restricción única de la tabla): un mensaje cuyo id ya está guardado se ignora (`on conflict do
+ * nothing`) y el resto se guarda igual. Así un reintento que reenvía la misma pregunta guarda su
+ * respuesta sin duplicar la pregunta ni fallar. Solo pide `insert` (con `do nothing` no hay
+ * `update`), que es lo que conceden los grants y la política de `assistant_messages`.
+ */
 export async function appendMessages(
   client: Client,
   userId: string,
@@ -141,7 +148,11 @@ export async function appendMessages(
       message: JSON.parse(JSON.stringify(m)),
     }));
   if (rows.length === 0) return;
-  const { error } = await client.from("assistant_messages").insert(rows);
+  // Todas las filas con las mismas columnas (PostgREST completa las faltantes con NULL).
+  const { error } = await client.from("assistant_messages").upsert(rows, {
+    onConflict: "conversation_id,ui_id",
+    ignoreDuplicates: true,
+  });
   if (error) throw new Error(`db assistant_messages: ${error.message}`);
 }
 

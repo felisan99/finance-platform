@@ -14,6 +14,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  ASSISTANT_GENERIC_ERROR,
   activityOf,
   announcementOf,
   canRetry,
@@ -57,7 +58,7 @@ function errorText(error: Error | undefined): string | null {
   } catch {
     // No era JSON: el texto del error puede tener detalles internos, no se muestra.
   }
-  return "No pude responder en este momento. Probá de nuevo en un rato.";
+  return ASSISTANT_GENERIC_ERROR;
 }
 
 function renderInline(inlines: Inline[]): ReactNode {

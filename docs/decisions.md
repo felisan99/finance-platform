@@ -538,6 +538,7 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
     - **`simulate_trade`:** pasó de tres campos opcionales (`cantidad`/`monto`/`fraccion`, de los que había que usar uno) a `medida` + `valor`, así no se puede armar una entrada ambigua.
     - Un test fija la estructura. No se volvió a correr contra el modelo.
   - **Riesgo aceptado:** con invitados, el asistente también les recomienda a ellos. «Antes de comprar» (la tarjeta del activo) sigue sin veredictos de compra.
+- **Reintentar (2026-10-28).** Guardar mensajes es idempotente por `(conversation_id, ui_id)` (`appendMessages` hace `on conflict do nothing` sobre la restricción única; alcanza con el grant y la política de `insert`). Un reintento reenvía la pregunta con el mismo id: si ya quedó guardada (el turno anterior falló durante la respuesta y guardó solo la pregunta), no se le manda dos veces al modelo (`historyWithQuestion`) ni se duplica en la base, y la respuesta nueva se guarda una vez, después de la pregunta. Por eso el botón aparece con cualquier error si todavía no hay respuesta, y con una respuesta a medias solo si la ruta avisó la falla (`canRetry`): si se cortó la conexión, el servidor termina y guarda la respuesta completa, y reintentar la duplicaría.
 - **Observabilidad** (`assistant_runs`):
   - Una fila por turno con modelo, respaldo, pasos, tools (nombre, ms, ok), tokens, costo, TTFT, latencia, error y compactación. Sin el texto.
   - Se escribe en `after()`: no demora la respuesta.
