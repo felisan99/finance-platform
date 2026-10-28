@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cleanText } from "@/lib/market-data/sanitize";
+import { containsLink, looksLikeInstruction } from "./stored-text";
 
 // Memoria de largo plazo del asistente: perfil de riesgo, objetivos y hechos estables que la
 // persona contó ("invierto para jubilarme", "no quiero cripto"). Nunca números de la cartera: esos
@@ -48,6 +49,14 @@ export const memoryTextSchema = z
       .refine(
         (value) => !looksLikePortfolioNumber(value),
         "No guardo montos, porcentajes ni cantidades: esos datos salen siempre de la cartera.",
+      )
+      .refine(
+        (value) => !containsLink(value),
+        "No guardo links, direcciones web ni emails: solo datos cortos sobre la persona.",
+      )
+      .refine(
+        (value) => !looksLikeInstruction(value),
+        "Un recuerdo es un dato en texto plano sobre la persona, no código ni instrucciones.",
       ),
   );
 
