@@ -4,23 +4,18 @@ import type { MoverView } from "@/lib/portfolio/movers-view";
 import { PnlText } from "./pnl-text";
 
 const BAR_COLOR = {
-  gain: "from-gain to-gain/10",
-  loss: "from-loss to-loss/10",
-  flat: "from-muted to-muted",
+  gain: "bg-gain",
+  loss: "bg-loss",
+  flat: "bg-muted-foreground/40",
 };
 
-/**
- * Alto de la barra: su proporción del área que deja libre el porcentaje de arriba (así la mayor
- * llega al tope sin empujar el texto afuera), y nunca menos de medio rem: una suba chica tiene que
- * verse.
- */
-const barHeight = (ratio: number) =>
-  `max(calc((100% - 1.25rem) * ${ratio}), 0.5rem)`;
+/** Ancho de la barra sobre su pista; nunca menos de 6 %: una suba chica tiene que verse. */
+const barWidth = (ratio: number) => `${Math.max(ratio * 100, 6)}%`;
 
 /**
- * Hasta cinco barras verticales: el porcentaje arriba (con signo y flecha), la barra y el símbolo.
- * Las columnas son siempre cinco, así las barras tienen el mismo ancho aunque haya menos. Cada una
- * abre la ficha del activo. Textos y proporciones vienen del servidor (`movers-view.ts`).
+ * Hasta cinco filas ordenadas: posición, símbolo, una barra horizontal proporcional al mayor
+ * movimiento de la tarjeta y el porcentaje (con signo y flecha) en una pastilla. Cada fila abre la
+ * ficha del activo. Textos y proporciones vienen del servidor (`movers-view.ts`).
  */
 export function MoversCard({
   title,
@@ -40,28 +35,37 @@ export function MoversCard({
         {movers.length === 0 ? (
           <p className="py-2 text-sm text-muted-foreground">{emptyText}</p>
         ) : (
-          <ul className="grid grid-cols-5 gap-1.5">
-            {movers.map((mover) => (
-              <li key={mover.symbol} className="min-w-0">
+          <ul className="flex flex-col">
+            {movers.map((mover, index) => (
+              <li key={mover.symbol}>
                 <Link
                   href={mover.href}
-                  className="flex flex-col items-center gap-1 rounded-md py-1 active:bg-muted"
+                  className="flex min-h-11 items-center gap-3 rounded-md px-1 active:bg-muted"
                 >
-                  <div className="flex h-28 w-full flex-col items-center justify-end gap-1">
-                    <PnlText
-                      text={mover.text}
-                      tone={mover.tone}
-                      className="text-[0.65rem] font-semibold whitespace-nowrap"
-                    />
-                    <div
-                      aria-hidden="true"
-                      className={`w-3/4 max-w-12 rounded-t-md bg-linear-to-b ${BAR_COLOR[mover.tone]}`}
-                      style={{ height: barHeight(mover.ratio) }}
-                    />
-                  </div>
-                  <span className="w-full truncate text-center text-xs font-semibold">
+                  <span
+                    aria-hidden="true"
+                    className="w-3 text-xs text-muted-foreground tabular-nums"
+                  >
+                    {index + 1}
+                  </span>
+                  <span className="w-14 shrink-0 truncate text-sm font-semibold">
                     {mover.symbol}
                   </span>
+                  <div
+                    aria-hidden="true"
+                    className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/60"
+                  >
+                    <div
+                      className={`h-full rounded-full ${BAR_COLOR[mover.tone]}`}
+                      style={{ width: barWidth(mover.ratio) }}
+                    />
+                  </div>
+                  <PnlText
+                    text={mover.text}
+                    tone={mover.tone}
+                    pill
+                    className="w-20 shrink-0 text-center text-xs font-semibold whitespace-nowrap tabular-nums"
+                  />
                 </Link>
               </li>
             ))}
