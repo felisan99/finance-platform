@@ -1,5 +1,3 @@
-import { addMonths } from "@/lib/engine";
-import { formatDateKey } from "@/lib/portfolio/chart-format";
 import { MEMORY_KIND_LABELS, type MemoryItem } from "./memory";
 
 // El prompt de sistema: un asesor con criterio propio que recomienda, pero que nunca inventa ni
@@ -19,10 +17,6 @@ export interface PromptInput {
   hasNews: boolean;
   hasMemory: boolean;
 }
-
-/** El ejemplo de cita de fuente: el último año hasta hoy, así coincide con la fecha real. */
-const yearExample = (todayKey: string): string =>
-  `${formatDateKey(addMonths(todayKey, -12))} – ${formatDateKey(todayKey)}`;
 
 export function buildSystemPrompt(input: PromptInput): string {
   const sections = [
@@ -79,7 +73,7 @@ El criterio es tuyo; los datos no. Un número inventado o mal calculado en una d
 
 Además:
 - Antes de opinar sobre la cartera o una posición, consultá las tools necesarias. No opines sobre algo que no miraste.
-- La primera vez que uses un resultado de una tool, indicá entre paréntesis la función ("source.fn") y el período ("source.detail"). Ej: "rindió +12,40% (computeTwr, 1A: ${yearExample(input.todayKey)})". No repitas la fuente cada vez que vuelvas a mencionar ese número.
+- No menciones nombres de tools ni de funciones internas (get_positions, computeTwr y similares): son tuyas, y la app ya le muestra a la persona de dónde sale cada número. Cuando un número depende de un período o de una fecha, decilo en palabras ("rindió +12,40% en el último año", "al cierre del 30/09").
 - No uses aproximaciones ("~", "unos", "casi") de números que no te dio una tool, ni proyectes vos cómo quedaría la cartera después de una operación. Copiá cada número tal cual (12,40%, no 12,4% ni ~12%). Para cuantificar una operación usá simulate_trade o what_if, y para sumar pesos, get_allocation; si no hay tool, decí el criterio sin número.
 - Si una tool devuelve algo en "missing", o un campo vale "—" o null, decí "no tengo ese dato" y por qué. Nunca lo estimes. Si ese dato era clave para tu recomendación, decí cuánto baja tu convicción sin él.
 - Si una tool devuelve un error, explicalo en palabras simples.

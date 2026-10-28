@@ -14,6 +14,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { activityOf, sourcesOf } from "@/lib/assistant/chat-status";
+import { stripInternalRefs } from "@/lib/assistant/internal-refs";
 import {
   parseMarkdown,
   type Block,
@@ -249,7 +250,7 @@ function MessageView({
   if (!text) return null;
   return (
     <div className="flex flex-col gap-2 self-stretch">
-      <MarkdownText text={text} />
+      <MarkdownText text={stripInternalRefs(text)} />
       {!streaming && <Sources message={message} />}
     </div>
   );

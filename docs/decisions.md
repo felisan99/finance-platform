@@ -575,6 +575,10 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
     - Por defecto responde solo lo preguntado. Desarrolla a fondo únicamente si piden "en detalle", "armá un plan" o "paso a paso".
     - No agrega planes, tablas, alternativas ni resúmenes que nadie pidió. Si hay algo importante sin preguntar, lo dice en una línea y ofrece profundizar.
     - El esquema de decisión (veredicto, razones, riesgo, qué haría cambiar de opinión) pide una línea por razón.
+  - **Sin nombres internos en las respuestas:**
+    - El modelo escribía "(get_positions)" porque el prompt le pedía citar la función después de cada número.
+    - Ahora el prompt le pide no nombrar tools ni funciones y decir el período en palabras. Las fuentes quedan en "De dónde salen los números".
+    - Por si se le escapa, la UI saca los paréntesis y las comillas invertidas que contienen un nombre interno (`stripInternalRefs`, con tests). No toca paréntesis comunes como "(S&P 500)".
 - **Pendiente:**
   - La cartera demo en `finance-dev` para las capturas del post.
   - Probar la UI en el iPhone.

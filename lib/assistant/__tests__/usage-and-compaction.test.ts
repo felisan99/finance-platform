@@ -198,11 +198,14 @@ describe("buildSystemPrompt", () => {
     expect(prompt).not.toContain("{{");
   });
 
-  it("el ejemplo de cita usa el último año hasta hoy y el formato de la app", () => {
+  it("no pide citar nombres internos y usa el formato de la app", () => {
     const prompt = buildSystemPrompt(input);
+    expect(prompt).toContain(
+      "No menciones nombres de tools ni de funciones internas",
+    );
+    expect(prompt).not.toContain("source.fn");
     // `formatPercent` escribe el % pegado al número.
     expect(prompt).not.toMatch(/\d %/);
-    expect(prompt).toContain("(computeTwr, 1A: 30/09/2025 – 30/09/2026)");
   });
 
   it("agrega noticias, memoria y resumen solo si corresponden", () => {
