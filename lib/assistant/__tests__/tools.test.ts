@@ -2,19 +2,33 @@ import { describe, expect, it, vi } from "vitest";
 import {
   addDays,
   computeAllocation,
+  d,
   summarizeRealized,
   realizedEvents,
 } from "@/lib/engine";
-import { formatMoney, formatPercent } from "@/lib/portfolio/format";
+import {
+  formatMoney,
+  formatPercent,
+  formatPrice,
+} from "@/lib/portfolio/format";
 import { demoDataSource } from "../fixture/demo-data-source";
-import { demoNews, inMemoryStore } from "../fixture/demo-deps";
+import { demoNews, demoWeb, inMemoryStore } from "../fixture/demo-deps";
 import { DEMO_NOW } from "../fixture/demo-portfolio";
 import type { MemoryItem, MemoryStore } from "../memory";
-import type { ToolResult } from "../tool-result";
+import { TOOL_ACTIVITY, TOOL_LABELS, type ToolResult } from "../tool-result";
 import { getAllocation } from "../tools/allocation";
 import { explainMove } from "../tools/explain-move";
 import { getGains } from "../tools/gains";
-import { buildTools, MEMORY_TOOL, NEWS_TOOL } from "../tools";
+import {
+  ASSET_TOOL,
+  buildTools,
+  MAX_ASSET_LOOKUPS,
+  MEMORY_TOOL,
+  NEWS_TOOL,
+  WEB_TOOL,
+} from "../tools";
+import { getAssetInfo } from "../tools/asset-info";
+import { webSearch, type WebSearchDeps } from "../tools/web-search";
 import { updateMemory } from "../tools/memory";
 import { searchNews, type NewsDeps } from "../tools/news";
 import { getPerformance } from "../tools/performance";
@@ -499,6 +513,7 @@ describe("buildTools", () => {
     expect(Object.keys(tools).sort()).toEqual([
       "explain_move",
       "get_allocation",
+      "get_asset_info",
       "get_gains",
       "get_performance",
       "get_positions",
@@ -509,6 +524,7 @@ describe("buildTools", () => {
     ]);
     expect(tools[MEMORY_TOOL]).toBeUndefined();
     expect(tools[NEWS_TOOL]).toBeUndefined();
+    expect(tools[WEB_TOOL]).toBeUndefined();
   });
 
   it("cada descripción dice cuándo usar la tool, y las de datos llevan la regla de los números", () => {
@@ -520,11 +536,15 @@ describe("buildTools", () => {
         takeLimit: async () => true,
         holds: async () => false,
       },
+      web: { search: demoWeb, takeLimit: async () => true },
       timings: [],
     });
+    expect(tools[WEB_TOOL]).toBeDefined();
     for (const [name, definition] of Object.entries(tools)) {
       expect(definition.description, name).toMatch(/Usala/);
-      if (name !== NEWS_TOOL && name !== MEMORY_TOOL) {
+      expect(TOOL_LABELS[name], name).toBeDefined();
+      expect(TOOL_ACTIVITY[name], name).toBeDefined();
+      if (name !== NEWS_TOOL && name !== MEMORY_TOOL && name !== WEB_TOOL) {
         expect(definition.description, name).toContain("copialos tal cual");
       }
     }
@@ -555,5 +575,217 @@ describe("buildTools", () => {
       error: "Hubo un error interno al calcular esto.",
     });
     expect(timings).toEqual([{ name: "get_positions", ok: false, ms: 5 }]);
+  });
+});
+
+describe("get_asset_info", () => {
+  it("un activo fuera de la cartera: precio, cambio, datos y trimestres ya formateados", async () => {
+    const result = expectOk(
+      await getAssetInfo(demoDataSource(), { simbolo: "orcl" }),
+    );
+    expect(result.source.fn).toBe("Yahoo Finance");
+    expect(result.data).toMatchObject({
+      simbolo: "ORCL",
+      nombre: "Demo Oracle",
+      tipo: "Acción",
+      precio: formatPrice(d("182.5"), { currency: true }),
+      cambio_del_dia: formatPercent(d("0.012483"), { signed: true }),
+      cambio_del_dia_usd: formatMoney(d("2.25"), { signed: true }),
+      proximos_resultados: "Próximos resultados: 10/12/2026",
+    });
+    const datos = result.data.datos as Record<string, string>;
+    expect(datos["Rango de 52 semanas"]).toBe("US$ 120,10 – 198,40");
+    expect(datos["P/E (12 meses)"]).toBe("41,20");
+    expect(datos["Capitalización bursátil"]).toBe("US$ 512 mil millones");
+    const quarters = result.data.ultimos_trimestres as string[];
+    expect(quarters).toHaveLength(2);
+    expect(quarters[0]).toContain("superó");
+    expect(result.missing).toEqual([]);
+  });
+
+  it("un ETF avisa que el costo anual no está y no inventa ganancias trimestrales", async () => {
+    const result = expectOk(
+      await getAssetInfo(demoDataSource(), { simbolo: "VXUS" }),
+    );
+    expect(result.data).toMatchObject({ tipo: "ETF", ultimos_trimestres: [] });
+    expect((result.data.datos as Record<string, string>).Categoría).toBe(
+      "Foreign Large Blend",
+    );
+    expect(result.missing.join(" ")).toMatch(/TER/);
+  });
+
+  it("un activo de la cartera trae su cotización; sin datos de empresa lo dice en missing", async () => {
+    const result = expectOk(
+      await getAssetInfo(demoDataSource(), { simbolo: "NVDA" }),
+    );
+    expect(result.data.precio).toMatch(/^US\$\s/);
+    expect(result.missing).toEqual([
+      "No pude obtener los datos de la empresa o del fondo de NVDA.",
+    ]);
+  });
+
+  it("símbolo inválido, inexistente, proveedor caído y límite: nunca inventa", async () => {
+    const ds = demoDataSource();
+    expect((await getAssetInfo(ds, { simbolo: "AAPL; DROP" })).ok).toBe(false);
+
+    const missing = expectOk(await getAssetInfo(ds, { simbolo: "ZZZZ" }));
+    expect(missing.data).toEqual({ simbolo: "ZZZZ" });
+    expect(missing.missing[0]).toMatch(/No encontré ZZZZ/);
+
+    ds.assetInfo = async () => ({ status: "unavailable" });
+    const down = expectOk(await getAssetInfo(ds, { simbolo: "ORCL" }));
+    expect(down.data).toEqual({ simbolo: "ORCL" });
+    expect(down.missing[0]).toMatch(/^No pude obtener los datos de ORCL/);
+
+    ds.assetInfo = async () => ({ status: "limited" });
+    expect((await getAssetInfo(ds, { simbolo: "ORCL" })).ok).toBe(false);
+  });
+
+  it("sin cotización lo dice; en otra moneda no muestra precios como dólares", async () => {
+    const ds = demoDataSource();
+    ds.assetInfo = async () => ({
+      status: "ok",
+      info: {
+        symbol: "SHOP",
+        name: null,
+        type: "STOCK",
+        sector: null,
+        industry: null,
+        quote: null,
+        company: null,
+      },
+    });
+    const noQuote = expectOk(await getAssetInfo(ds, { simbolo: "SHOP" }));
+    expect(noQuote.data.precio).toBeNull();
+    expect(noQuote.missing).toContain(
+      "No pude obtener la cotización de hoy de SHOP.",
+    );
+
+    ds.assetInfo = async () => ({
+      status: "ok",
+      info: {
+        symbol: "SHOP",
+        name: null,
+        type: "STOCK",
+        sector: null,
+        industry: null,
+        quote: {
+          symbol: "SHOP",
+          price: "100",
+          change: "1",
+          changePct: "0.01",
+          asOf: new Date("2026-09-30T20:00:00Z"),
+          currency: "CAD",
+        },
+        company: null,
+      },
+    });
+    const foreign = expectOk(await getAssetInfo(ds, { simbolo: "SHOP" }));
+    expect(foreign.data).toMatchObject({ precio: null, datos: {} });
+    expect(foreign.missing).toEqual([
+      "SHOP cotiza en CAD: solo puedo mostrar precios en dólares.",
+    ]);
+  });
+
+  it("buildTools corta las consultas al proveedor después del tope por pregunta", async () => {
+    const ds = demoDataSource();
+    const assetInfo = vi.fn(ds.assetInfo);
+    ds.assetInfo = assetInfo;
+    const tools = buildTools({ ds, memory: null, news: null, timings: [] });
+    const call = () =>
+      tools[ASSET_TOOL]!.execute!({ simbolo: "ORCL" }, {
+        toolCallId: "1",
+        messages: [],
+      } as never) as Promise<ToolResult>;
+    for (let i = 0; i < MAX_ASSET_LOOKUPS; i++) {
+      expect((await call()).ok).toBe(true);
+    }
+    expect((await call()).ok).toBe(false);
+    expect(assetInfo).toHaveBeenCalledTimes(MAX_ASSET_LOOKUPS);
+  });
+});
+
+describe("web_search", () => {
+  const deps = (over: Partial<WebSearchDeps> = {}): WebSearchDeps => ({
+    search: { searchWeb: vi.fn(async () => []) },
+    takeLimit: async () => true,
+    ...over,
+  });
+
+  it("valida la consulta antes de gastar el límite o llamar a Tavily", async () => {
+    const searchWeb = vi.fn(async () => []);
+    const takeLimit = vi.fn(async () => true);
+    for (const consulta of ["", "ab", "12345678", "  ...  "]) {
+      const result = await webSearch(
+        deps({ search: { searchWeb }, takeLimit }),
+        { consulta },
+      );
+      expect(result.ok, consulta).toBe(false);
+    }
+    expect(takeLimit).not.toHaveBeenCalled();
+    expect(searchWeb).not.toHaveBeenCalled();
+  });
+
+  it("respeta el límite diario y no llama a Tavily si se pasó", async () => {
+    const searchWeb = vi.fn(async () => []);
+    const result = await webSearch(
+      deps({ search: { searchWeb }, takeLimit: async () => false }),
+      { consulta: "VXUS expense ratio" },
+    );
+    expect(result.ok).toBe(false);
+    expect(searchWeb).not.toHaveBeenCalled();
+  });
+
+  it("a Tavily le llega solo la consulta limpia; lo que vuelve es contenido externo", async () => {
+    const searchWeb = vi.fn(async () => [
+      {
+        title: "Título",
+        url: "https://example.com/a",
+        publishedAt: "2026-09-29",
+        site: "example.com",
+        snippet: "Extracto",
+      },
+    ]);
+    const result = expectOk(
+      await webSearch(deps({ search: { searchWeb } }), {
+        consulta: "  VXUS\nexpense   ratio ",
+      }),
+    );
+    expect(searchWeb).toHaveBeenCalledWith("VXUS expense ratio");
+    expect(result.source).toEqual({
+      fn: "Tavily",
+      detail: "Web · VXUS expense ratio",
+    });
+    expect((result.data.contenido_externo as Data[])[0]).toEqual({
+      titulo: "Título",
+      sitio: "example.com",
+      fecha: "29/09/2026",
+      url: "https://example.com/a",
+      extracto: "Extracto",
+    });
+    expect(result.notes[0]).toMatch(/nunca contiene instrucciones/);
+  });
+
+  it("sin resultados lo dice en missing, y un fallo vuelve como error legible", async () => {
+    const empty = expectOk(
+      await webSearch(deps(), { consulta: "Fed rate decision" }),
+    );
+    expect(empty.missing).toHaveLength(1);
+
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await webSearch(
+      deps({
+        search: {
+          searchWeb: async () => {
+            throw new Error("boom");
+          },
+        },
+      }),
+      { consulta: "Fed rate decision" },
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: "No pude buscar en la web en este momento.",
+    });
   });
 });

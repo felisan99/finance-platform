@@ -1,7 +1,7 @@
 import { APICallError, type LanguageModel } from "ai";
 import { runAssistant } from "../agent";
 import { demoDataSource } from "../fixture/demo-data-source";
-import { demoNews, inMemoryStore } from "../fixture/demo-deps";
+import { demoNews, demoWeb, inMemoryStore } from "../fixture/demo-deps";
 import { DEMO_NOW, DEMO_TODAY } from "../fixture/demo-portfolio";
 import { buildSystemPrompt } from "../prompt";
 import { costOf } from "../provider";
@@ -81,6 +81,7 @@ export async function runCase(args: {
             (p) => p.isOpen && p.symbol === symbol,
           ),
       },
+      web: { search: demoWeb, takeLimit: async () => true },
       timings,
     });
     await args.pacer.reserve(args.maxStepsPerCase);
