@@ -127,6 +127,24 @@ export function buildUsageView(rows: readonly RunRow[]): UsageView {
   };
 }
 
+export type UsageOutcome = { ok: true; usage: UsageView } | { ok: false };
+
+/**
+ * Distingue "todavía no hay datos" (consulta bien, sin filas) de "no se pudo
+ * cargar" (error de la consulta o filas inválidas): en el segundo caso no se
+ * deben mostrar ceros como si fueran reales.
+ */
+export function resolveUsage(
+  queryFailed: boolean,
+  data: unknown,
+): UsageOutcome {
+  if (queryFailed) return { ok: false };
+  const parsed = runRowSchema.array().safeParse(data ?? []);
+  return parsed.success
+    ? { ok: true, usage: buildUsageView(parsed.data) }
+    : { ok: false };
+}
+
 const seconds = new Intl.NumberFormat("es-UY", {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
