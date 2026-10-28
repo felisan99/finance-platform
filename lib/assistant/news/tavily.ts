@@ -25,6 +25,11 @@ export interface NewsSearch {
   search(query: string, days: number): Promise<NewsItem[]>;
 }
 
+/** Búsqueda web general (no solo noticias), con el mismo saneamiento. */
+export interface WebSearch {
+  searchWeb(query: string): Promise<NewsItem[]>;
+}
+
 const resultSchema = z.object({
   title: z.unknown(),
   url: z.unknown(),
@@ -93,30 +98,30 @@ export function parseTavilyResponse(raw: unknown): NewsItem[] {
 export function createTavilySearch(
   apiKey: string,
   fetchImpl: typeof fetch = fetch,
-): NewsSearch {
+): NewsSearch & WebSearch {
+  const post = async (params: Record<string, unknown>) => {
+    const response = await fetchImpl(ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...params,
+        max_results: MAX_NEWS,
+        search_depth: "basic",
+        include_answer: false,
+        include_raw_content: false,
+        include_images: false,
+      }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`tavily: HTTP ${response.status}`);
+    return parseTavilyResponse(await response.json());
+  };
   return {
-    async search(query, days) {
-      const response = await fetchImpl(ENDPOINT, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          query,
-          topic: "news",
-          days,
-          max_results: MAX_NEWS,
-          search_depth: "basic",
-          include_answer: false,
-          include_raw_content: false,
-          include_images: false,
-        }),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error(`tavily: HTTP ${response.status}`);
-      return parseTavilyResponse(await response.json());
-    },
+    search: (query, days) => post({ query, topic: "news", days }),
+    searchWeb: (query) => post({ query, topic: "general" }),
   };
 }

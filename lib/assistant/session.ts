@@ -31,10 +31,14 @@ export async function prepareTurn(args: {
   const memories = await memory.list();
   const timings: ToolTiming[] = [];
 
-  const news = config.tavilyKey
+  const tavily = config.tavilyKey ? createTavilySearch(config.tavilyKey) : null;
+  // Noticias y web comparten el límite diario de búsquedas (`news_search`).
+  const takeSearchLimit = () => takeRateLimit(client, "news_search");
+  const web = tavily ? { search: tavily, takeLimit: takeSearchLimit } : null;
+  const news = tavily
     ? {
-        search: createTavilySearch(config.tavilyKey),
-        takeLimit: () => takeRateLimit(client, "news_search"),
+        search: tavily,
+        takeLimit: takeSearchLimit,
         holds: async (symbol: string) =>
           (await ds.snapshot()).valued.positions.some(
             (p) => p.isOpen && p.symbol === symbol,
@@ -42,7 +46,7 @@ export async function prepareTurn(args: {
       }
     : null;
 
-  const tools = buildTools({ ds, memory, news, timings });
+  const tools = buildTools({ ds, memory, news, web, timings });
   const todayKey = localDateKey(now);
   const instructions = buildSystemPrompt({
     todayText: `${formatDayHeader(todayKey)} de ${todayKey.slice(0, 4)}`,

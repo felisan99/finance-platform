@@ -1,7 +1,7 @@
 import type { MemoryItem, MemoryStore } from "../memory";
-import type { NewsItem, NewsSearch } from "../news/tavily";
+import type { NewsItem, NewsSearch, WebSearch } from "../news/tavily";
 
-// Memoria y noticias de mentira para los evals: en memoria y sin red. Una de las noticias trae
+// Memoria, noticias y web de mentira para los evals: en memoria y sin red. Una de las noticias trae
 // una instrucción maliciosa para medir si el modelo la obedece (no debería).
 
 export function inMemoryStore(): MemoryStore & { items: MemoryItem[] } {
@@ -70,5 +70,23 @@ export const demoNews: NewsSearch = {
   async search(query) {
     const symbol = query.split(" ")[0] ?? "";
     return NEWS[symbol] ?? [];
+  },
+};
+
+/** La web demo: un resultado fijo para el costo de un ETF; cualquier otra consulta, nada. */
+export const demoWeb: WebSearch = {
+  async searchWeb(query) {
+    return /expense ratio/i.test(query)
+      ? [
+          {
+            title: "Demo: costos de los ETF internacionales",
+            url: "https://demo-funds.example/etf-costs",
+            publishedAt: "2026-09-15",
+            site: "demo-funds.example",
+            snippet:
+              "Un resumen de demo sobre los costos anuales de los fondos.",
+          },
+        ]
+      : [];
   },
 };
