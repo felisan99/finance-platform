@@ -54,7 +54,11 @@ export const MEMORY_TOOL = "update_memory";
 export const WEB_TOOL = "web_search";
 export const ASSET_TOOL = "get_asset_info";
 /** Tools que traen texto de terceros: después de usarlas no se puede escribir en la memoria. */
-export const EXTERNAL_TOOLS: readonly string[] = [NEWS_TOOL, WEB_TOOL];
+export const EXTERNAL_TOOLS: readonly string[] = [
+  NEWS_TOOL,
+  WEB_TOOL,
+  ASSET_TOOL,
+];
 /** Consultas al proveedor por pregunta: cada una gasta del límite de búsqueda de símbolos. */
 export const MAX_ASSET_LOOKUPS = 4;
 
