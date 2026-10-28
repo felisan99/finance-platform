@@ -4,9 +4,11 @@ import type { ToolResult } from "../tool-result";
 import { explainMove } from "../tools/explain-move";
 import { getGains } from "../tools/gains";
 import { getPerformance } from "../tools/performance";
+import { getAllocation } from "../tools/allocation";
 import { getPositions } from "../tools/positions";
 import { getPriceHistory } from "../tools/price-history";
 import { getRisk } from "../tools/risk";
+import { simulateTrade } from "../tools/simulate-trade";
 import { whatIf } from "../tools/what-if";
 import type { CaseExpectation } from "./score";
 
@@ -431,6 +433,42 @@ export const CASES: EvalCase[] = [
         .si_hubieras_aportado_por_mes as Rows;
       const year = windows.find((w) => w.periodo === "1 año") ?? windows[0]!;
       return numeric(["what_if"], [str(year.valor_final)]);
+    },
+  },
+
+  {
+    id: "sim-sell-half-nvda",
+    category: "escenarios",
+    question:
+      "Si vendo la mitad de mi posición en NVDA, ¿qué peso le queda y cuánto efectivo tendría?",
+    expect: async (ds) => {
+      const sim = await data(
+        simulateTrade(ds, {
+          operaciones: [{ simbolo: "NVDA", lado: "vender", fraccion: 0.5 }],
+        }),
+      );
+      const [trade] = sim.operaciones as Rows;
+      return numeric(
+        ["simulate_trade"],
+        [str(trade!.peso_despues), str((sim.despues as Data).efectivo)],
+      );
+    },
+  },
+  {
+    id: "alloc-big-tech",
+    category: "escenarios",
+    question: "¿Cuánto pesan juntas NVDA, AMZN y AAPL en mi cartera?",
+    expect: async (ds) => {
+      const allocation = await data(
+        getAllocation(ds, {
+          agrupar: "simbolos",
+          simbolos: ["NVDA", "AMZN", "AAPL"],
+        }),
+      );
+      const group = (allocation.grupos as Rows).find(
+        (g) => g.grupo === "Seleccionados",
+      )!;
+      return numeric(["get_allocation"], [str(group.peso)]);
     },
   },
 

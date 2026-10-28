@@ -4,6 +4,7 @@ import { PERIOD_IDS } from "@/lib/engine";
 import type { AssistantDataSource } from "../data-source";
 import { MEMORY_KINDS, type MemoryStore } from "../memory";
 import type { ToolResult } from "../tool-result";
+import { MAX_GROUP_SYMBOLS, getAllocation } from "./allocation";
 import { explainMove } from "./explain-move";
 import { getGains } from "./gains";
 import { searchNews, type NewsDeps } from "./news";
@@ -11,6 +12,7 @@ import { getPerformance } from "./performance";
 import { getPositions } from "./positions";
 import { getPriceHistory } from "./price-history";
 import { getRisk } from "./risk";
+import { MAX_SIM_TRADES, simulateTrade } from "./simulate-trade";
 import { dateInput, fail, symbolInput } from "./shared";
 import { MAX_WHAT_IF_AMOUNT, whatIf } from "./what-if";
 import { updateMemory } from "./memory";
@@ -134,6 +136,63 @@ export function buildTools(deps: ToolDeps): ToolSet {
         "Riesgo de la cartera: concentración (mayores posiciones y reparto por tipo), caída máxima, distancia al máximo, volatilidad anualizada y mejor/peor día del período (por defecto todo el historial).",
       inputSchema: z.object({ periodo: period.optional() }),
       execute: run("get_risk", (input) => getRisk(ds, input)),
+    }),
+    simulate_trade: tool({
+      description:
+        'Simula comprar o vender hoy (sin ejecutar nada) y devuelve cómo quedaría la cartera: peso de cada posición, efectivo y valor total antes y después, y la ganancia que realizaría una venta. Usala siempre que quieras cuantificar una recomendación ("vendé la mitad", "comprá con el efectivo") en vez de calcular vos los pesos o montos resultantes.',
+      inputSchema: z.object({
+        operaciones: z
+          .array(
+            z.object({
+              simbolo: symbolInput,
+              lado: z.enum(["comprar", "vender"]),
+              cantidad: z
+                .number()
+                .positive()
+                .optional()
+                .describe("Cantidad de acciones o unidades"),
+              monto: z
+                .number()
+                .positive()
+                .max(10_000_000)
+                .optional()
+                .describe("Monto en dólares"),
+              fraccion: z
+                .number()
+                .positive()
+                .max(1)
+                .optional()
+                .describe(
+                  "Solo ventas: fracción de la posición (0.5 = la mitad)",
+                ),
+            }),
+          )
+          .min(1)
+          .max(MAX_SIM_TRADES)
+          .describe(
+            "Se aplican en orden: lo que libera una venta puede pagar una compra siguiente",
+          ),
+        fondeo: z
+          .enum(["efectivo", "plata_nueva"])
+          .optional()
+          .describe(
+            "Con qué se pagan las compras; por defecto, el efectivo de la cuenta",
+          ),
+      }),
+      execute: run("simulate_trade", (input) => simulateTrade(ds, input)),
+    }),
+    get_allocation: tool({
+      description:
+        "Reparto de la cartera con pesos ya calculados: por tipo de activo, por sector, o el peso conjunto de un grupo de símbolos que elijas (por ejemplo, las tecnológicas). Usala en vez de sumar pesos vos.",
+      inputSchema: z.object({
+        agrupar: z.enum(["tipo", "sector", "simbolos"]),
+        simbolos: z
+          .array(symbolInput)
+          .max(MAX_GROUP_SYMBOLS)
+          .optional()
+          .describe("Solo con agrupar = simbolos"),
+      }),
+      execute: run("get_allocation", (input) => getAllocation(ds, input)),
     }),
   };
 

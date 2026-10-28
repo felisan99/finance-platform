@@ -521,6 +521,11 @@ Pestaña **Asistente**: un chat con streaming que responde preguntas sobre la ca
   - **Lo que no cambia:** los datos salen solo de las tools y el modelo no los calcula. El prompt separa los datos, el juicio sobre esos datos (comparar, calificar) y las referencias de criterio ("como regla general"). Sigue sin poder operar.
   - **Evals:** las preguntas de decisión ahora aprueban si hay una recomendación concreta, si se consultó la cartera antes de opinar y si no hay disclaimers.
   - Las cifras de criterio que el modelo cite de memoria (por ejemplo, el costo típico de un ETF) cuentan como "cifras sin fuente" en la métrica de alucinación.
+  - **Tools para cuantificar sin calcular (2026-10-28).** En la primera prueba del prompt nuevo, el modelo sumaba pesos y proyectaba cómo quedaría la cartera ("~16,5 %", "subís el cash a ~40 %"), y la métrica de alucinación lo marcó en las 4 preguntas. Se agregaron dos tools:
+    - `simulate_trade` (`simulateTrades` en el motor): compras y ventas hipotéticas a precios de hoy. Devuelve pesos, efectivo y total antes y después, y la ganancia estimada de una venta. Usa el último cierre para lo que no está en la cartera, no cobra comisiones y paga las compras con el efectivo o con plata nueva.
+    - `get_allocation`: el peso conjunto de un grupo de símbolos, o el reparto por tipo o por sector (`computeAllocation`).
+
+    Sus descripciones le piden al modelo usarlas en vez de calcular. El prompt no se tocó. Las preguntas de recomendación no se volvieron a correr.
   - **Riesgo aceptado:** con invitados, el asistente también les recomienda a ellos. «Antes de comprar» (la tarjeta del activo) sigue sin veredictos de compra.
 - **Observabilidad** (`assistant_runs`):
   - Una fila por turno con modelo, respaldo, pasos, tools (nombre, ms, ok), tokens, costo, TTFT, latencia, error y compactación. Sin el texto.

@@ -31,6 +31,8 @@ export const TOOL_LABELS: Record<string, string> = {
   get_price_history: "Precio histórico",
   what_if: "¿Y si…?",
   get_risk: "Riesgo",
+  simulate_trade: "Simulación",
+  get_allocation: "Reparto",
   search_news: "Noticias",
   update_memory: "Memoria",
 };

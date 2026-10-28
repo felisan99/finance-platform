@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { addDays, summarizeRealized, realizedEvents } from "@/lib/engine";
+import {
+  addDays,
+  computeAllocation,
+  summarizeRealized,
+  realizedEvents,
+} from "@/lib/engine";
 import { formatMoney, formatPercent } from "@/lib/portfolio/format";
 import { demoDataSource } from "../fixture/demo-data-source";
 import { DEMO_NOW } from "../fixture/demo-portfolio";
 import type { MemoryItem, MemoryStore } from "../memory";
 import type { ToolResult } from "../tool-result";
+import { getAllocation } from "../tools/allocation";
 import { explainMove } from "../tools/explain-move";
 import { getGains } from "../tools/gains";
 import { buildTools, MEMORY_TOOL, NEWS_TOOL } from "../tools";
@@ -15,6 +21,7 @@ import { getPositions } from "../tools/positions";
 import { getPriceHistory } from "../tools/price-history";
 import { getRisk } from "../tools/risk";
 import { checkRange, checkSymbol } from "../tools/shared";
+import { simulateTrade } from "../tools/simulate-trade";
 import { whatIf } from "../tools/what-if";
 
 type Ok = Extract<ToolResult, { ok: true }>;
@@ -225,6 +232,112 @@ describe("get_price_history, what_if y get_risk", () => {
   });
 });
 
+describe("simulate_trade", () => {
+  it("vender la mitad de NVDA: el peso de antes es el de Inicio y baja después", async () => {
+    const ds = demoDataSource();
+    const positions = expectOk(await getPositions(ds));
+    const nvda = (positions.data.posiciones as Data[]).find(
+      (p) => p.simbolo === "NVDA",
+    )!;
+    const result = expectOk(
+      await simulateTrade(ds, {
+        operaciones: [{ simbolo: "nvda", lado: "vender", fraccion: 0.5 }],
+      }),
+    );
+    const [trade] = result.data.operaciones as Data[];
+    expect(trade?.peso_antes).toBe(nvda.peso);
+    expect(trade?.cantidad).toBe("12,5");
+    expect(trade?.ganancia_realizada_estimada).toMatch(/^\+US\$/);
+    expect((result.data.antes as Data).valor_total).toBe(
+      positions.data.valor_total,
+    );
+    // Vender con el efectivo como destino no cambia el total.
+    expect((result.data.despues as Data).valor_total).toBe(
+      positions.data.valor_total,
+    );
+    expect(result.source.fn).toBe("simulateTrades");
+  });
+
+  it("comprar algo que no está en la cartera usa su último cierre; con plata nueva sube el total", async () => {
+    const result = expectOk(
+      await simulateTrade(demoDataSource(), {
+        operaciones: [{ simbolo: "SPY", lado: "comprar", monto: 1000 }],
+        fondeo: "plata_nueva",
+      }),
+    );
+    expect(result.data.plata_nueva_a_depositar).toBe("US$\u00a01.000,00");
+    expect((result.data.operaciones as Data[])[0]?.peso_antes).toBe("0,00%");
+  });
+
+  it("rechaza vender más de lo que hay, símbolos sin precio y listas vacías", async () => {
+    const ds = demoDataSource();
+    expect(
+      (
+        await simulateTrade(ds, {
+          operaciones: [{ simbolo: "NVDA", lado: "vender", cantidad: 1000 }],
+        })
+      ).ok,
+    ).toBe(false);
+    expect(
+      (
+        await simulateTrade(ds, {
+          operaciones: [{ simbolo: "XNEW", lado: "vender", fraccion: 0.5 }],
+        })
+      ).ok,
+    ).toBe(false);
+    expect(
+      (
+        await simulateTrade(ds, {
+          operaciones: [{ simbolo: "TSLA", lado: "comprar", monto: 100 }],
+        })
+      ).ok,
+    ).toBe(false);
+    expect((await simulateTrade(ds, { operaciones: [] })).ok).toBe(false);
+  });
+});
+
+describe("get_allocation", () => {
+  it("el peso conjunto de varios símbolos es el del motor", async () => {
+    const ds = demoDataSource();
+    const { valued } = await ds.snapshot();
+    const chosen = new Set(["NVDA", "AMZN", "AAPL"]);
+    const expected = computeAllocation(valued, (s) =>
+      chosen.has(s) ? "Seleccionados" : "Resto",
+    ).slices.find((slice) => slice.key === "Seleccionados")!;
+    const result = expectOk(
+      await getAllocation(ds, {
+        agrupar: "simbolos",
+        simbolos: ["nvda", "AMZN", "aapl", "TSLA"],
+      }),
+    );
+    const group = (result.data.grupos as Data[]).find(
+      (g) => g.grupo === "Seleccionados",
+    )!;
+    expect(group.peso).toBe(formatPercent(expected.weight));
+    expect(result.data.por_simbolo as Data[]).toHaveLength(3);
+    expect(result.missing).toContain("TSLA no está en la cartera.");
+  });
+
+  it("por tipo y por sector", async () => {
+    const ds = demoDataSource();
+    const byType = expectOk(await getAllocation(ds, { agrupar: "tipo" }));
+    expect((byType.data.grupos as Data[]).map((g) => g.grupo)).toEqual(
+      expect.arrayContaining(["Acción", "ETF", "Cripto", "Efectivo"]),
+    );
+    const bySector = expectOk(await getAllocation(ds, { agrupar: "sector" }));
+    expect((bySector.data.grupos as Data[]).map((g) => g.grupo)).toEqual(
+      expect.arrayContaining(["Technology", "ETF", "Cripto"]),
+    );
+    expect(byType.missing.some((m) => m.includes("XNEW"))).toBe(true);
+  });
+
+  it("pide al menos un símbolo", async () => {
+    expect(
+      (await getAllocation(demoDataSource(), { agrupar: "simbolos" })).ok,
+    ).toBe(false);
+  });
+});
+
 function memoryStore(): MemoryStore & { items: MemoryItem[] } {
   const items: MemoryItem[] = [];
   return {
@@ -369,11 +482,13 @@ describe("buildTools", () => {
     });
     expect(Object.keys(tools).sort()).toEqual([
       "explain_move",
+      "get_allocation",
       "get_gains",
       "get_performance",
       "get_positions",
       "get_price_history",
       "get_risk",
+      "simulate_trade",
       "what_if",
     ]);
     expect(tools[MEMORY_TOOL]).toBeUndefined();

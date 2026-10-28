@@ -81,6 +81,15 @@ export type {
   SymbolContribution,
 } from "./attribution";
 export { summarizeCloses } from "./price-summary";
+export { simulateTrades } from "./trade-sim";
+export type {
+  SimHolding,
+  SimInput,
+  SimResult,
+  SimState,
+  SimTrade,
+  SimTradeResult,
+} from "./trade-sim";
 export type { PriceSummary } from "./price-summary";
 export type { MonthlyReturn } from "./monthly";
 export {
