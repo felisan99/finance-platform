@@ -19,6 +19,15 @@ function latestDate(
     : dates.reduce((max, date) => (date > max ? date : max));
 }
 
+export interface AssembledPerformance {
+  result: PerformanceResult;
+  view: PerformanceView;
+  /** Los cierres con los que se armó la serie, con la cotización de hoy si correspondía. */
+  closes: ReadonlyMap<string, readonly DailyClose[]>;
+  /** Último día de la serie. */
+  endDate: string;
+}
+
 /**
  * Del snapshot y los cierres leídos al rendimiento (sin tocar la base). Si "Actualizar precios"
  * trajo cotizaciones de un día más nuevo que el último cierre, la serie termina en ese día con la
@@ -34,7 +43,7 @@ export function assemblePerformance(input: {
   benchmarkCloses: readonly DailyClose[];
   benchmarkQuote: LiveQuote | null;
   benchmarkSymbol: string | null;
-}): { result: PerformanceResult; view: PerformanceView } | null {
+}): AssembledPerformance | null {
   const { snapshot, closes, benchmarkCloses } = input;
 
   const lastCloseDate = latestDate(...closes.values(), benchmarkCloses);
@@ -74,5 +83,5 @@ export function assemblePerformance(input: {
     live:
       live.liveAsOf === null ? null : { asOf: live.liveAsOf, lastCloseDate },
   });
-  return view ? { result, view } : null;
+  return view ? { result, view, closes: live.closes, endDate } : null;
 }

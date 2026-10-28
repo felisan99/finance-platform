@@ -2,7 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/db/database.types";
 import { addDays, d, type DailyClose } from "@/lib/engine";
 import { describeError } from "@/lib/market-data";
-import { assemblePerformance } from "./performance-build";
+import {
+  assemblePerformance,
+  type AssembledPerformance,
+} from "./performance-build";
 import type { PerformanceView } from "./performance-view";
 import { getBenchmark, getCloseSeries, getQuoteRows } from "./queries";
 import type { DailyCloseRow } from "./rows";
@@ -26,6 +29,17 @@ export async function loadPerformance(
   client: SupabaseClient<Database>,
   snapshot: PortfolioSnapshot,
 ): Promise<PerformanceView | null> {
+  return (await loadPerformanceData(client, snapshot))?.view ?? null;
+}
+
+/**
+ * Lo mismo que `loadPerformance`, pero con el resultado del motor y los cierres usados: el
+ * asistente trabaja con los valores exactos (rangos libres, contribución) y no con el texto.
+ */
+export async function loadPerformanceData(
+  client: SupabaseClient<Database>,
+  snapshot: PortfolioSnapshot,
+): Promise<AssembledPerformance | null> {
   if (snapshot.transactions.length === 0) return null;
 
   const firstTx = snapshot.transactions.reduce(
@@ -66,20 +80,18 @@ export async function loadPerformance(
     ? toCloses(benchmarkRows.get(benchmark.instrumentId) ?? [])
     : [];
 
-  return (
-    assemblePerformance({
-      snapshot,
-      closes,
-      benchmarkCloses,
-      benchmarkQuote: benchmarkQuotes[0]
-        ? {
-            price: d(benchmarkQuotes[0].price),
-            asOf: new Date(benchmarkQuotes[0].as_of),
-          }
-        : null,
-      benchmarkSymbol: benchmark?.symbol ?? null,
-    })?.view ?? null
-  );
+  return assemblePerformance({
+    snapshot,
+    closes,
+    benchmarkCloses,
+    benchmarkQuote: benchmarkQuotes[0]
+      ? {
+          price: d(benchmarkQuotes[0].price),
+          asOf: new Date(benchmarkQuotes[0].as_of),
+        }
+      : null,
+    benchmarkSymbol: benchmark?.symbol ?? null,
+  });
 }
 
 /** Lo que salió de pedir el rendimiento, para que varias secciones de Inicio lo compartan. */

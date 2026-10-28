@@ -68,6 +68,20 @@ export type {
 } from "./risk";
 export { computeMonthlyReturns } from "./monthly";
 export { combineEngineResults, combineSeries } from "./combine";
+export { realizedEvents, summarizeRealized } from "./realized";
+export type {
+  RealizedBySymbol,
+  RealizedEvent,
+  RealizedSummary,
+} from "./realized";
+export { combineContributions, contributionBetween } from "./attribution";
+export type {
+  ContributionInput,
+  ContributionResult,
+  SymbolContribution,
+} from "./attribution";
+export { summarizeCloses } from "./price-summary";
+export type { PriceSummary } from "./price-summary";
 export type { MonthlyReturn } from "./monthly";
 export {
   MIN_SHARED_DAYS,
