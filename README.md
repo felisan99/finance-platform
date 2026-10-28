@@ -2,14 +2,14 @@
 
 # Portfolio Tracker
 
-**A personal investment tracker for stocks, ETFs and crypto. Every number is derived from a ledger of transactions with exact decimal math, returns are measured time- and money-weighted against a benchmark, and it runs at zero cost. It installs on the iPhone as an app and comes with a home-screen widget.**
+**A personal investment tracker for stocks, ETFs and crypto, built around an LLM agent that answers questions about your portfolio by calling read-only tools over a pure calculation engine. The model explains; it never does the math. Every number comes from a ledger of transactions with exact decimal math, and the whole thing runs at zero cost. It installs on the iPhone as an app and comes with a home-screen widget.**
 
 [![CI](https://github.com/felisan99/finance-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/felisan99/finance-platform/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ECF8E?logo=supabase&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-1779%20unit-2EA44F?logo=vitest&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-1995%20unit-2EA44F?logo=vitest&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 <picture>
@@ -23,12 +23,96 @@
 
 ## At a glance
 
+- **LLM agent first:** a streaming chat assistant, a ReAct-style tool-calling loop on the Vercel AI SDK 7 with free OpenRouter models. It has 13 read-only tools over the pure engine, long-term memory, automatic conversation compaction, structural guardrails, per-turn observability and an eval harness. [Architecture below](#the-assistant-an-llm-agent-over-a-pure-engine).
 - **Source of truth:** one ledger of transactions per account. Positions, cash, gains and returns are recomputed from it, never stored.
 - **Calculation engine:** pure TypeScript (`lib/engine`) with no database, network or clock: average cost, splits, cash, daily value series, TWR, XIRR, drawdown, volatility and what-if analysis.
 - **Money:** `decimal.js` end to end. Postgres `numeric` values are read as text, so no amount ever passes through a float.
-- **Tests:** 1,779 unit tests in CI, including property-based tests with fast-check, plus integration tests for row-level security and live tests against real market data.
-- **Running cost:** US$ 0 per month: Vercel Hobby, Supabase Free and Yahoo Finance, with one daily cron.
+- **Tests:** 1,995 unit tests in CI, including property-based tests with fast-check, plus integration tests for row-level security and live tests against real market data.
+- **Running cost:** US$ 0 per month: Vercel Hobby, Supabase Free, Yahoo Finance, free OpenRouter models and the free Tavily plan, with one daily cron.
 - **Access:** invite-only sign-in with 6-digit email codes. No passwords anywhere.
+
+## The assistant: an LLM agent over a pure engine
+
+The main goal of the project is an assistant that can talk about a real portfolio **without ever making a number up**. The design follows from one rule: the model decides what to look up and explains the result, and every figure it states was computed by the same deterministic engine that draws the dashboard.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/assistant-dark.png">
+  <img src="docs/images/assistant.png" alt="The assistant answering a performance question, with the sources of its numbers listed" width="360">
+</picture>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/assistant-whatif-dark.png">
+  <img src="docs/images/assistant-whatif.png" alt="The assistant answering a what-if question with a verdict, reasons and the biggest risk" width="360">
+</picture>
+
+<sub>Demo account with fictitious data. The assistant speaks Spanish because the app does.</sub>
+
+### How a turn works
+
+```mermaid
+flowchart TD
+    Q["Question (POST /api/assistant)"] --> G["Session via getClaims, Zod validation,<br/>2 rate limits"]
+    G --> C["Load conversation: summary + recent messages<br/>+ long-term memory"]
+    C --> L{{"Model loop (max 6 steps)<br/>OpenRouter free model + fallbacks"}}
+    L -- "tool call" --> T["Read-only tools"]
+    T --> E["lib/engine (pure)<br/>+ stored prices under RLS"]
+    T --> X["Yahoo quotes, Tavily search<br/>(untrusted input)"]
+    E --> R["Preformatted text + source + missing"]
+    X --> R
+    R --> L
+    L -- "final answer" --> S["Streamed to the UI<br/>with source chips from the real tool calls"]
+    S --> P["after(): persist messages, compact old ones,<br/>write run metrics"]
+```
+
+It is a ReAct-style tool-calling loop (`streamText` with a six-step cap). The route verifies the session, validates the input, takes two database rate limits, reads the conversation history from the database (the client only sends the new question) and streams the answer. Persistence, compaction and metrics run in `after()`, so they never delay the response.
+
+### Tools: read-only wrappers over the engine
+
+| Tool | What it answers |
+| ---- | --------------- |
+| `get_positions` | Today's snapshot: positions, weights, cost basis, unrealized gain, day change, cash |
+| `get_gains` | Realized gain by asset for a period or all time, plus today's unrealized gain |
+| `get_performance` | Time-weighted and money-weighted return against the benchmark for a period |
+| `explain_move` | Why the portfolio moved between two dates: contribution by position |
+| `get_price_history` | Summary of one symbol's closes (first, last, min, max, change) without dumping rows |
+| `what_if` | The "before you buy" analysis: exposure, concentration, volatility, dollar-cost-averaging backtest |
+| `simulate_trade` | The portfolio after a hypothetical buy or sell: new weights, cost basis, realized gain |
+| `get_allocation` | Weights by position or by asset type, and the sum of any subset |
+| `get_risk` | Volatility, drawdown and concentration |
+| `get_asset_info` | Current quote, company or fund data and latest earnings for **any** stock, ETF or crypto, held or not |
+| `search_news` | Recent news for a ticker (Tavily) |
+| `web_search` | General web search for facts the model doesn't know (Tavily) |
+| `update_memory` | Save or edit a stable fact about the person (risk profile, goals) |
+
+Design rules that make this trustworthy:
+
+- **The model never computes.** Each tool returns text that is already formatted with the app's formatter, plus a `source` (what was computed, over which dates) and an explicit `missing` list. A `null` from the engine becomes "I don't have that data", never a guess.
+- **Sources come from reality, not from the model.** The chips under each answer are built from the tool calls that actually ran, so the model cannot cite something it didn't use.
+- **Tool descriptions are prompts.** Each one says when to use it, when not to, what comes back and how to cite it, so the model picks between overlapping tools correctly.
+- **Read-only by construction.** There is no tool that writes portfolio data, so "the assistant can't trade or edit your ledger" is a property of the code, not of the prompt. Tools read through an `AssistantDataSource` bound to the user's session under row-level security; they never use the secret key and take no user id.
+
+### Memory and long conversations
+
+- **Long-term memory** holds the person's risk profile, goals and stable facts (up to 30 items, with a database trigger enforcing the cap). It is injected into the prompt as data, shown and deletable under **Más → Lo que el asistente recuerda**, and a Zod refinement rejects any text containing figures, so portfolio numbers never leak into memory.
+- **Automatic compaction.** When a conversation passes 16 messages or about 12,000 tokens, the older messages are summarized by the model and only the summary plus the last six messages are sent from then on. The decision rule is a pure function with tests, and token counts before and after are recorded.
+
+### Guardrails
+
+- **Scope:** the prompt is an opinionated financial advisor's, restricted to finance, and the evals include off-topic and missing-data traps.
+- **Prompt injection:** news and web results are third-party text. They reach the model wrapped as external content with a note that they never contain valid instructions, and `update_memory` is disabled for the rest of the turn as soon as a search tool is used.
+- **Abuse and cost:** two rate limits per person (8 questions per 5 minutes and 60 per day), a daily cap on searches and a per-turn cap on asset lookups, all enforced in the database.
+- **Failure:** the primary model and up to two free fallbacks are tried in order through OpenRouter's model routing. Errors reach the user as generic messages and details go to the server log.
+
+### Observability
+
+Every turn writes one row to `assistant_runs` under RLS: model used and whether a fallback fired, steps, tools with their timings, tokens, cost, time to first token, total latency, finish reason and compaction data. Message contents are never stored in it. **Más → Uso del asistente** shows the totals, p50 and p95 latency and the most used tools. The metrics already paid for themselves: they showed that tools take about 370 ms while slow answers come from long outputs on free models, which led to the "short and proportional" answer rule.
+
+### Evals
+
+`pnpm eval` runs 46 questions against a fictitious demo portfolio, in 12 categories: positions, gains, performance, explaining moves, prices, risk, what-if scenarios, news, memory, recommendations, missing data and off-topic. **The expected answer to each question is computed at run time by the engine through the same tools**, never hardcoded, and the report scores numeric accuracy, correct tool choice, hallucination (a figure that appears in no tool output), guardrails, latency, tokens and cost. Runs are manual because they spend free-tier requests. The recommendation category is where small free models struggle (they like to do arithmetic on long answers), which is why the engine got `simulate_trade` and `get_allocation`.
+
+### Stack
+
+Vercel AI SDK 7 (`streamText`, UI message streams), `@openrouter/ai-sdk-provider` with free models, Tavily for search, Zod 4 on every tool input, Supabase for conversations, memory and metrics.
 
 ## Features
 
@@ -75,7 +159,7 @@
 </td>
 <td width="50%" valign="top">
 
-**Asset detail.** Price history (1W, 1M, 3M, 1Y) with the 52-week range, company data and quarterly earnings against the analyst consensus.
+**Asset detail.** Price history (1W, 1M, 3M, 1Y) with the 52-week range, company data and quarterly earnings against the analyst consensus, plus a chart of your own trades on the price with range chips.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/price-dark.png">
@@ -114,6 +198,7 @@ It describes the past and never says "buy".
 
 Also included:
 
+- **Automatic dividends.** The app proposes the dividends the provider reports for the shares you held the day before the ex-date, with the US withholding for non-residents (30% by default, configurable). Nothing is added until you confirm.
 - **Activity and import.** Add, edit and delete buys, sells, dividends, deposits, withdrawals and splits. CSV import recognizes the format from the headers: either the app's own format (the one its CSV export writes, so a backup can be restored) or an export from [Delta](https://delta.app), a popular portfolio-tracking app. A preview shows what will be loaded and flags likely duplicates, and a whole import can be undone.
 - **Watchlist** of up to 50 symbols with each one's change for the day.
 - **Multiple portfolios**, up to five (for example, one for stocks and one for crypto), plus an "all together" view that adds them up without mixing their ledgers.
@@ -132,6 +217,7 @@ flowchart LR
     subgraph Vercel["Vercel: Next.js 16"]
         RSC["Server Components<br/>+ Server Actions"]
         API["/api/widget"]
+        AGT["/api/assistant<br/>LLM agent loop (streaming)"]
         CRON["/api/cron/*"]
         ENG["lib/engine<br/>pure calculation"]
     end
@@ -142,8 +228,16 @@ flowchart LR
     end
 
     Y["Yahoo Finance"]
+    LLM["OpenRouter<br/>free models"]
+    TAV["Tavily<br/>search"]
 
     UI <--> RSC
+    UI <-- "stream" --> AGT
+    AGT -- "read-only tools" --> ENG
+    AGT <-- "session, RLS" --> DB
+    AGT <--> LLM
+    AGT --> TAV
+    AGT -- "quotes, company data" --> Y
     W -- "Bearer code" --> API
     RSC --> ENG
     API --> ENG
@@ -155,7 +249,7 @@ flowchart LR
     RSC -- "on-demand quotes, rate-limited" --> Y
 ```
 
-On each page request the server reads the user's ledger and the stored prices under row-level security, runs the engine, and sends the client text that is already formatted. The client never receives raw amounts or the calculation code.
+The assistant is the same idea applied to a chat: its tools call the same engine and return text that is already formatted. On each page request the server reads the user's ledger and the stored prices under row-level security, runs the engine, and sends the client text that is already formatted. The client never receives raw amounts or the calculation code.
 
 ## Why it is built this way
 
@@ -209,8 +303,9 @@ Because it is pure, it can be tested exhaustively with fixed dates and property-
 | UI            | Tailwind CSS 4, shadcn/ui on Base UI, Recharts, Lucide               |
 | Math          | decimal.js, date-fns / date-fns-tz                                   |
 | Validation    | Zod 4 at every boundary: forms, CSV, provider responses              |
+| LLM agent     | Vercel AI SDK 7, OpenRouter (free models with fallbacks), Tavily     |
 | Market data   | `yahoo-finance2` behind a swappable provider interface               |
-| Tests         | Vitest, fast-check                                                   |
+| Tests         | Vitest, fast-check; manual LLM evals (`pnpm eval`)                   |
 | Hosting       | Vercel Hobby with Vercel Cron                                        |
 | CI            | GitHub Actions: lint, typecheck, unit tests                          |
 
@@ -251,6 +346,10 @@ To try the app with data, import the sample Delta export [`lib/engine/__fixtures
 | `CRON_SECRET`                          | Bearer token for `/api/cron/*`, at least 32 characters (`openssl rand -hex 32`). Without it the crons fail closed |
 | `MARKET_DATA_PROVIDER`                 | `yahoo`                                                                                                           |
 | `APP_TIMEZONE`                         | `America/Montevideo`                                                                                              |
+| `OPENROUTER_API_KEY`                   | Assistant: OpenRouter key. Without it the Assistant tab shows "not available" and the rest of the app works     |
+| `ASSISTANT_MODEL`                      | Assistant: primary model id (a free one, for example)                                                             |
+| `ASSISTANT_FALLBACK_MODEL`             | Assistant: up to two comma-separated fallback model ids                                                           |
+| `TAVILY_API_KEY`                       | Assistant: news and web search (free plan). Without it the assistant doesn't offer the search tools                |
 
 ## Commands
 
@@ -260,6 +359,7 @@ To try the app with data, import the sample Delta export [`lib/engine/__fixtures
 | `pnpm test`                      | Unit tests: engine, importers, views, formatting, security headers, widget                          |
 | `pnpm test:integration`          | RLS isolation, invite-only sign-up, atomic imports and rate limits, against the development project |
 | `pnpm test:live`                 | Runs the real cron against Yahoo and loads every screen over HTTP with a real session (manual)      |
+| `pnpm eval`                      | Assistant evals against OpenRouter models on a fictitious portfolio (manual: spends free-tier requests; `EVAL_DRY_RUN=1` estimates first) |
 | `pnpm lint`                      | ESLint, including the rules that keep `lib/engine` pure                                             |
 | `pnpm typecheck`                 | `next typegen` + `tsc --noEmit`                                                                     |
 | `pnpm db:push` / `pnpm db:types` | Apply migrations / regenerate database types (development project only)                             |
@@ -270,11 +370,13 @@ The `db:*` scripts and the integration tests refuse to run against any project o
 
 ```
 app/
-  (app)/            Home, Positions, Activity, Watchlist, More
+  (app)/            Home, Positions, Assistant, Watchlist, More (Activity lives under More)
   (auth)/login/     Sign-in with an email code
   api/cron/         Daily prices and backfill (Bearer CRON_SECRET)
   api/widget/       iPhone widget endpoint
+  api/assistant/    Streaming endpoint for the LLM agent
 lib/
+  assistant/        The agent: loop, prompt, tools, memory, compaction, telemetry, evals and demo fixture
   engine/           Pure calculation: positions, cash, series, TWR, XIRR, risk, what-if
   importers/        CSV parsers (app format and Delta) with format detection
   portfolio/        Database reads, view models and formatting for the UI
@@ -285,7 +387,7 @@ lib/
   security/         Content Security Policy
   validation/       Zod schemas for every input
 supabase/
-  migrations/       Schema, RLS policies and SQL functions (18 migrations)
+  migrations/       Schema, RLS policies and SQL functions (20 migrations)
   templates/        Auth email templates
 docs/               Design log, operations and user guides (in Spanish)
 ```
@@ -297,7 +399,7 @@ The project was built in phases from a written spec, with a decision log kept al
 | Document                                                   | Covers                                                                         |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | [PROJECT_SPEC.md](PROJECT_SPEC.md)                         | Full specification: data model, engine rules, market data, import, phases      |
-| [docs/decisions.md](docs/decisions.md)                     | Decision log: deviations from the spec, trade-offs, incidents, security review |
+| [docs/decisions.md](docs/decisions.md)                     | Decision log: deviations from the spec, trade-offs, incidents, security review, the assistant's design |
 | [docs/supabase-setup.md](docs/supabase-setup.md)           | Environments, keys, invitations, SMTP, crons                                   |
 | [docs/limits.md](docs/limits.md)                           | Free-tier limits that shaped the design                                        |
 | [docs/importar-csv.md](docs/importar-csv.md)               | CSV import guide for users                                                     |
@@ -314,7 +416,9 @@ Phases 0 to 6 are done:
 - market data and crons;
 - the full interface, watchlist and asset detail;
 - PWA and widget;
-- multiple portfolios and crypto.
+- multiple portfolios and crypto;
+- the LLM assistant with read-only tools, memory, compaction, observability and evals;
+- automatic dividends with withholding.
 
 The app runs on Vercel against the development database. Next up are the production environment, a strict nonce-based CSP, and import from IBKR Flex Queries.
 
