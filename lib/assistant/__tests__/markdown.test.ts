@@ -72,7 +72,7 @@ describe("parseMarkdown", () => {
 
   it("tablas: encabezado, filas sin el separador y celdas con formato", () => {
     const blocks = parseMarkdown(
-      "Plan:\n| Paso | Qué hacer |\n|------|:---------:|\n| 1 | **Vendé** NFLX |\n| 2 | Esperá | extra |\n| 3 |\nFin",
+      "Plan:\n| Paso | Qué hacer |\n|------|:---------:|\n| 1 | **Vendé** XYZ |\n| 2 | Esperá | extra |\n| 3 |\nFin",
     );
     expect(blocks.map((b) => b.kind)).toEqual([
       "paragraph",
@@ -90,7 +90,7 @@ describe("parseMarkdown", () => {
     expect(table.rows).toHaveLength(3);
     expect(table.rows[0]![1]).toEqual([
       { kind: "strong", text: "Vendé" },
-      { kind: "text", text: " NFLX" },
+      { kind: "text", text: " XYZ" },
     ]);
     // Celdas de más se recortan y las que faltan quedan vacías.
     expect(table.rows[1]).toHaveLength(2);

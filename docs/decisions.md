@@ -613,7 +613,7 @@ Antes, un dividendo solo existía en la cartera si se cargaba a mano o venía en
 
 ## Rangos en «Tus operaciones en el gráfico» (2026-10-28)
 
-- **Problema:** el gráfico de la ficha mostraba siempre desde unos días antes de la primera operación hasta hoy. Eso es demasiado ancho para ver compras cercanas (las de junio de VOO quedaban encimadas) y demasiado corto para ver si una entrada fue cara respecto de la historia.
+- **Problema:** el gráfico de la ficha mostraba siempre desde unos días antes de la primera operación hasta hoy. Eso es demasiado ancho para ver compras cercanas (quedaban encimadas) y demasiado corto para ver si una entrada fue cara respecto de la historia.
 - **Elegido:** chips de rango *Desde tu compra* (por defecto, lo de siempre), 1M, 3M, 1A y 5A.
   - El servidor manda una sola vez hasta 5 años de cierres, o desde la primera operación si es más vieja. El cliente recorta cada rango (`trade-chart-range.ts`, sin imports, con tests), así que cambiar de rango es inmediato. Son unos 1260 puntos.
   - Un rango más corto que la tenencia avisa cuántas operaciones quedaron antes.
