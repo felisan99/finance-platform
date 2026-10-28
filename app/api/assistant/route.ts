@@ -11,6 +11,7 @@ import {
 import { after } from "next/server";
 import { z } from "zod";
 import { runAssistant } from "@/lib/assistant/agent";
+import { ASSISTANT_GENERIC_ERROR } from "@/lib/assistant/chat-status";
 import {
   estimateTokens,
   planCompaction,
@@ -33,6 +34,10 @@ import {
   type RunMetrics,
 } from "@/lib/assistant/telemetry";
 import { loadTurnContext } from "@/lib/assistant/turn-context";
+import {
+  historyWithQuestion,
+  messagesToPersist,
+} from "@/lib/assistant/turn-messages";
 import { getSessionUser } from "@/lib/db/auth";
 import { takeRateLimit } from "@/lib/db/rate-limit";
 import { createClient } from "@/lib/db/server";
@@ -52,7 +57,8 @@ const bodySchema = z.object({
   }),
 });
 
-const GENERIC = "No pude responder en este momento. Probá de nuevo en un rato.";
+// El cliente reconoce este texto como una falla informada por la ruta (`canRetry`).
+const GENERIC = ASSISTANT_GENERIC_ERROR;
 
 function json(body: unknown, status: number): Response {
   return Response.json(body, {
@@ -120,7 +126,11 @@ export async function POST(request: Request) {
       parts: [{ type: "text", text: message.text }],
     };
     const validated = await safeValidateUIMessages({
-      messages: [...stored.map((m) => m.message), question],
+      // Un reintento reenvía la pregunta que ya quedó guardada: no se repite.
+      messages: historyWithQuestion(
+        stored.map((m) => m.message),
+        question,
+      ),
     });
     if (!validated.success) {
       console.error(
@@ -175,9 +185,7 @@ export async function POST(request: Request) {
           setTimeout(() => resolve(null), (maxDuration - 10) * 1000),
         ),
       ]);
-      const fresh = finalMessages
-        ? finalMessages.slice(history.length - 1)
-        : [question];
+      const fresh = messagesToPersist(finalMessages, history, question);
       const run: RunMetrics = summarizeRun({
         event: endEvent,
         requestedModel: config.model,

@@ -5,6 +5,7 @@ import {
   ANNOUNCE_DONE,
   activityOf,
   announcementOf,
+  ASSISTANT_GENERIC_ERROR,
   canRetry,
   sourcesOf,
 } from "../chat-status";
@@ -107,29 +108,37 @@ describe("canRetry", () => {
   const rejected = JSON.stringify({
     error: "Hiciste muchas preguntas seguidas.",
   });
-  const streamFailure =
-    "No pude responder en este momento. Probá de nuevo en un rato.";
+  const partial = assistant([{ type: "text", text: "Tu cartera" }]);
 
-  it("permite reintentar si la ruta rechazó la pregunta y no hay respuesta", () => {
+  it("sin respuesta todavía: con cualquier error (el reintento no duplica la pregunta)", () => {
     expect(canRetry([user], rejected)).toBe(true);
+    expect(canRetry([user], ASSISTANT_GENERIC_ERROR)).toBe(true);
+    expect(canRetry([user], "Failed to fetch")).toBe(true);
+    expect(canRetry([user], "Load failed")).toBe(true);
   });
   it("no sin error", () => {
     expect(canRetry([user], undefined)).toBe(false);
     expect(canRetry([user], "")).toBe(false);
   });
-  it("no si el error ocurrió durante la respuesta (la pregunta pudo guardarse)", () => {
-    expect(canRetry([user], streamFailure)).toBe(false);
-    expect(canRetry([user], "Failed to fetch")).toBe(false);
-  });
-  it("no si ya hay una respuesta parcial", () => {
+  it("con una respuesta a medias, si la ruta avisó la falla (no guardó la respuesta)", () => {
+    expect(canRetry([user, partial], ASSISTANT_GENERIC_ERROR)).toBe(true);
+    expect(canRetry([user, assistant([])], ASSISTANT_GENERIC_ERROR)).toBe(true);
     expect(
-      canRetry([user, assistant([{ type: "text", text: "Hola" }])], rejected),
-    ).toBe(false);
+      canRetry(
+        [user, assistant([{ type: "step-start" }])],
+        ASSISTANT_GENERIC_ERROR,
+      ),
+    ).toBe(true);
   });
-  it("no sin mensajes ni con JSON sin `error` de texto", () => {
+  it("no con una respuesta a medias si se cortó la conexión (el servidor la guarda completa)", () => {
+    expect(canRetry([user, partial], "Failed to fetch")).toBe(false);
+    expect(canRetry([user, partial], "network error")).toBe(false);
+    expect(canRetry([user, partial], rejected)).toBe(false);
+  });
+  it("no sin mensajes ni con una respuesta que no sigue a una pregunta", () => {
     expect(canRetry([], rejected)).toBe(false);
-    expect(canRetry([user], JSON.stringify({ error: 5 }))).toBe(false);
-    expect(canRetry([user], "null")).toBe(false);
+    expect(canRetry([], ASSISTANT_GENERIC_ERROR)).toBe(false);
+    expect(canRetry([partial], ASSISTANT_GENERIC_ERROR)).toBe(false);
   });
 });
 
