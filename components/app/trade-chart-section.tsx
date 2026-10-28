@@ -36,15 +36,28 @@ export async function TradeChartSection({
   symbol,
   avgCost,
 }: {
-  closes: Promise<Array<{ date: string; close: string }>>;
+  closes: Promise<Array<{ date: string; close: string }> | null>;
   price: LivePrice;
   transactions: readonly Transaction[];
   symbol: string;
   avgCost: string | null;
 }) {
+  const rows = await closes;
+  if (rows === null) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">{TITLE}</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          No pudimos cargar el gráfico ahora. Probá de nuevo en un rato.
+        </CardContent>
+      </Card>
+    );
+  }
   // Con la cotización de hoy como último punto mientras no exista el cierre de hoy.
   const full = buildPositionChart(
-    withLiveBar(await closes, price),
+    withLiveBar(rows, price),
     transactions,
     symbol,
     avgCost,
