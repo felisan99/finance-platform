@@ -95,6 +95,38 @@ describe("asistente: tablas y RLS (integración, finance-dev)", () => {
     expect(first!.seq).toBeLessThan(second!.seq);
   });
 
+  it("guardar dos veces el mismo mensaje no falla ni lo duplica (reintento)", async () => {
+    const conversation = await createConversation(a.client, a.id);
+    const question = {
+      id: "q1",
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: "¿Cómo voy?" }],
+    };
+    await appendMessages(a.client, a.id, conversation.id, [question]);
+    await appendMessages(a.client, a.id, conversation.id, [
+      question,
+      {
+        id: "r1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Bien." }],
+      },
+    ]);
+    const stored = await loadMessages(a.client, conversation);
+    expect(stored.map((m) => m.message.id)).toEqual(["q1", "r1"]);
+
+    // B no escribe nada en la conversación de A. Con un id nuevo la FK lo rechaza; con un id que ya
+    // existe el insert no hace nada (ON CONFLICT DO NOTHING) y tampoco agrega ni cambia filas.
+    await expect(
+      appendMessages(b.client, b.id, conversation.id, [
+        { id: "intruso", role: "user", parts: [] },
+      ]),
+    ).rejects.toThrow();
+    await appendMessages(b.client, b.id, conversation.id, [question]);
+    const after = await loadMessages(a.client, conversation);
+    expect(after.map((m) => m.message.id)).toEqual(["q1", "r1"]);
+    expect(after.every((m) => m.message.parts.length > 0)).toBe(true);
+  });
+
   it("un mensaje no se puede editar (solo agregar o borrar)", async () => {
     const { error } = await a.client
       .from("assistant_messages")
