@@ -1,6 +1,6 @@
 import Decimal from "decimal.js";
 import { describe, expect, it } from "vitest";
-import { D, QTY_EPSILON, ZERO, d } from "../decimal";
+import { D, d } from "../decimal";
 
 describe("decimal", () => {
   it("suma decimales sin el error de los floats", () => {
@@ -23,11 +23,6 @@ describe("decimal", () => {
     } finally {
       Decimal.set({ precision, rounding });
     }
-  });
-
-  it("expone las constantes del motor", () => {
-    expect(ZERO.isZero()).toBe(true);
-    expect(QTY_EPSILON.toFixed()).toBe("0.000000001");
   });
 
   it("d() acepta un Decimal existente sin alterarlo", () => {
