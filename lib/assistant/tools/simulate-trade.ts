@@ -87,15 +87,34 @@ export async function simulateTrade(
       addDays(today, -PRICE_LOOKBACK_DAYS),
     );
     const last = history?.closes.at(-1);
-    if (last) prices.set(trade.symbol, last.close);
+    if (last) {
+      prices.set(trade.symbol, last.close);
+      continue;
+    }
+    // Un símbolo que la app todavía no sigue no tiene cierres guardados: sirve su cotización de hoy.
+    const info = await ds.assetInfo(trade.symbol);
+    const quote = info.status === "ok" ? info.info.quote : null;
+    if (quote && (quote.currency === null || quote.currency === "USD")) {
+      prices.set(trade.symbol, d(quote.price));
+    }
   }
 
-  const result = simulateTrades({
-    valued: snapshot.valued,
-    trades,
-    prices,
-    funding: input.fondeo === "plata_nueva" ? "new_money" : "cash",
-  });
+  const simulate = (funding: "cash" | "new_money") =>
+    simulateTrades({ valued: snapshot.valued, trades, prices, funding });
+  let funding: "cash" | "new_money" =
+    input.fondeo === "plata_nueva" ? "new_money" : "cash";
+  let result = simulate(funding);
+  // Sin `fondeo` explícito y sin efectivo suficiente, se simula con plata nueva en vez de fallar.
+  let fellBack = false;
+  if (
+    !result.ok &&
+    input.fondeo === undefined &&
+    result.error.startsWith("No alcanza el efectivo")
+  ) {
+    funding = "new_money";
+    result = simulate(funding);
+    fellBack = result.ok;
+  }
   if (!result.ok) return fail(result.error);
 
   const traded = new Set(trades.map((t) => t.symbol));
@@ -123,7 +142,7 @@ export async function simulateTrade(
   return ok(
     {
       fn: "simulateTrades",
-      detail: `precios de hoy · ${input.fondeo === "plata_nueva" ? "con plata nueva" : "con el efectivo"}`,
+      detail: `precios de hoy · ${funding === "new_money" ? "con plata nueva" : "con el efectivo"}`,
     },
     {
       portafolio: ds.scopeName,
@@ -152,6 +171,11 @@ export async function simulateTrade(
           `Sin precio para ${symbol}: no entra en el total ni en los pesos.`,
       ),
       notes: [
+        ...(fellBack
+          ? [
+              "No alcanzaba el efectivo de la cuenta: se simuló con plata nueva a depositar.",
+            ]
+          : []),
         "Simulación a los precios de hoy, sin comisiones ni impuestos. La ganancia de una venta se estima con el costo promedio actual.",
       ],
     },

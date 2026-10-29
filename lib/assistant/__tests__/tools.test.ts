@@ -288,6 +288,45 @@ describe("simulate_trade", () => {
     expect((result.data.operaciones as Data[])[0]?.peso_antes).toBe("0,00%");
   });
 
+  it("un símbolo sin cierres guardados se simula con su cotización de hoy", async () => {
+    const result = expectOk(
+      await simulateTrade(demoDataSource(), {
+        operaciones: [
+          { simbolo: "ORCL", lado: "comprar", medida: "acciones", valor: 10 },
+        ],
+        fondeo: "plata_nueva",
+      }),
+    );
+    const [trade] = result.data.operaciones as Data[];
+    expect(trade?.precio).toContain("182,50");
+    expect(trade?.monto).toContain("1.825,00");
+  });
+
+  it("sin fondeo y sin efectivo suficiente simula con plata nueva y lo avisa", async () => {
+    const operaciones = [
+      {
+        simbolo: "SPY",
+        lado: "comprar" as const,
+        medida: "dolares" as const,
+        valor: 5_000_000,
+      },
+    ];
+    const result = expectOk(
+      await simulateTrade(demoDataSource(), { operaciones }),
+    );
+    expect(result.data.plata_nueva_a_depositar).not.toBeNull();
+    expect(result.notes?.join(" ")).toContain("plata nueva");
+    // Pidiendo el efectivo de forma explícita, sigue fallando.
+    expect(
+      (
+        await simulateTrade(demoDataSource(), {
+          operaciones,
+          fondeo: "efectivo",
+        })
+      ).ok,
+    ).toBe(false);
+  });
+
   it("rechaza vender más de lo que hay, símbolos sin precio y listas vacías", async () => {
     const ds = demoDataSource();
     expect(

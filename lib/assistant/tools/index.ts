@@ -250,7 +250,7 @@ export function buildTools(deps: ToolDeps): ToolSet {
           .enum(["efectivo", "plata_nueva"])
           .optional()
           .describe(
-            "Con qué se pagan las compras: el efectivo de la cuenta (por defecto) o plata nueva que se depositaría",
+            "Con qué se pagan las compras: el efectivo de la cuenta (por defecto; si no alcanza, se simula con plata nueva) o plata nueva que se depositaría",
           ),
       }),
       execute: run("simulate_trade", (input) => simulateTrade(ds, input)),
