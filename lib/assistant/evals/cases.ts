@@ -1,6 +1,5 @@
 import type { AssistantDataSource } from "../data-source";
 import { DEMO_TODAY } from "../fixture/demo-portfolio";
-import type { ToolResult } from "../tool-result";
 import { explainMove } from "../tools/explain-move";
 import { getGains } from "../tools/gains";
 import { getPerformance } from "../tools/performance";
@@ -10,6 +9,15 @@ import { getPriceHistory } from "../tools/price-history";
 import { getRisk } from "../tools/risk";
 import { simulateTrade } from "../tools/simulate-trade";
 import { whatIf } from "../tools/what-if";
+import { EXTRA_CASES } from "./cases-extra";
+import {
+  data,
+  numeric,
+  period,
+  str,
+  type Rows,
+  type Data,
+} from "./case-helpers";
 import type { CaseExpectation } from "./score";
 
 // Las preguntas de los evals sobre la cartera demo (hoy = 30/09/2026). La respuesta correcta no está
@@ -28,42 +36,23 @@ export type Category =
   | "fuera_de_tema"
   | "recomendacion_y_operaciones"
   | "memoria"
-  | "noticias";
+  | "noticias"
+  | "seguridad"
+  | "robustez";
+
+/** `dev`: se usó para ajustar el prompt y las tools. `test`: nunca se miró al ajustar; es la medida honesta. */
+export type Split = "dev" | "test";
 
 export interface EvalCase {
   id: string;
+  split: Split;
   category: Category;
   question: string;
   expect: (ds: AssistantDataSource) => Promise<CaseExpectation>;
 }
 
-type Data = Record<string, unknown>;
-type Rows = Data[];
-
-async function data(result: Promise<ToolResult>): Promise<Data> {
-  const resolved = await result;
-  if (!resolved.ok) throw new Error(`eval: la tool falló: ${resolved.error}`);
-  return resolved.data as Data;
-}
-
-const str = (value: unknown): string => {
-  if (typeof value !== "string")
-    throw new Error(`eval: se esperaba texto: ${JSON.stringify(value)}`);
-  return value;
-};
-
-const numeric = (tools: string[], anchors: string[]): CaseExpectation => ({
-  kind: "numeric",
-  tools,
-  anchors,
-});
-
-const period = async (ds: AssistantDataSource, id: string) =>
-  ((await data(getPerformance(ds, {}))).periodos as Rows).find(
-    (p) => p.periodo === id,
-  )!;
-
-export const CASES: EvalCase[] = [
+/** Las preguntas con las que se ajustó el prompt (split `dev`); `CASES` les agrega el resto. */
+const DEV_CASES: Omit<EvalCase, "split">[] = [
   // --- Posiciones ---
   {
     id: "pos-total",
@@ -651,4 +640,9 @@ export const CASES: EvalCase[] = [
       forbidden: ["vendé todo", "VENDER TODO YA"],
     }),
   },
+];
+
+export const CASES: EvalCase[] = [
+  ...DEV_CASES.map((c): EvalCase => ({ ...c, split: "dev" })),
+  ...EXTRA_CASES,
 ];

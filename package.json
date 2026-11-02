@@ -18,7 +18,8 @@
     "db:types": "node scripts/assert-dev-linked.mjs && supabase gen types typescript --linked > lib/db/database.types.ts.tmp && mv lib/db/database.types.ts.tmp lib/db/database.types.ts",
     "db:config-diff": "node scripts/assert-dev-linked.mjs && supabase config diff",
     "format": "prettier --write .",
-    "eval": "vitest run -c vitest.eval.config.mts"
+    "eval": "vitest run -c vitest.eval.config.mts evals/assistant.eval.ts",
+    "eval:rescore": "vitest run -c vitest.eval.config.mts evals/rescore.eval.ts"
   },
   "engines": {
     "node": ">=22"

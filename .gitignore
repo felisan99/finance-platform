@@ -41,3 +41,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Intermediate eval run logs (the consolidated result files are committed)
+/evals/results/*.partial.jsonl
