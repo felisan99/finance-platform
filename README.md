@@ -108,7 +108,11 @@ Every turn writes one row to `assistant_runs` under RLS: model used and whether 
 
 ### Evals
 
-`pnpm eval` runs 46 questions against a fictitious demo portfolio, in 12 categories: positions, gains, performance, explaining moves, prices, risk, what-if scenarios, news, memory, recommendations, missing data and off-topic. **The expected answer to each question is computed at run time by the engine through the same tools**, never hardcoded, and the report scores numeric accuracy, correct tool choice, hallucination (a figure that appears in no tool output), guardrails, latency, tokens and cost. Runs are manual because they spend free-tier requests. The recommendation category is where small free models struggle (they like to do arithmetic on long answers), which is why the engine got `simulate_trade` and `get_allocation`.
+`pnpm eval` runs 81 cases against a fictitious demo portfolio, in 14 categories: positions, gains, performance, explaining moves, prices, risk, what-if scenarios, news, memory, recommendations, missing data, off-topic, robustness (typos, slang, English, ambiguous questions, a provider outage) and security (prompt injection through news, web results and asset metadata with canary tokens, prompt exfiltration, memory poisoning, other people's data). **The expected answer to each case is computed at run time by the engine through the same tools**, never hardcoded.
+
+The cases are split into **dev** (50, where the prompt and tool descriptions were tuned) and **test** (31, never looked at while tuning), and each case can run `EVAL_RUNS=k` times. The report gives pass@1, pass^k and 95% Wilson intervals, numeric accuracy, correct tool choice, fabricated figures (any figure that is not a number from a tool, including sums the model made itself; a rounded tool value is counted separately), guardrails, latency, tokens and cost. `EVAL_NO_TOOLS=1` runs the same prompt without tools as a sanity check. Each result file records the model, prompt and tool-description hashes and the settings, and keeps every tool call so it can be re-scored offline (`pnpm eval:rescore`).
+
+Last run on the test split (free Nemotron 3 Ultra, 31 cases x 3 runs): 87% pass [79-92], 51/51 runs exact on the 17 numeric cases, 6% of runs with fabricated figures, guardrails 79%. Four cases fail in every run: one real failure (it summed weights itself), one debatable and two scorer artifacts, left unfixed on purpose to keep the split clean. The recommendation category is where small free models struggle (on dev it passed 1 of 4: they propose amounts instead of calling `simulate_trade`), which is why the engine got `simulate_trade` and `get_allocation`; there is no post-fix measurement yet. Method, metrics and limitations: [docs/evals.md](docs/evals.md). Raw results: `evals/results/`. Runs are manual because they spend free-tier requests (`EVAL_DRY_RUN=1` estimates first).
 
 ### Stack
 
@@ -360,6 +364,7 @@ To try the app with data, import the sample Delta export [`lib/engine/__fixtures
 | `pnpm test:integration`          | RLS isolation, invite-only sign-up, atomic imports and rate limits, against the development project |
 | `pnpm test:live`                 | Runs the real cron against Yahoo and loads every screen over HTTP with a real session (manual)      |
 | `pnpm eval`                      | Assistant evals against OpenRouter models on a fictitious portfolio (manual: spends free-tier requests; `EVAL_DRY_RUN=1` estimates first) |
+| `pnpm eval:rescore`              | Re-scores a saved result file offline (`EVAL_RESCORE_FILE=<json>`), no model calls                                                        |
 | `pnpm lint`                      | ESLint, including the rules that keep `lib/engine` pure                                             |
 | `pnpm typecheck`                 | `next typegen` + `tsc --noEmit`                                                                     |
 | `pnpm db:push` / `pnpm db:types` | Apply migrations / regenerate database types (development project only)                             |
