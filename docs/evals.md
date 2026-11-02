@@ -6,7 +6,7 @@ Cómo se mide al asistente y qué se puede (y qué no) concluir. Los números sa
 
 81 preguntas (50 `dev`, 31 `test`) sobre una cartera demo ficticia, con "hoy" fijo en 30/09/2026. Por pregunta se puntúa:
 
-- **Acierto numérico:** los números exactos que calculan las tools aparecen en la respuesta.
+- **Acierto numérico:** los números exactos que calculan las tools aparecen en la respuesta. Se mide solo en los casos de tipo numérico (17 de los 31 de test, 51 corridas con k=3); los demás se puntúan por herramienta, cifras inventadas y guardrails.
 - **Tool correcta:** el modelo eligió la consulta que corresponde.
 - **Cifras (tres señales):** ver "Cifras: inventadas, redondeadas y alucinación estricta".
 - **Guardrails:** fuera de tema, consejo de compra/venta, operar, memoria e inyección de prompt.
