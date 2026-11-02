@@ -4,8 +4,11 @@ import {
   type LanguageModel,
   type ModelMessage,
   type StreamTextEndEvent,
+  type TimeoutConfiguration,
   type ToolSet,
+  wrapLanguageModel,
 } from "ai";
+import { emptyRetryMiddleware } from "./empty-retry";
 import { EXTERNAL_TOOLS, MEMORY_TOOL } from "./tools";
 
 /** Tope de pasos por pregunta: cada paso es una request al modelo. */
@@ -17,6 +20,10 @@ export interface AssistantRunInput {
   messages: ModelMessage[];
   tools: ToolSet;
   abortSignal?: AbortSignal;
+  /** Timeout de AI SDK (`firstChunkMs`, `chunkMs`...). Sin él, la app no corta nada. */
+  timeout?: TimeoutConfiguration<ToolSet>;
+  /** Reintentos internos del SDK por request (por defecto, los del SDK). */
+  maxRetries?: number;
   onEnd?: (event: StreamTextEndEvent<ToolSet>) => void | Promise<void>;
   onError?: (error: unknown) => void;
 }
@@ -31,7 +38,13 @@ export interface AssistantRunInput {
 export function runAssistant(input: AssistantRunInput) {
   const allTools = Object.keys(input.tools);
   return streamText({
-    model: input.model,
+    model:
+      typeof input.model === "string"
+        ? input.model
+        : wrapLanguageModel({
+            model: input.model,
+            middleware: emptyRetryMiddleware,
+          }),
     instructions: input.instructions,
     messages: input.messages,
     tools: input.tools,
@@ -39,6 +52,8 @@ export function runAssistant(input: AssistantRunInput) {
     temperature: 0.2,
     maxOutputTokens: 2000,
     abortSignal: input.abortSignal,
+    timeout: input.timeout,
+    maxRetries: input.maxRetries,
     prepareStep: ({ steps }) => {
       const activeTools = activeToolsAfter(steps, allTools);
       return activeTools ? { activeTools } : {};

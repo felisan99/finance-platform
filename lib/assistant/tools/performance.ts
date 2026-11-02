@@ -51,7 +51,7 @@ export async function getPerformance(
     switch (warning.code) {
       case "UNPRICED_POSITION":
         return [
-          `Hubo días sin precio para ${warning.symbols.join(", ")}: esos días se valuaron a costo.`,
+          `Hubo días sin precio para ${warning.symbols.join(", ")}: esos días se valuaron a costo, así que la ganancia en dinero es aproximada.`,
         ];
       case "NO_BENCHMARK":
         return [`No hay precios de ${benchmark} para comparar.`];
