@@ -34,3 +34,6 @@ supabase/
 # Generados
 *.tsbuildinfo
 next-env.d.ts
+
+# Notas personales fuera de git (ignoradas por el .gitignore global, no por el del repo)
+Mejoras app portafolio/
