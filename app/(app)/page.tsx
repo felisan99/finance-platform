@@ -30,17 +30,17 @@ import {
 import { loadPerformanceOutcome } from "@/lib/portfolio/performance-data";
 import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
 import { scopeName } from "@/lib/portfolio/portfolio-scope";
-import { loadScopeSnapshot } from "@/lib/portfolio/queries";
+import { loadScopeSnapshotWithSplits } from "@/lib/portfolio/auto-splits";
 import { buildCachedSnapshot } from "@/lib/portfolio/snapshot-cache";
 import { localYear } from "@/lib/portfolio/time";
 
 export default async function HomePage() {
   const supabase = await createClient();
   const context = await getPortfolioContext(supabase);
-  const snapshot = context.scope
-    ? await loadScopeSnapshot(supabase, context.scope)
-    : null;
   const now = new Date();
+  const snapshot = context.scope
+    ? await loadScopeSnapshotWithSplits(supabase, context.scope, now)
+    : null;
   const switcher = portfolioContextLine(context);
 
   if (!snapshot || snapshot.transactions.length === 0) {

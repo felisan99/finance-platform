@@ -41,11 +41,8 @@ import {
   formatQuantity,
 } from "@/lib/portfolio/format";
 import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
-import {
-  getPriceSeries,
-  getWatchlistItems,
-  loadScopeSnapshot,
-} from "@/lib/portfolio/queries";
+import { loadScopeSnapshotWithSplits } from "@/lib/portfolio/auto-splits";
+import { getPriceSeries, getWatchlistItems } from "@/lib/portfolio/queries";
 import { settle } from "@/lib/portfolio/settle";
 import { describeTransaction } from "@/lib/portfolio/tx-view";
 import { loadSymbolView } from "@/lib/portfolio/watchlist-data";
@@ -76,7 +73,7 @@ export default async function PositionDetailPage({
     getWatchlistItems(supabase),
   ]);
   const snapshot = context.scope
-    ? await loadScopeSnapshot(supabase, context.scope)
+    ? await loadScopeSnapshotWithSplits(supabase, context.scope, new Date())
     : null;
   const followedItem = followedItems.find(
     (item) => item.instruments.symbol === symbol,

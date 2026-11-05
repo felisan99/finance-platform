@@ -597,6 +597,42 @@ export type Database = {
         }
         Relationships: []
       }
+      split_dismissals: {
+        Row: {
+          account_id: string
+          corporate_action_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          corporate_action_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          corporate_action_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "split_dismissals_account_fk"
+            columns: ["account_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id", "user_id"]
+          },
+          {
+            foreignKeyName: "split_dismissals_corporate_action_id_fkey"
+            columns: ["corporate_action_id"]
+            isOneToOne: false
+            referencedRelation: "corporate_actions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           account_id: string

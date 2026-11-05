@@ -640,6 +640,29 @@ Antes, un dividendo solo existía en la cartera si se cargaba a mano o venía en
   - **Verificación:** con Yahoo real repara exactamente esos 3 cierres de SOXX. En los 42 instrumentos de la base, con 10 años de historia y 13 splits (AAPL, NVDA ×2, PANW ×2, AMZN, GOOG, AVGO, NFLX, CRWD, COKE, SOXX 2024), no toca nada más.
 - La serie histórica no se cambió: sigue multiplicando los cierres guardados por los `SPLIT` del libro, y con los cierres reparados da bien.
 
+## Splits automáticos (2026-11-05)
+
+- **Problema:** un split del proveedor que no estaba cargado en el libro dejaba la cantidad igual y el precio dividido: la posición mostraba una pérdida que no existía (SOXX 3:1, que se veía como −67 %). Antes había que cargarlo a mano y nada avisaba (observación 14).
+- **Elegido: se agrega solo, sin confirmar.** A diferencia de un dividendo, un split no tiene montos que el broker pueda liquidar distinto: la razón es exacta y le toca a todo el que tenía el activo.
+  - **Cálculo** (`missingSplits`, `lib/engine/splits.ts`, puro y probado): un split de `corporate_actions` hasta hoy, para cada cuenta que tenía el activo al cierre del día anterior al ex-split.
+  - **Ya cargado:** si la cuenta tiene un `SPLIT` del mismo símbolo entre 7 días antes y 60 después, se toma como ese split aunque tenga otra fecha u otra razón, porque otro lo aplicaría dos veces.
+  - **Se guarda** como `SPLIT` con `source = 'auto_split'` y `external_id` `split:` + el id de `corporate_actions` (`transactions_dedup` impide duplicarlo). La fecha es el ex-split a las 09:00 UTC, antes de la apertura de Nueva York, así va antes de cualquier operación de ese día. Antes de escribir, se valida el libro (`validateLedgerChange`).
+- **Quién escribe y cuándo:**
+  - Lo escribe la sesión de la persona, bajo RLS, al abrir Inicio, Posiciones, el detalle de un activo o Dividendos (`loadScopeSnapshotWithSplits`, `lib/portfolio/auto-splits.ts`).
+  - El cron no escribe en el libro de nadie: la clave secreta solo toca datos de mercado (y el widget, por `widget_ledger`).
+  - Lo común es que no haya ningún split: cuesta una consulta chica a `corporate_actions` por carga.
+  - Si dos pantallas lo intentan a la vez, la restricción deja uno solo.
+  - Si algo falla, la pantalla se muestra igual y se reintenta en la próxima carga.
+- **Borrarlo es definitivo:** si la persona borra un split automático (por ejemplo, porque cargó sus compras viejas con cantidades ya ajustadas), queda en `split_dismissals` (RLS por persona) y no se vuelve a agregar. El aviso de borrado lo dice.
+- **Límites:**
+  - El asistente y el widget leen sin escribir: ven el split recién después de que la persona abre una de esas pantallas.
+  - Actividad tampoco lo agrega por sí sola.
+  - Un split que Yahoo nunca informa no se agrega.
+- **Verificación:**
+  - Unitarias: el motor (tenencia del día anterior, ya cargado con otra fecha o razón, descartados, futuros, razones inválidas, splits encadenados, split inverso, libro sin avisos) y los mappers (ida y vuelta fila → motor, hora antes de la apertura con y sin horario de verano).
+  - Integración (`auto-splits.integration.test.ts`): se agrega una sola vez con la sesión de la persona, la base rechaza el duplicado, RLS de los descartes entre dos personas, y borrado no vuelve.
+  - Simulación en seco sobre las 5 cuentas de `finance-dev`: ningún split a agregar. Felipe ya tenía el de SOXX cargado a mano.
+
 ## Rangos en «Tus operaciones en el gráfico» (2026-10-28)
 
 - **Problema:** el gráfico de la ficha mostraba siempre desde unos días antes de la primera operación hasta hoy. Eso es demasiado ancho para ver compras cercanas (quedaban encimadas) y demasiado corto para ver si una entrada fue cara respecto de la historia.
@@ -668,4 +691,4 @@ Antes, un dividendo solo existía en la cartera si se cargaba a mano o venía en
 11. **El advisor de seguridad de Supabase avisa `auth_leaked_password_protection`.** Es una función de plan Pro (doc de Supabase: "available on the Pro Plan and above") y no aplica: la app no usa contraseñas y desde la migración `no_passwords` nadie puede tener una (ver "Sin contraseñas…").
 12. **Si Supabase Auth está degradado, la suite de integración se cuelga** (se vio el 2026-09-24: 20–40 s por llamada a Auth durante un incidente de "401 por rechazo de JWT"). Mirar status.supabase.com antes de re-correrla. Si se corta a mitad, limpiar lo que queda (ver `docs/supabase-setup.md`).
 13. **La app se ve con letra con serifa por un error de configuración.** En `app/globals.css`, `--font-sans: var(--font-sans);` se refiere a sí misma (no vale nada) y Geist, que `app/layout.tsx` sí carga como `--font-geist-sans`, nunca se aplica: el navegador cae a su tipografía por defecto (Times). Se ve en todas las pantallas desde la Fase 0. **No se tocó** porque cambia el aspecto de toda la app y Felipe la aprobó tal como se ve; si se prefiere la letra sin serifa que se pensó, es `--font-sans: var(--font-geist-sans);`.
-14. **Un split de Yahoo que no está cargado en el libro** deja mal la serie histórica de esa posición (la cantidad no cambia pero el precio ya sí). Hoy no hay aviso. Una advertencia sería contrastar los `SPLIT` del libro contra `corporate_actions` (mismo instrumento, fechas cercanas y misma razón) y avisar en Inicio; queda como posible agregado.
+14. ~~**Un split de Yahoo que no está cargado en el libro** deja mal la serie histórica de esa posición (la cantidad no cambia pero el precio ya sí). Hoy no hay aviso.~~ _(Resuelto el 2026-11-05: se agrega solo, ver «Splits automáticos».)_

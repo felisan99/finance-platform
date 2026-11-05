@@ -53,6 +53,9 @@ function initialValues(
   };
 }
 
+/** Orígenes que vienen de un archivo: reimportarlo los vuelve a crear. */
+const IMPORT_SOURCES = new Set(["delta_csv", "csv", "ibkr_flex"]);
+
 export default async function EditTransactionPage({
   params,
 }: {
@@ -86,7 +89,11 @@ export default async function EditTransactionPage({
           initial={initialValues(row, instrument?.symbol ?? "", portfolio.id)}
         />
       </div>
-      <DeleteTransactionButton id={row.id} imported={row.source !== "manual"} />
+      <DeleteTransactionButton
+        id={row.id}
+        imported={IMPORT_SOURCES.has(row.source)}
+        automaticSplit={row.source === "auto_split"}
+      />
     </div>
   );
 }

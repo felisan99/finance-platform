@@ -14,9 +14,12 @@ const initialState: FormState = { status: "idle" };
 export function DeleteTransactionButton({
   id,
   imported,
+  automaticSplit = false,
 }: {
   id: string;
   imported: boolean;
+  /** Un split que la app agregó sola: borrado, no se vuelve a agregar. */
+  automaticSplit?: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [state, formAction, pending] = useActionState(
@@ -45,6 +48,8 @@ export function DeleteTransactionButton({
             ¿Seguro? Esta operación se borra y los números se recalculan.
             {imported &&
               " Si volvés a importar el archivo original, se va a crear de nuevo."}
+            {automaticSplit &&
+              " Este split se agregó solo al detectarlo; si lo borrás, no se vuelve a agregar."}
           </p>
           <div className="flex gap-2">
             <Button

@@ -16,6 +16,7 @@ import {
 import { cleanText } from "@/lib/market-data/sanitize";
 import { backfillPendingInBackground } from "@/lib/portfolio/background";
 import { resolveInstrumentId } from "@/lib/portfolio/instruments";
+import { splitEventIdOf } from "@/lib/portfolio/auto-splits";
 import { describeRejectedChange } from "@/lib/portfolio/issues";
 import {
   inputToInsertRow,
@@ -269,6 +270,32 @@ export async function deleteTransaction(
         status: "error",
         message: describeRejectedChange(check.newErrors),
       };
+
+    // Un split automático borrado no se vuelve a agregar (`applyAutoSplits`).
+    const splitEventId = target.current ? splitEventIdOf(target.current) : null;
+    if (splitEventId) {
+      const { error: dismissError } = await supabase
+        .from("split_dismissals")
+        .upsert(
+          {
+            account_id: account.id,
+            corporate_action_id: splitEventId,
+            user_id: user.id,
+          },
+          {
+            onConflict: "account_id,corporate_action_id",
+            ignoreDuplicates: true,
+          },
+        );
+      if (dismissError) {
+        console.error(
+          "[delete-transaction]",
+          dismissError.code,
+          dismissError.message,
+        );
+        return { status: "error", message: GENERIC };
+      }
+    }
 
     const { error } = await supabase.from("transactions").delete().eq("id", id);
     if (error) {

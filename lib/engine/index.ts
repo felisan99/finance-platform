@@ -93,6 +93,12 @@ export type {
   DividendInput,
   DividendSuggestion,
 } from "./dividends";
+export {
+  SPLIT_RECORDED_AFTER_DAYS,
+  SPLIT_RECORDED_BEFORE_DAYS,
+  missingSplits,
+} from "./splits";
+export type { MissingSplit, SplitEvent, SplitInput } from "./splits";
 export type {
   SimHolding,
   SimInput,

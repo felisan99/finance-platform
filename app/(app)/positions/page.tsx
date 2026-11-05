@@ -16,7 +16,7 @@ import {
   splitPositions,
 } from "@/lib/portfolio/positions-list";
 import { getPortfolioContext } from "@/lib/portfolio/current-portfolio";
-import { loadScopeSnapshot } from "@/lib/portfolio/queries";
+import { loadScopeSnapshotWithSplits } from "@/lib/portfolio/auto-splits";
 import { cn } from "@/lib/utils";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -36,7 +36,7 @@ export default async function PositionsPage({
   const supabase = await createClient();
   const context = await getPortfolioContext(supabase);
   const snapshot = context.scope
-    ? await loadScopeSnapshot(supabase, context.scope)
+    ? await loadScopeSnapshotWithSplits(supabase, context.scope, new Date())
     : null;
   const switcher = portfolioContextLine(context);
   if (!snapshot || snapshot.engine.positions.length === 0) {

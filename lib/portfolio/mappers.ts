@@ -336,6 +336,58 @@ export function dividendToInsertRows(
   return rows;
 }
 
+/**
+ * Antes de la apertura de Nueva York del ex-split (04:00 o 05:00 según el horario de verano): el
+ * split va antes de cualquier operación de ese día, que ya se hace a precio nuevo.
+ */
+export const splitInstant = (exDate: string): Date =>
+  new Date(`${exDate}T09:00:00.000Z`);
+
+/**
+ * Un split que faltaba en el libro → la fila que se guarda. `external_id` (`split:` + el id de
+ * `corporate_actions`) hace que la base rechace guardarlo dos veces en la misma cuenta.
+ */
+export function splitToInsertRow(
+  split: { eventId: string; exDate: string; ratio: Dec },
+  ctx: {
+    userId: string;
+    accountId: string;
+    instrumentId: string;
+    currency: string;
+  },
+): TransactionInsert {
+  return {
+    user_id: ctx.userId,
+    account_id: ctx.accountId,
+    instrument_id: ctx.instrumentId,
+    type: "SPLIT",
+    executed_at: splitInstant(split.exDate).toISOString(),
+    split_ratio: num(split.ratio),
+    currency: ctx.currency,
+    source: "auto_split",
+    external_id: `split:${split.eventId}`,
+    fee: 0,
+    notes: null,
+  };
+}
+
+/** El mismo split como `Transaction` del motor, para validar el libro antes de guardar. */
+export function splitToTransaction(
+  split: { eventId: string; symbol: string; exDate: string; ratio: Dec },
+  ctx: { accountId: string; currency: string; now: Date },
+): Transaction {
+  return {
+    id: `split:${split.eventId}`,
+    accountId: ctx.accountId,
+    type: "SPLIT",
+    symbol: split.symbol,
+    splitRatio: split.ratio,
+    executedAt: splitInstant(split.exDate),
+    createdAt: ctx.now,
+    currency: ctx.currency,
+  };
+}
+
 /** Las mismas operaciones como `Transaction` del motor, para validar el libro antes de guardar. */
 export function dividendToTransactions(
   suggestion: {

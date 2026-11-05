@@ -16,7 +16,7 @@ import {
   withholdingValueOf,
 } from "@/lib/portfolio/dividends-view";
 import { portfoliosOfScope } from "@/lib/portfolio/portfolio-scope";
-import { loadScopeSnapshot } from "@/lib/portfolio/queries";
+import { loadScopeSnapshotWithSplits } from "@/lib/portfolio/auto-splits";
 
 /**
  * Dividendos detectados: los que el proveedor informó para lo que la persona tenía el día antes
@@ -35,7 +35,11 @@ export default async function DividendsPage() {
   );
   if (!context.scope) return header;
 
-  const snapshot = await loadScopeSnapshot(supabase, context.scope);
+  const snapshot = await loadScopeSnapshotWithSplits(
+    supabase,
+    context.scope,
+    new Date(),
+  );
   const { rate, items } = await loadPendingDividends(
     supabase,
     snapshot,
