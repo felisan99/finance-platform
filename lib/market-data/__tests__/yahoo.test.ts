@@ -123,6 +123,7 @@ describe("getDailyHistory: precios", () => {
       bars: [],
       actions: [],
       droppedBars: 0,
+      repairedBars: 0,
     });
   });
 
@@ -267,6 +268,45 @@ describe("getDailyHistory: splits y dividendos", () => {
       { type: "SPLIT", exDate: "2024-06-10", ratio: "10" },
       { type: "DIVIDEND", exDate: "2024-06-11", amount: "0.01" },
     ]);
+  });
+
+  it("ajusta los cierres que Yahoo dejó en la escala vieja tras un split (SOXX 3:1) y lo cuenta", async () => {
+    const day = (date: string) => `${date}T14:30:00.000Z`;
+    const { provider } = providerFor(
+      chartResponse({
+        regular: null,
+        quotes: [
+          bar(day("2026-10-30"), 157.1699981689453),
+          bar(day("2026-11-02"), 453.6499938964844),
+          bar(day("2026-11-03"), 465.0),
+          bar(day("2026-11-04"), 450.4100036621094),
+          bar(day("2026-11-05"), 131.89999389648438),
+        ],
+        events: {
+          splits: [
+            {
+              date: at(day("2026-11-05")),
+              numerator: 3,
+              denominator: 1,
+              splitRatio: "3:1",
+            },
+          ],
+        },
+      }),
+    );
+    const { bars, repairedBars } = await provider.getDailyHistory(
+      "SOXX",
+      FROM,
+      new Date("2026-11-06T00:00:00.000Z"),
+    );
+    expect(bars.map((b) => [b.date, b.close])).toEqual([
+      ["2026-10-30", "157.17"],
+      ["2026-11-02", "151.2167"],
+      ["2026-11-03", "155"],
+      ["2026-11-04", "150.1367"],
+      ["2026-11-05", "131.9"],
+    ]);
+    expect(repairedBars).toBe(3);
   });
 
   it.each([

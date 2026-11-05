@@ -826,7 +826,12 @@ describe("runMarketJob: cotizaciones", () => {
     const provider = {
       name: "x",
       search: async () => [],
-      getDailyHistory: async () => ({ bars: [], actions: [], droppedBars: 0 }),
+      getDailyHistory: async () => ({
+        bars: [],
+        actions: [],
+        droppedBars: 0,
+        repairedBars: 0,
+      }),
       getQuotes: async () => [
         quote("AAA", "10"),
         quote("aaa", "11"),

@@ -47,6 +47,7 @@ export interface RunSummary {
   skippedForBudget: number;
   barsWritten: number;
   droppedBars: number;
+  repairedBars: number;
   actionsWritten: number;
   quotesUpdated: number;
 }

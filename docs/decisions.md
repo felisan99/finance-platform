@@ -629,7 +629,16 @@ Antes, un dividendo solo existía en la cartera si se cargaba a mano o venía en
   - **Cron** (`lib/market-jobs/run.ts`): un instrumento con un split del proveedor en los últimos 30 días se vuelve a bajar completo en cada corrida (precios y eventos). Así los montos que Yahoo corrija tarde llegan a `corporate_actions` antes de que el motor use el split, y los cierres que quedaron en la escala vieja se corrigen solos. Es una descarga por día por instrumento, solo en esa ventana.
 - **Los datos de esa cuenta** se corrigieron a mano en `finance-dev`: los dos `DIVIDEND` y sus `TAX` de SOXX, con los montos que da el proveedor en la escala de cada fecha.
 - **Límite:** si Yahoo tarda más de 30 días en ajustar un dividendo, el problema vuelve. No se detectó un caso así.
-- **No se tocó la serie histórica:** también multiplica los cierres por los `SPLIT` del libro, pero no guarda nada. Se corrige sola cuando el cron reajusta el historial (ver el límite 4 de «"Actualizar precios" actualiza también las series»).
+- **Cierres a medio ajustar** (`lib/market-data/split-repair.ts`, mismo día):
+  - **Qué se vio:** después del cron, la serie de rendimiento seguía mal. Yahoo devolvía los cierres hasta el 30/10 ya divididos por 3, pero los del 2, 3 y 4/11 en la escala vieja (453–465, entre 157 y 132).
+  - **Efecto:** la serie multiplica por 3 los cierres anteriores al `SPLIT` del libro, así que esos tres días valuaban SOXX al triple. «Valor» mostraba US$ 17.429 el 03/11 en vez de ~12.780, «Ganancia» +4.939 en vez de ~+290, y «vs S&P 500» encadenaba un +33 % y un −31 % falsos.
+  - **Arreglo:** el proveedor de Yahoo repara esos cierres antes de devolverlos. Se busca una firma con dos marcas:
+    - el día del split, el precio cambia en la razón inversa del split respecto de la rueda anterior (450 → 132);
+    - en las 10 ruedas anteriores hay un salto en la razón del split (157 → 453).
+    Las ruedas entre las dos marcas se dividen por la razón (`close` y `adj_close`). "En la razón" quiere decir más cerca de la razón que de 1 en escala logarítmica, y a menos de la mitad de la distancia entre las dos. Si falta alguna marca, o el split es menor a 1,5 (p. ej. 5:4, que se confunde con un movimiento real), no se toca nada.
+  - **Visibilidad:** `repairedBars` en `DailyHistory` y en el resumen de `market_job_runs`, igual que `droppedBars`.
+  - **Verificación:** con Yahoo real repara exactamente esos 3 cierres de SOXX. En los 42 instrumentos de la base, con 10 años de historia y 13 splits (AAPL, NVDA ×2, PANW ×2, AMZN, GOOG, AVGO, NFLX, CRWD, COKE, SOXX 2024), no toca nada más.
+- La serie histórica no se cambió: sigue multiplicando los cierres guardados por los `SPLIT` del libro, y con los cierres reparados da bien.
 
 ## Rangos en «Tus operaciones en el gráfico» (2026-10-28)
 

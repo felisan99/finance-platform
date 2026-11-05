@@ -4,6 +4,7 @@ import { MarketDataError, classifyYahooError } from "./errors";
 import { round } from "./numbers";
 import { createLimiter, withRetry, type Sleep } from "./retry";
 import { cleanText } from "./sanitize";
+import { repairPartialSplitAdjustment } from "./split-repair";
 import { parseCompanyData } from "./yahoo-company";
 import type {
   CompanyData,
@@ -364,13 +365,20 @@ export function createYahooProvider(
       actions.set(`DIVIDEND|${exDate}`, { type: "DIVIDEND", exDate, amount });
     }
 
+    const sortedActions = [...actions.values()].sort(
+      (a, b) =>
+        a.exDate.localeCompare(b.exDate) || a.type.localeCompare(b.type),
+    );
+    // Yahoo a veces deja unos días sin reajustar después de un split.
+    const repaired = repairPartialSplitAdjustment(
+      [...bars.values()].sort((a, b) => a.date.localeCompare(b.date)),
+      sortedActions,
+    );
     return {
-      bars: [...bars.values()].sort((a, b) => a.date.localeCompare(b.date)),
-      actions: [...actions.values()].sort(
-        (a, b) =>
-          a.exDate.localeCompare(b.exDate) || a.type.localeCompare(b.type),
-      ),
+      bars: repaired.bars,
+      actions: sortedActions,
       droppedBars,
+      repairedBars: repaired.repairedBars,
     };
   }
 

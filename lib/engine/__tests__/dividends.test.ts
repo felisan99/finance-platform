@@ -136,10 +136,7 @@ describe("suggestDividends", () => {
     });
 
     it("el split de otro símbolo no frena nada", () => {
-      const txs = [
-        ...soxx,
-        buy(at("2026-05-12"), "VOO", "2", "600"),
-      ];
+      const txs = [...soxx, buy(at("2026-05-12"), "VOO", "2", "600")];
       const [s] = suggestDividends({
         transactions: txs,
         events: [event("VOO", "2026-09-28", "1.82")],

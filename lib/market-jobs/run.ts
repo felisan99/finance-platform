@@ -151,6 +151,7 @@ export async function runMarketJob(
     skippedForBudget: 0,
     barsWritten: 0,
     droppedBars: 0,
+    repairedBars: 0,
     actionsWritten: 0,
     quotesUpdated: 0,
   };
@@ -224,6 +225,7 @@ export async function runMarketJob(
     await store.markBackfilled(instrument.id, { at: now, from });
     summary.barsWritten += history.bars.length;
     summary.droppedBars += history.droppedBars;
+    summary.repairedBars += history.repairedBars;
     summary.actionsWritten += history.actions.length;
     await fillProfile(instrument, symbol);
   }
@@ -291,6 +293,7 @@ export async function runMarketJob(
     await store.upsertPrices(instrument.id, history.bars);
     summary.barsWritten += history.bars.length;
     summary.droppedBars += history.droppedBars;
+    summary.repairedBars += history.repairedBars;
     return "ok";
   }
 

@@ -604,6 +604,7 @@ describe("SupabaseMarketStore (integración, finance-dev)", () => {
         skippedForBudget: 0,
         barsWritten: 10,
         droppedBars: 1,
+        repairedBars: 0,
         actionsWritten: 0,
         quotesUpdated: 2,
       };

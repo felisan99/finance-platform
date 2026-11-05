@@ -210,7 +210,7 @@ export class FakeMarket implements MarketDataProvider {
     const actions = s.actions.filter(
       (a) => a.exDate >= fromDate && a.exDate < toDate,
     );
-    return { bars, actions, droppedBars: 0 };
+    return { bars, actions, droppedBars: 0, repairedBars: 0 };
   }
 
   async getProfile(symbol: string): Promise<InstrumentProfile> {

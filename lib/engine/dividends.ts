@@ -117,11 +117,10 @@ export function suggestDividends(input: DividendInput): DividendSuggestion[] {
       ({ day }) => addDays(day, SPLIT_SETTLE_DAYS) >= input.today,
     );
     if (unsettled) continue;
-    const splitFactor = laterSplits
-      .reduce(
-        (acc, { tx }) => (tx.type === "SPLIT" ? acc.mul(tx.splitRatio) : acc),
-        ZERO.plus(1),
-      );
+    const splitFactor = laterSplits.reduce(
+      (acc, { tx }) => (tx.type === "SPLIT" ? acc.mul(tx.splitRatio) : acc),
+      ZERO.plus(1),
+    );
     const perShare = event.amount.mul(splitFactor);
     const gross = cents(shares.mul(perShare));
     if (!gross.gt(0)) continue;

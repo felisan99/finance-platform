@@ -50,6 +50,8 @@ export interface DailyHistory {
   actions: CorporateAction[];
   /** Barras descartadas por venir sin cierre válido (Yahoo devuelve `null` algunos días). */
   droppedBars: number;
+  /** Cierres que vinieron sin ajustar por un split y se ajustaron (`split-repair.ts`). */
+  repairedBars: number;
 }
 
 export interface InstrumentProfile {

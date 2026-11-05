@@ -209,7 +209,12 @@ function provider(
   const base = {
     name: "fake",
     search: async () => [],
-    getDailyHistory: async () => ({ bars: [], actions: [], droppedBars: 0 }),
+    getDailyHistory: async () => ({
+      bars: [],
+      actions: [],
+      droppedBars: 0,
+      repairedBars: 0,
+    }),
     getQuotes,
   };
   return {
