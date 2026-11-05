@@ -85,6 +85,7 @@ export { simulateTrades } from "./trade-sim";
 export {
   RECORDED_AFTER_DAYS,
   RECORDED_BEFORE_DAYS,
+  SPLIT_SETTLE_DAYS,
   suggestDividends,
 } from "./dividends";
 export type {

@@ -108,6 +108,17 @@ export class FakeMarket implements MarketDataProvider {
     s.actions.push({ type: "DIVIDEND", exDate, amount });
   }
 
+  /** Yahoo corrige el monto de un dividendo ya informado (p. ej. lo ajusta por un split, tarde). */
+  setDividendAmount(symbol: string, exDate: string, amount: string): void {
+    const action = this.mustSeries(symbol).actions.find(
+      (a) => a.type === "DIVIDEND" && a.exDate === exDate,
+    );
+    if (!action || action.type !== "DIVIDEND") {
+      throw new Error(`sin dividendo de ${symbol} el ${exDate}`);
+    }
+    action.amount = amount;
+  }
+
   setQuote(
     symbol: string,
     price: string,

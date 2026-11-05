@@ -617,6 +617,20 @@ Antes, un dividendo solo existía en la cartera si se cargaba a mano o venía en
   - Unitarias: el motor (cantidad al día anterior, splits, redondeo, ya cargados, futuros, tasa 0, rango), los mappers (el libro los acepta y el efectivo sube el neto) y la vista.
   - Integración (`dividends.integration.test.ts`): propuesta de punta a punta, tasa por persona con su rango, descartes con RLS entre dos personas, el duplicado rechazado por la base, y que confirmado no se vuelve a proponer. Integración completa 144/144.
 
+## Dividendos y splits recientes (2026-11-05)
+
+- **Qué pasó:** SOXX hizo un split 3:1 el 2026-11-05. Ese mismo día se cargó el `SPLIT` en el libro y se confirmaron los dividendos propuestos. Los de junio y septiembre se guardaron **triplicados** (0,85 y 2,93 brutos en vez de 0,28 y 0,98).
+- **Por qué:**
+  - `suggestDividends` des-ajusta el monto del proveedor con los `SPLIT` posteriores del libro, porque supone que el proveedor ya lo ajustó por ese split.
+  - Yahoo no reajusta todo junto: ese día ya informaba el split, pero seguía dando los dividendos en la escala vieja (0,283), y del 2 al 4 de noviembre daba cierres sin ajustar mientras los anteriores ya estaban divididos por 3.
+  - El cron tampoco se iba a enterar si Yahoo ajustaba los dividendos más tarde. Solo vuelve a bajar el historial cuando cambia un cierre de los últimos 7 días o aparece un evento nuevo, y un monto de dividendo viejo no cambia ningún cierre.
+- **Arreglo** (`SPLIT_SETTLE_DAYS = 30`, `lib/engine/dividends.ts`):
+  - **Motor:** un dividendo anterior a un `SPLIT` del libro de hace 30 días o menos no se propone todavía. Tampoco se puede confirmar, porque la Server Action recalcula las propuestas. Los dividendos posteriores al split y los de otros símbolos no esperan.
+  - **Cron** (`lib/market-jobs/run.ts`): un instrumento con un split del proveedor en los últimos 30 días se vuelve a bajar completo en cada corrida (precios y eventos). Así los montos que Yahoo corrija tarde llegan a `corporate_actions` antes de que el motor use el split, y los cierres que quedaron en la escala vieja se corrigen solos. Es una descarga por día por instrumento, solo en esa ventana.
+- **Los datos de esa cuenta** se corrigieron a mano en `finance-dev`: los dos `DIVIDEND` y sus `TAX` de SOXX, con los montos que da el proveedor en la escala de cada fecha.
+- **Límite:** si Yahoo tarda más de 30 días en ajustar un dividendo, el problema vuelve. No se detectó un caso así.
+- **No se tocó la serie histórica:** también multiplica los cierres por los `SPLIT` del libro, pero no guarda nada. Se corrige sola cuando el cron reajusta el historial (ver el límite 4 de «"Actualizar precios" actualiza también las series»).
+
 ## Rangos en «Tus operaciones en el gráfico» (2026-10-28)
 
 - **Problema:** el gráfico de la ficha mostraba siempre desde unos días antes de la primera operación hasta hoy. Eso es demasiado ancho para ver compras cercanas (quedaban encimadas) y demasiado corto para ver si una entrada fue cara respecto de la historia.

@@ -375,7 +375,7 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
     ]);
   });
 
-  it("después del split la corrida siguiente es incremental (no re-descarga en bucle)", async () => {
+  it("durante 30 días tras un split re-descarga todo en cada corrida; después vuelve a ser incremental", async () => {
     const { market, store, run, add } = setup();
     add("VOO");
     await run();
@@ -384,10 +384,44 @@ describe("runMarketJob: splits, dividendos y correcciones", () => {
     await run();
     const settled = marketState(store);
 
+    // Una vez por corrida (no en bucle) y sin cambiar nada si Yahoo no cambió.
     const again = await run();
-
-    expect(again.summary).toMatchObject({ rebackfilled: 0, incremental: 1 });
+    expect(again.summary).toMatchObject({ rebackfilled: 1, incremental: 0 });
     expect(marketState(store)).toBe(settled);
+
+    // El día 30 todavía re-descarga; el 31 ya no.
+    const lastDay = await run({ now: new Date("2026-10-24T22:00:00.000Z") });
+    expect(lastDay.summary).toMatchObject({ rebackfilled: 1, incremental: 0 });
+    const after = await run({ now: new Date("2026-10-25T22:00:00.000Z") });
+    expect(after.summary).toMatchObject({ rebackfilled: 0, incremental: 1 });
+  });
+
+  it("toma los dividendos que Yahoo reajusta días después del split (no cambian ningún cierre)", async () => {
+    const { market, store, run, add } = setup();
+    add("SOXX");
+    market.addBar("SOXX", "2026-09-24", "450");
+    market.dividend("SOXX", "2026-06-15", "0.283");
+    await run();
+    market.addBar("SOXX", "2026-09-25", "150");
+    market.split("SOXX", "2026-09-25", 3);
+    const nextDay = new Date("2026-09-25T22:00:00.000Z");
+    await run({ now: nextDay });
+    // Yahoo ya informa el split pero el dividendo sigue en la escala vieja.
+    expect(store.actionsOf("SOXX")).toContainEqual({
+      type: "DIVIDEND",
+      exDate: "2026-06-15",
+      amount: "0.283",
+    });
+
+    market.setDividendAmount("SOXX", "2026-06-15", "0.094333");
+    const result = await run({ now: new Date("2026-09-28T22:00:00.000Z") });
+
+    expect(result.summary.rebackfilled).toBe(1);
+    expect(store.actionsOf("SOXX")).toContainEqual({
+      type: "DIVIDEND",
+      exDate: "2026-06-15",
+      amount: "0.094333",
+    });
   });
 
   it("un split inverso también se detecta (1:10 → ratio 0.1)", async () => {

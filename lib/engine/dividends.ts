@@ -11,6 +11,12 @@ import type { EngineOptions, Transaction } from "./types";
 // splits posteriores (igual que los precios guardados): se des-ajusta con los `SPLIT` del libro que
 // ocurrieron desde el ex-dividendo en adelante. El bruto y la retención se redondean al centavo,
 // como los liquida un broker.
+//
+// Ese des-ajuste supone que el proveedor ya reajustó el monto por el split, y eso no pasa enseguida:
+// con el 3:1 de SOXX (2026-11-05), Yahoo ya informaba el split pero seguía dando los dividendos en
+// la escala vieja, y multiplicar por 3 los triplicó. Por eso un dividendo anterior a un `SPLIT` del
+// libro reciente no se propone hasta que pasen `SPLIT_SETTLE_DAYS` (mientras tanto el cron vuelve a
+// bajar el historial completo de ese instrumento en cada corrida: `lib/market-jobs/run.ts`).
 
 export interface DividendEvent {
   /** El id de `corporate_actions`. */
@@ -56,6 +62,13 @@ export interface DividendInput {
 export const RECORDED_BEFORE_DAYS = 7;
 export const RECORDED_AFTER_DAYS = 60;
 
+/**
+ * Días que se espera, desde un split, a que el proveedor reajuste los montos por acción de los
+ * dividendos anteriores. El cron re-descarga el historial de un instrumento con un split en esta
+ * ventana en cada corrida (incluido el último día), y el motor recién usa el split al día siguiente.
+ */
+export const SPLIT_SETTLE_DAYS = 30;
+
 const cents = (value: Dec): Dec => value.toDecimalPlaces(2, D.ROUND_HALF_UP);
 
 export function suggestDividends(input: DividendInput): DividendSuggestion[] {
@@ -93,13 +106,18 @@ export function suggestDividends(input: DividendInput): DividendSuggestion[] {
     const shares = ledger.positions.get(event.symbol)?.quantity ?? ZERO;
     if (shares.lt(QTY_EPSILON)) continue;
 
-    const splitFactor = txs
-      .filter(
-        ({ tx, day }) =>
-          tx.type === "SPLIT" &&
-          tx.symbol === event.symbol &&
-          day >= event.exDate,
-      )
+    const laterSplits = txs.filter(
+      ({ tx, day }) =>
+        tx.type === "SPLIT" &&
+        tx.symbol === event.symbol &&
+        day >= event.exDate,
+    );
+    // El monto todavía puede estar en la escala de antes del split: se espera (ver arriba).
+    const unsettled = laterSplits.some(
+      ({ day }) => addDays(day, SPLIT_SETTLE_DAYS) >= input.today,
+    );
+    if (unsettled) continue;
+    const splitFactor = laterSplits
       .reduce(
         (acc, { tx }) => (tx.type === "SPLIT" ? acc.mul(tx.splitRatio) : acc),
         ZERO.plus(1),

@@ -1,4 +1,5 @@
 import { D } from "@/lib/engine/decimal";
+import { SPLIT_SETTLE_DAYS } from "@/lib/engine/dividends";
 import { describeError, type MarketDataProvider } from "@/lib/market-data";
 import { addDays, addYears, isoDate, startOfDay } from "./dates";
 import {
@@ -270,9 +271,19 @@ export async function runMarketJob(
       summary.actionsWritten += newActions.length;
     }
 
+    // Yahoo no reajusta todo junto tras un split: con SOXX (2026-11-05) informó el split, dejó
+    // tres cierres en la escala vieja y siguió dando los dividendos sin ajustar. Un monto viejo de
+    // un dividendo no cambia ningún cierre de la ventana, así que no se notaría: mientras el split
+    // sea reciente se re-descarga todo en cada corrida (el motor espera lo mismo para usarlo).
+    const settleFrom = addDays(today, -SPLIT_SETTLE_DAYS);
+    const recentSplit = [...known, ...newActions.map(actionKey)].some(
+      (key) =>
+        key.startsWith("SPLIT|") && key.slice("SPLIT|".length) >= settleFrom,
+    );
+
     // Un split reajusta `close` hacia atrás y un dividendo reajusta `adj_close`: lo guardado
     // quedó en otra escala. No se mezclan filas viejas con nuevas: se descarga todo de nuevo.
-    if (reAdjusted || newActions.length > 0) {
+    if (reAdjusted || newActions.length > 0 || recentSplit) {
       await store.markNeedsBackfill(instrument.id);
       return "adjusted";
     }

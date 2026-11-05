@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { d } from "../decimal";
-import { suggestDividends, type DividendEvent } from "../dividends";
+import {
+  SPLIT_SETTLE_DAYS,
+  suggestDividends,
+  type DividendEvent,
+} from "../dividends";
 import type { Transaction } from "../types";
 import {
   buy,
@@ -97,6 +101,53 @@ describe("suggestDividends", () => {
     const [after] = run(txs, [event("NVDA", "2026-09-10", "0.01")]);
     expectDec(after!.shares, "40");
     expectDec(after!.perShare, "0.01");
+  });
+
+  describe("con un split reciente en el libro", () => {
+    // El caso de SOXX: 5 cuotas, split 3:1 el 2026-11-05 cargado ese día. El proveedor sigue dando
+    // el dividendo de septiembre en la escala vieja (0,325): multiplicarlo por 3 lo triplicaba.
+    const soxx = [
+      deposit(at("2026-05-01"), "10000"),
+      buy(at("2026-05-12"), "SOXX", "5", "500"),
+      split(at("2026-11-05"), "SOXX", "3"),
+    ];
+    const september = event("SOXX", "2026-09-15", "0.325");
+    const on = (today: string, events = [september]) =>
+      suggestDividends({
+        transactions: soxx,
+        events,
+        withholdingRate: d("0.3"),
+        today,
+      });
+
+    it("no propone un dividendo anterior al split hasta que pasa la ventana", () => {
+      expect(SPLIT_SETTLE_DAYS).toBe(30);
+      expect(on("2026-11-05")).toEqual([]);
+      expect(on("2026-12-05")).toEqual([]); // el día 30: el cron todavía re-descarga
+      const [s] = on("2026-12-06");
+      expectDec(s!.shares, "5");
+      expectDec(s!.perShare, "0.975"); // ya con el split aplicado
+    });
+
+    it("un dividendo posterior al split no depende de él y se propone enseguida", () => {
+      const [s] = on("2026-11-20", [event("SOXX", "2026-11-12", "0.1")]);
+      expectDec(s!.shares, "15");
+      expectDec(s!.perShare, "0.1");
+    });
+
+    it("el split de otro símbolo no frena nada", () => {
+      const txs = [
+        ...soxx,
+        buy(at("2026-05-12"), "VOO", "2", "600"),
+      ];
+      const [s] = suggestDividends({
+        transactions: txs,
+        events: [event("VOO", "2026-09-28", "1.82")],
+        withholdingRate: d("0.3"),
+        today: "2026-11-05",
+      });
+      expectDec(s!.gross, "3.64");
+    });
   });
 
   it("no repite uno que ya está cargado cerca de la fecha (a mano, importado o confirmado)", () => {
